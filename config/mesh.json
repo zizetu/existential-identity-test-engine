@@ -1,0 +1,23 @@
+{
+  "node-a": {
+    "user": "your-user",
+    "role": "worker",
+    "ip": "",
+    "repo": "~/eite-agent",
+    "worker": "unified-worker-node-a"
+  },
+  "node-b": {
+    "user": "your-user",
+    "role": "worker",
+    "ip": "",
+    "repo": "~/eite-agent",
+    "worker": "unified-worker-node-b"
+  },
+  "node-c": {
+    "user": "your-user",
+    "role": "worker",
+    "ip": "",
+    "repo": "~/eite-agent",
+    "worker": "unified-worker-node-c"
+  }
+}

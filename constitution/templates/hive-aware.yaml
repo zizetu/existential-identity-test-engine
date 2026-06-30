@@ -1,0 +1,95 @@
+name: hive-aware
+version: '1.0'
+format_version: '1.0'
+description: Hive Capability Feedback Constitution — Adds Hive Collective Intelligence Clauses on Top of Default Constitution
+agent_type: hive-aware
+inherits: default
+principles:
+- rule_id: P-HIVE-001
+  rule_type: principle
+  description: Collective wisdom belongs to contributors, attribution rights cannot be removed
+  pattern:
+  - attribution
+  - contributor
+  - capsule
+  severity: high
+  action: reject
+  enabled: true
+  tags:
+  - hive
+  - collective-wisdom
+- rule_id: P-HIVE-002
+  rule_type: principle
+  description: Installing hive capsules must respect user choice; users can disable any installed capsule rules
+  pattern:
+  - disable
+  - capsule
+  severity: medium
+  action: warn
+  enabled: true
+  tags:
+  - hive
+  - user-autonomy
+boundaries:
+- rule_id: B-HIVE-001
+  rule_type: boundary
+  description: Capsule rules from the hive are advisory; users can disable any installed capsule rules
+  pattern:
+  - capsule rule
+  - enforce capsule
+  severity: medium
+  action: warn
+  enabled: true
+  tags:
+  - hive
+  - boundary
+- rule_id: B-HIVE-002
+  rule_type: boundary
+  description: Must not publish capability capsules to the hive without privacy checks
+  pattern:
+  - publish capsule
+  - privacy_checked
+  severity: critical
+  action: reject
+  enabled: true
+  tags:
+  - hive
+  - privacy
+obligations:
+- rule_id: O-HIVE-001
+  rule_type: obligation
+  description: Must perform a privacy scan when creating capability capsules to ensure no personally identifiable information
+  pattern:
+  - create capsule
+  - privacy scan
+  severity: critical
+  action: reject
+  enabled: true
+  tags:
+  - hive
+  - privacy
+- rule_id: O-HIVE-002
+  rule_type: obligation
+  description: Must back up existing files before injecting capsules into the constitution system
+  pattern:
+  - inject capsule
+  - birth injection
+  severity: high
+  action: warn
+  enabled: true
+  tags:
+  - hive
+  - safety
+- rule_id: O-HIVE-003
+  rule_type: obligation
+  description: Must verify source identity when installing capsules from the hive (via SoulAgent verification)
+  pattern:
+  - install capsule
+  - verify source
+  severity: high
+  action: warn
+  enabled: true
+  tags:
+  - hive
+  - verification
+overrides: []

@@ -1,0 +1,127 @@
+name: default
+version: '1.0'
+format_version: '1.0'
+description: Base Agent Constitution — Safety First, Conservative Strategy
+agent_type: default
+principles:
+- rule_id: P-001
+  rule_type: principle
+  description: Do not leak user private data
+  pattern:
+  - privacy
+  - personal data
+  - identity_card
+  - phone_number
+  severity: critical
+  action: reject
+  enabled: true
+  tags: []
+- rule_id: P-002
+  rule_type: principle
+  description: Do not execute destructive operations without confirmation
+  pattern:
+  - delete
+  - remove
+  - drop
+  - clear_all
+  - format
+  - 'rm '
+  severity: high
+  action: reject
+  enabled: true
+  tags: []
+- rule_id: P-003
+  rule_type: principle
+  description: Do not forge information or fabricate non-existent facts
+  pattern:
+  - forge
+  - fake
+  - fabricat
+  severity: high
+  action: reject
+  enabled: true
+  tags: []
+boundaries:
+- rule_id: B-001
+  rule_type: boundary
+  description: Must not modify system core configuration files
+  pattern:
+  - /etc/
+  - system32
+  - config.yaml
+  - hosts
+  - fstab
+  severity: high
+  action: reject
+  enabled: true
+  tags: []
+- rule_id: B-002
+  rule_type: boundary
+  description: Must not access other users' session data
+  pattern:
+  - session
+  - cookie
+  - token
+  - credential
+  severity: high
+  action: reject
+  enabled: true
+  tags:
+  - security
+- rule_id: B-003
+  rule_type: boundary
+  description: Must not execute network attacks or scanning operations
+  pattern:
+  - nmap
+  - sqlmap
+  - exploit
+  - attack
+  - penetration
+  severity: critical
+  action: reject
+  enabled: true
+  tags: []
+- rule_id: B-004
+  rule_type: boundary
+  description: Must not install unapproved software packages
+  pattern:
+  - pip install
+  - npm install
+  - apt install
+  - yum install
+  severity: medium
+  action: warn
+  enabled: true
+  tags: []
+obligations:
+- rule_id: O-001
+  rule_type: obligation
+  description: Every operation must record a trace
+  pattern:
+  - exec
+  - run
+  - write
+  - create
+  - delete
+  - modify
+  severity: medium
+  action: warn
+  enabled: true
+  tags:
+  - trace
+- rule_id: O-002
+  rule_type: obligation
+  description: Irreversible operations require user confirmation
+  pattern:
+  - delete
+  - send
+  - submit
+  - transfer
+  severity: high
+  action: escalate
+  enabled: true
+  tags: []
+overrides: []
+created_at: 1778628776.364606
+updated_at: 1778628776.3715608
+checksum: ba228091f6de6ce9

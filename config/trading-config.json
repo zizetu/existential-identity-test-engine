@@ -1,0 +1,71 @@
+{
+  "_comment": "Trading Plugin configuration for tical-code (IB Web API)",
+
+  "gateway": {
+    "mode": "gateway",
+    "base_url": "https://localhost:5000/v1/api",
+    "timeout": 30,
+    "verify_ssl": false,
+    "tickle_interval": 60,
+    "description": "Client Portal Gateway mode (personal, localhost)"
+  },
+
+  "gateway_paper": {
+    "mode": "gateway",
+    "base_url": "https://localhost:5000/v1/api",
+    "timeout": 30,
+    "verify_ssl": false,
+    "tickle_interval": 60,
+    "paper_trading": true,
+    "description": "Client Portal Gateway with Paper Trading account"
+  },
+
+  "oauth": {
+    "mode": "oauth",
+    "base_url": "https://api.ibkr.com/v1/api",
+    "timeout": 30,
+    "verify_ssl": true,
+    "tickle_interval": 60,
+    "client_id": "",
+    "client_key_id": "",
+    "private_key_path": "",
+    "credential": "",
+    "description": "OAuth2.0 mode (multi-user / third-party)"
+  },
+
+  "demo": {
+    "mode": "demo",
+    "description": "Pure demo mode (no IB Gateway required, uses mock data)"
+  },
+
+  "market_data": {
+    "fields": ["31", "84", "86", "70", "71", "7059", "87", "85", "88"],
+    "field_names": {
+      "31": "Last",
+      "84": "Bid",
+      "86": "Ask",
+      "70": "High",
+      "71": "Low",
+      "7059": "Close",
+      "87": "Volume",
+      "85": "Bid Size",
+      "88": "Ask Size"
+    },
+    "stream_max_duration": 300,
+    "snapshot_retry_count": 2,
+    "snapshot_retry_delay": 1
+  },
+
+  "orders": {
+    "default_tif": "DAY",
+    "max_order_value": 100000,
+    "dual_verify_threshold": 50000,
+    "reply_timeout": 30
+  },
+
+  "logging": {
+    "level": "INFO",
+    "log_trades": true,
+    "log_market_data": false
+  }
+}

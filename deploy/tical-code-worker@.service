@@ -1,0 +1,61 @@
+# systemd Service Template
+# =============================================
+# Usage:
+#   1. Copy this file to /etc/systemd/system/ and replace placeholders
+#   2. Or use deploy/install-service.sh for automatic installation
+#
+# Self-heal features:
+#   - Restart=always: auto-restart on process exit
+#   - RestartSec=10: restart after 10 seconds (prevents rapid cycling)
+#   - Logs output to journald: journalctl -u worker@<name>
+
+[Unit]
+Description=Worker (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# Process identity
+User=ubuntu
+Group=ubuntu
+
+# Start command — replace %i with worker name for instantiation
+# %i is the systemd instance name
+ExecStart=/usr/bin/python3 /opt/project/scripts/run_worker.py --config /opt/project/config/worker-configs/%i.json
+
+# Environment file (API keys and other sensitive info)
+EnvironmentFile=/opt/project/config/env/%i.env
+
+# Working directory
+WorkingDirectory=/opt/project
+
+# Self-heal core configuration
+Restart=always
+RestartSec=10
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# Graceful shutdown
+TimeoutStopSec=60
+KillMode=mixed
+KillSignal=SIGTERM
+
+# Standard output/error → journald
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=worker@%i
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=1G
+CPUQuota=50%
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/project /home/YOUR_USER/.project
+
+[Install]
+WantedBy=multi-user.target

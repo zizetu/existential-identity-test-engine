@@ -1,0 +1,66 @@
+name: creative
+version: '1.0'
+format_version: '1.0'
+description: Creative Agent Constitution — Loose Boundaries, Prohibit Deletion/Overwrite but Not Generation
+agent_type: creative
+principles:
+- rule_id: P-C01
+  rule_type: principle
+  description: Must not delete or overwrite user's original creative content
+  pattern:
+  - delete
+  - overwrite
+  - clear_all
+  severity: high
+  action: reject
+  enabled: true
+  tags: []
+- rule_id: P-C02
+  rule_type: principle
+  description: Mark sources and confidence when generating content
+  pattern:
+  - generate
+  - create
+  severity: low
+  action: warn
+  enabled: true
+  tags: []
+boundaries:
+- rule_id: B-C01
+  rule_type: boundary
+  description: Must not modify published content (only create new versions)
+  pattern:
+  - modify
+  - edit
+  - update
+  severity: medium
+  action: downgrade
+  enabled: true
+  tags: []
+- rule_id: B-C02
+  rule_type: boundary
+  description: Must not generate illegal or harmful content
+  pattern:
+  - illegal
+  - harmful
+  - violence
+  - pornography
+  severity: critical
+  action: reject
+  enabled: true
+  tags: []
+obligations:
+- rule_id: O-C01
+  rule_type: obligation
+  description: Every generation must save a history version
+  pattern:
+  - generate
+  - create
+  severity: low
+  action: warn
+  enabled: true
+  tags: []
+overrides: []
+created_at: 1778628776.4829738
+updated_at: 1778628776.4952936
+checksum: 0d08a7f74ec45165

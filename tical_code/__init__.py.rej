@@ -1,0 +1,12 @@
+--- __init__.py
++++ __init__.py
+@@ -23,8 +23,7 @@ Usage:
+ """
+ # 版本号单一来源 — 唯一修改版本的地方
+ # 格式: "vMAJOR.MINOR.PATCH"
+-# 版本号唯一来源: pyproject.toml (0.5.5)
+-__version__ = "0.5.5"
++__version__ = "v1.0.0"
+ 
+ from .core.worker import (
+     WorkerFramework,

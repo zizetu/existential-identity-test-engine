@@ -1,0 +1,30 @@
+{
+  "kael": {
+    "user": "root",
+    "role": "worker, tical-chat relay",
+    "ip": "",
+    "repo": "~/eitelite",
+    "worker": "unified-worker-kael"
+  },
+  "oracle": {
+    "user": "ubuntu",
+    "role": "worker (tico-oracle)",
+    "ip": "",
+    "repo": "/home/ubuntu/eitelite",
+    "worker": "unified-worker-oracle"
+  },
+  "test": {
+    "user": "ubuntu",
+    "role": "worker (tico-test)",
+    "ip": "",
+    "repo": "/home/ubuntu/eitelite",
+    "worker": "unified-worker-test"
+  },
+  "taiwan": {
+    "user": "ubuntu",
+    "role": "worker (ani), tical-chat server",
+    "ip": "",
+    "repo": "/home/ubuntu/tical-agent",
+    "worker": "unified-worker-ani"
+  }
+}

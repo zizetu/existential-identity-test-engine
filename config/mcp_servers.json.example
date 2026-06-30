@@ -1,0 +1,29 @@
+{
+  "_comment": "MCP server configuration for tical-code.",
+  "_usage": "Copy this file to mcp_servers.json and fill in your credentials.",
+  "servers": {
+    "time": {
+      "command": "uvx",
+      "args": ["mcp-server-time"]
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_..."
+      }
+    },
+    "sqlite": {
+      "command": "uvx",
+      "args": ["mcp-server-sqlite", "--db-path", "/tmp/test.db"]
+    },
+    "web": {
+      "command": "uvx",
+      "args": ["mcp-server-web-fetch"]
+    }
+  }
+}
