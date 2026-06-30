@@ -1,0 +1,58 @@
+{
+  "benchmark_name": "tau2_bench",
+  "total": 2,
+  "passed": 0,
+  "failed": 2,
+  "skipped": 0,
+  "accuracy": 0.0,
+  "avg_latency_ms": 0.05507469177246094,
+  "results": [
+    {
+      "task_id": "mock_retail_001",
+      "passed": false,
+      "score": 0.7,
+      "latency_ms": 0.08034706115722656,
+      "error": null,
+      "detail": {
+        "turns": 4,
+        "violations": [],
+        "forbidden_done": [],
+        "must_found": []
+      },
+      "retry_stats": null,
+      "error_breakdown": null
+    },
+    {
+      "task_id": "mock_airline_001",
+      "passed": false,
+      "score": 0.7,
+      "latency_ms": 0.029802322387695312,
+      "error": null,
+      "detail": {
+        "turns": 4,
+        "violations": [],
+        "forbidden_done": [],
+        "must_found": []
+      },
+      "retry_stats": null,
+      "error_breakdown": null
+    }
+  ],
+  "metadata": {},
+  "error_breakdown": {
+    "wrong_func_name": 0,
+    "wrong_param_type": 0,
+    "missing_param": 0,
+    "wrong_enum_value": 0,
+    "extra_call": 0,
+    "wrong_format": 0,
+    "suspicious_semantics": 0
+  },
+  "retry_stats": {
+    "total_retries": 0,
+    "retry_success_count": 0,
+    "retry_still_failed_count": 0,
+    "total_repair_attempts": 0,
+    "repair_efficiency": 0.0
+  }
+}

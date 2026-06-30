@@ -1,0 +1,23 @@
+{
+    "$schema": "MCP server configuration for eite-agent",
+    "description": "Defines MCP servers to connect to. Each server must have exactly one of 'command' (stdio) or 'url' (HTTP).",
+    "servers": {
+        "example_stdio": {
+            "command": "/path/to/mcp-server-binary",
+            "args": ["--flag", "value"],
+            "env": {
+                "API_KEY": "your-api-key-here"
+            },
+            "timeout": 120,
+            "connect_timeout": 60
+        },
+        "example_http": {
+            "url": "http://localhost:8080/mcp",
+            "headers": {
+                "Authorization": "Bearer your-token-here"
+            },
+            "timeout": 120,
+            "connect_timeout": 60
+        }
+    }
+}

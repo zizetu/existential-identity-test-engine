@@ -1,0 +1,62 @@
+{
+  "bfcl": {
+    "benchmark_name": "BFCL_v4",
+    "total": 3,
+    "passed": 1,
+    "failed": 2,
+    "skipped": 0,
+    "accuracy": 0.3333333333333333,
+    "avg_latency_ms": 581.445058186849,
+    "results": [
+      {
+        "task_id": "irrelevance_0",
+        "passed": true,
+        "score": 1.0,
+        "latency_ms": 1744.3351745605469,
+        "error": null,
+        "detail": {
+          "reason": "no_expected_calls"
+        },
+        "retry_stats": null,
+        "error_breakdown": null
+      },
+      {
+        "task_id": "irrelevance_1",
+        "passed": false,
+        "score": 0.0,
+        "latency_ms": 0.0,
+        "error": "HTTP Error 400: Bad Request",
+        "detail": null,
+        "retry_stats": null,
+        "error_breakdown": null
+      },
+      {
+        "task_id": "irrelevance_2",
+        "passed": false,
+        "score": 0.0,
+        "latency_ms": 0.0,
+        "error": "HTTP Error 400: Bad Request",
+        "detail": null,
+        "retry_stats": null,
+        "error_breakdown": null
+      }
+    ],
+    "metadata": {},
+    "error_breakdown": {
+      "wrong_function_name": 0,
+      "wrong_param_type": 0,
+      "missing_param": 0,
+      "wrong_enum_value": 0,
+      "extra_call": 0,
+      "wrong_format": 0,
+      "suspicious_semantics": 0
+    },
+    "retry_stats": {
+      "total_retries": 0,
+      "retry_success_count": 0,
+      "retry_still_failed_count": 0,
+      "total_repair_attempts": 0,
+      "repair_efficiency": 0.0
+    }
+  }
+}

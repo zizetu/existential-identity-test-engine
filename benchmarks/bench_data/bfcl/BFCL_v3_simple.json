@@ -1,0 +1,58 @@
+[
+  {
+    "id": 0,
+    "question": "What is the weather in Tokyo?",
+    "function": [
+      {
+        "name": "get_weather",
+        "description": "Get weather for a city",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "city": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    ],
+    "expected": {
+      "name": "get_weather",
+      "arguments": {
+        "city": "Tokyo"
+      }
+    }
+  },
+  {
+    "id": 1,
+    "question": "Find flights from NYC to London on 2024-12-25",
+    "function": [
+      {
+        "name": "find_flights",
+        "description": "Search flights",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "origin": {
+              "type": "string"
+            },
+            "destination": {
+              "type": "string"
+            },
+            "date": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    ],
+    "expected": {
+      "name": "find_flights",
+      "arguments": {
+        "origin": "NYC",
+        "destination": "London",
+        "date": "2024-12-25"
+      }
+    }
+  }
+]

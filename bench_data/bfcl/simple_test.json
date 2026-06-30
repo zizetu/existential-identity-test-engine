@@ -1,0 +1,90 @@
+[
+  {
+    "id": 0,
+    "question": "What is the weather in Tokyo?",
+    "function": [
+      {
+        "name": "get_weather",
+        "description": "Get weather for a city",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "city": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    ],
+    "ground_truth": {
+      "name": "get_weather",
+      "arguments": {
+        "city": "Tokyo"
+      }
+    }
+  },
+  {
+    "id": 1,
+    "question": "Find flights from NYC to London on 2024-12-25",
+    "function": [
+      {
+        "name": "find_flights",
+        "description": "Search flights",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "origin": {
+              "type": "string"
+            },
+            "destination": {
+              "type": "string"
+            },
+            "date": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    ],
+    "ground_truth": {
+      "name": "find_flights",
+      "arguments": {
+        "origin": "NYC",
+        "destination": "London",
+        "date": "2024-12-25"
+      }
+    }
+  },
+  {
+    "id": 2,
+    "question": "Send an email to john@example.com saying Hello",
+    "function": [
+      {
+        "name": "send_email",
+        "description": "Send email",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "to": {
+              "type": "string"
+            },
+            "subject": {
+              "type": "string"
+            },
+            "body": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    ],
+    "ground_truth": {
+      "name": "send_email",
+      "arguments": {
+        "to": "john@example.com",
+        "subject": "Hello",
+        "body": "Hello"
+      }
+    }
+  }
+]

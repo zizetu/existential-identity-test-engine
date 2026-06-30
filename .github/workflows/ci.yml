@@ -1,0 +1,72 @@
+name: CI — Compile + CJK + Bare Except + Version (Lite)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python compile check (all .py files)
+        run: |
+          errors=0
+          while IFS= read -r f; do
+            python3 -m py_compile "$f" || { echo "COMPILE FAIL: $f"; errors=$((errors+1)); }
+          done < <(find . -name '*.py' -not -path './.git/*' -not -path '*/__pycache__/*')
+          echo "$errors compile errors"
+          exit $errors
+
+      - name: CJK character check
+        run: |
+          hits=$(grep -rP '[\x{4e00}-\x{9fff}]' --include='*.py' . | grep -v '.git/' | wc -l)
+          if [ "$hits" -gt 0 ]; then
+            echo "CJK characters found:"
+            grep -rnP '[\x{4e00}-\x{9fff}]' --include='*.py' . | grep -v '.git/'
+            echo "FAIL: $hits CJK character(s) in codebase"
+            exit 1
+          fi
+          echo "OK: 0 CJK characters"
+
+      - name: Bare except check
+        run: |
+          hits=$(grep -rn 'except:' --include='*.py' . | grep -v 'except Exception' | grep -v 'except (' | grep -v 'except BaseException' | grep -v '# noqa' | grep -v '.git/' | wc -l)
+          if [ "$hits" -gt 0 ]; then
+            echo "FAIL: $hits bare except(s) in codebase"
+            exit 1
+          fi
+          echo "OK: 0 bare excepts"
+
+      - name: Version coherence check
+        run: |
+          if [ -f VERSION ]; then
+            V=$(cat VERSION)
+            grep -q "$V" CLAUDE.md || { echo "FAIL: CLAUDE.md version mismatch"; exit 1; }
+            echo "OK: version coherent"
+          fi
+
+      - name: shell=True check
+        run: |
+          hits=$(grep -rn 'shell\s*=\s*True' --include='*.py' . | grep -v '.git/' | grep -v '# noqa' | wc -l)
+          if [ "$hits" -gt 0 ]; then
+            echo "FAIL: $hits shell=True usage(s)"
+            exit 1
+          fi
+          echo "OK: 0 shell=True"
+
+      - name: Light profile integrity
+        run: |
+          if grep -q 'decision_engine\|sandbox\|reflection' tical_code/core/module_defs.py 2>/dev/null; then
+            echo "WARNING: full-profile-only module references in lite deployment"
+          fi
+          for f in task_state.py context_manager.py checkpoint.py self_repair.py; do
+            if [ -f "tical_code/core/$f" ]; then
+              echo "FAIL: forbidden file $f present in lite deployment"
+              exit 1
+            fi
+          done
+          echo "OK: light profile clean"

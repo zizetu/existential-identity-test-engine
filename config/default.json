@@ -1,0 +1,13 @@
+{
+  "comment": "Global defaults for all workers",
+  "verify_level": "strict",
+  "log_level": "INFO",
+  "strict_host_check": false,
+  "auto_verify": true,
+  "execution_timeout": 300,
+  "max_retries": 3,
+  "mcp_client": {
+    "enabled": true,
+    "servers_path": "config/mcp_servers.json"
+  }
+}

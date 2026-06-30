@@ -1,0 +1,35 @@
+[Unit]
+Description=Unified Worker (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+WatchdogSec=180
+NotifyAccess=all
+Restart=always
+StartLimitIntervalSec=0
+RestartSec=2
+
+User=ubuntu
+WorkingDirectory=/home/YOUR_USER/project
+Environment="PYTHONUNBUFFERED=1"
+Environment="MEMORY_PROFILE=0"
+EnvironmentFile=-/home/YOUR_USER/.project/worker.env
+ExecStart=/home/YOUR_USER/project/.venv/bin/python -m module.worker
+ExecStop=/bin/kill -TERM $MAINPID
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=60
+
+# Memory safety
+MemoryMax=2G
+MemoryHigh=1.5G
+
+# Standard output
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=worker-%i
+
+[Install]
+WantedBy=multi-user.target

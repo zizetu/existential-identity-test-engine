@@ -1,0 +1,56 @@
+{
+  "_comment": "Provider registry \u2014 add any OpenAI-compatible provider here without code changes.",
+  "_usage": "Each provider entry defines how to discover itself from env vars. Users can add/remove/reorder providers by editing this file. The from_env() function reads this file at startup.",
+  "_example_new_provider": {
+    "name": "my-custom-api",
+    "family": "openai",
+    "env_key": "MY_API_KEY",
+    "env_base_url": "MY_API_BASE",
+    "default_base_url": "https://api.myprovider.com/v1/chat/completions",
+    "auth_style": "bearer",
+    "default_model": "my-model-name",
+    "available_models": [
+      "my-model-name"
+    ],
+    "protocol": "openai",
+    "priority": 10,
+    "cost": "paid"
+  },
+  "providers": {
+    "deepseek": {
+      "name": "DeepSeek",
+      "family": "deepseek",
+      "env_key": "DEEPSEEK_API_KEY",
+      "env_base_url": "DEEPSEEK_ENDPOINT",
+      "default_base_url": "https://api.deepseek.com/v1/chat/completions",
+      "auth_style": "bearer",
+      "default_model": "deepseek-v4-flash",
+      "available_models": [
+        "deepseek-v4-flash",
+        "deepseek-chat",
+        "deepseek-reasoner"
+      ],
+      "protocol": "openai",
+      "priority": 1,
+      "cost": "paid"
+    }
+  },
+  "auth_styles": {
+    "bearer": "Authorization: Bearer {api_key}",
+    "api-key": "api-key: {api_key}",
+    "mimo-free-jwt": "Authorization: Bearer {jwt}"
+  },
+  "failover": {
+    "per_call_timeout": 30,
+    "global_call_timeout": 180,
+    "cooldown_base_429": 15,
+    "cooldown_base_5xx": 60,
+    "cooldown_auth": 300,
+    "cooldown_timeout": 60,
+    "cooldown_cap": 120,
+    "min_interval_seconds": 1.0,
+    "retry_jitter_min": 0.5,
+    "retry_jitter_max": 1.5,
+    "family_dead_time": 30
+  }
+}

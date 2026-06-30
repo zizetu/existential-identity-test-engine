@@ -1,0 +1,27 @@
+{
+  "benchmark_name": "BFCL_v4",
+  "total": 0,
+  "passed": 0,
+  "failed": 0,
+  "skipped": 0,
+  "accuracy": 0.0,
+  "avg_latency_ms": 0.0,
+  "results": [],
+  "metadata": {},
+  "error_breakdown": {
+    "wrong_function_name": 0,
+    "wrong_param_type": 0,
+    "missing_param": 0,
+    "wrong_enum_value": 0,
+    "extra_call": 0,
+    "wrong_format": 0,
+    "suspicious_semantics": 0
+  },
+  "retry_stats": {
+    "total_retries": 0,
+    "retry_success_count": 0,
+    "retry_still_failed_count": 0,
+    "total_repair_attempts": 0,
+    "repair_efficiency": 0.0
+  }
+}
