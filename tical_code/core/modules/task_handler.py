@@ -413,6 +413,8 @@ def run_task(ctx: SharedContext, task) -> None:
             while _attempt < _max_attempts:
                 try:
                     response = ctx.llm.call(_call_conv, tools=TOOL_SCHEMAS, preferred_family=_family)
+                    if asyncio.iscoroutine(response):
+                        response = ctx.run_async(response)
                     break
                 except Exception as e:
                     _attempt += 1
@@ -483,6 +485,8 @@ def run_task(ctx: SharedContext, task) -> None:
             # Retry once
             try:
                 response = ctx.llm.call(conv, tools=TOOL_SCHEMAS, preferred_family=_family)
+                if asyncio.iscoroutine(response):
+                    response = ctx.run_async(response)
             except Exception:
                 fail_task(state, f"Model call failed twice at step {step}: {e}",
                           workspace=ctx.workspace)
@@ -598,7 +602,7 @@ def run_task(ctx: SharedContext, task) -> None:
                     if ctx._tool_executor is not None:
                         try:
                             _instruction = json.dumps({"tool": name, "params": args})
-                            _tool_result = asyncio.run(ctx._tool_executor.dispatch(_instruction))
+                            _tool_result = ctx.run_async(ctx._tool_executor.dispatch(_instruction))
                             if _tool_result.success:
                                 result = _tool_result.data or {}
                             else:
@@ -715,8 +719,8 @@ def run_task(ctx: SharedContext, task) -> None:
 
             # Text response without [TASK_COMPLETE] - heuristic completion detection
             _content_len = len(content.strip()) if content else 0
-            _has_substantial_answer = _content_len > 100
-            _late_in_loop = step >= 3
+            _has_substantial_answer = _content_len > 300
+            _late_in_loop = step >= 5
 
             if _has_substantial_answer and _late_in_loop:
                 # Model gave a substantial answer but didn't signal completion.

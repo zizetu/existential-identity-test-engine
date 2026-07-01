@@ -949,7 +949,7 @@ def _exec_cmd(ctx: SharedContext, cmd_name: str, cmd_args: list[str],
                     )
                     _resp_result = ctx.llm.call([{"role": "user", "content": _prompt}])
                     if asyncio.iscoroutine(_resp_result):
-                        _resp_result = asyncio.new_event_loop().run_until_complete(_resp_result)
+                        _resp_result = ctx.run_async(_resp_result)
                     _resp = _resp_result
                     _text = _resp.get("content", "").strip()
                     _json_match = re.search(r'\{.*\}', _text, re.DOTALL)
@@ -1247,7 +1247,7 @@ def _execute_tool_core(tc: dict, ctx: SharedContext, iteration: int) -> dict:
             if name == "shell_exec" and "command" in _args and "cmd" not in _args:
                 _args["cmd"] = _args.pop("command")
             _instruction = json.dumps({"tool": name, "params": _args})
-            _tool_result = asyncio.run(ctx._tool_executor.dispatch(_instruction))
+            _tool_result = ctx.run_async(ctx._tool_executor.dispatch(_instruction))
             if _tool_result.success:
                 result = _tool_result.data or {}
             else:
@@ -1688,34 +1688,7 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
         #   RuntimeError: Timeout context manager should be used inside a task
         def _run_async_safe(coro):
             """Run an async coroutine synchronously, reusing worker's event loop."""
-            _loop = getattr(ctx, '_event_loop', None)
-            if _loop is None:
-                try:
-                    _loop = asyncio.get_event_loop()
-                except RuntimeError:
-                    _loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(_loop)
-                ctx._event_loop = _loop
-            _task = _loop.create_task(coro)
-            return _loop.run_until_complete(_task)
-
-        # Helper: run an async coroutine synchronously with proper Task context.
-        # aiohttp 3.13+ uses asyncio.timeout() internally, which requires
-        # the coroutine to be wrapped in a Task (Python 3.12+ behavior).
-        # Without create_task(), asyncio.timeout() raises:
-        #   RuntimeError: Timeout context manager should be used inside a task
-        def _run_async_safe(coro):
-            """Run an async coroutine synchronously, reusing worker's event loop."""
-            _loop = getattr(ctx, '_event_loop', None)
-            if _loop is None:
-                try:
-                    _loop = asyncio.get_event_loop()
-                except RuntimeError:
-                    _loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(_loop)
-                ctx._event_loop = _loop
-            _task = _loop.create_task(coro)
-            return _loop.run_until_complete(_task)
+            return ctx.run_async(coro)
 
         if ctx.compactor:
             def _llm_call_sync(msgs):
@@ -2057,7 +2030,7 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
                                 # Execute recovery if available
                                 if doom_result.recovery.value != "none":
                                     try:
-                                        asyncio.run(ctx.doom_detector.execute_recovery(doom_result))
+                                        ctx.run_async(ctx.doom_detector.execute_recovery(doom_result))
                                     except Exception:
                                         pass
                             elif doom_result.level == DoomLoopLevel.WARNING:

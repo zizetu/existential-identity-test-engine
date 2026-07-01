@@ -218,6 +218,39 @@ class SharedContext:
                 if k.startswith("task-") or k in keys[-20:]
             }
 
+
+    def run_async(self, coro):
+        """Run an async coroutine synchronously using the worker's persistent event loop.
+
+        Reuses ctx._loop (set by Worker during init) to avoid the asyncio.run()
+        create-destroy cycle that breaks aiohttp sessions and other persistent
+        async resources.  Falls back to asyncio.run() only when no loop is
+        available (e.g. during unit tests or standalone CLI usage).
+
+        Uses create_task() + run_until_complete() so that aiohttp 3.13+
+        internal asyncio.timeout() works correctly (requires Task context).
+
+        Args:
+            coro: An awaitable coroutine object.
+
+        Returns:
+            The coroutine's return value.
+        """
+        import asyncio
+        loop = self._loop
+        if loop is None or loop.is_closed():
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_closed():
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            self._loop = loop
+        task = loop.create_task(coro)
+        return loop.run_until_complete(task)
+
     def force_gc(self):
         """Force garbage collection."""
         import gc

@@ -1017,6 +1017,10 @@ class Worker:
         self._loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._loop)
 
+        # Propagate event loop to SharedContext for run_async()
+        if hasattr(self, '_ctx'):
+            self._ctx._loop = self._loop
+
         # Deferred MemoryBoot execution (avoids asyncio.run() in __init__)
         if getattr(self, '_memory_boot_pending', False) and self._memory_boot:
             try:
