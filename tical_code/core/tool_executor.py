@@ -1114,6 +1114,41 @@ TOOL_SCHEMAS = [
             },
         },
     },
+    # start_background_task: persist a multi-step plan for autonomous execution
+    {
+        "type": "function",
+        "function": {
+            "name": "start_background_task",
+            "description": (
+                "Create a persistent autonomous task that runs in the background. "
+                "Use this for any work that will take more than 3-5 tool calls. "
+                "The task engine will continue executing step by step across multiple "
+                "LLM rounds until completion or failure. "
+                "Call this tool with a clear goal and optional step-by-step plan, "
+                "then call end_task to signal the current message turn is done."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "goal": {
+                        "type": "string",
+                        "description": "The overall task goal - what you want to accomplish",
+                    },
+                    "plan": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional step-by-step plan. Each item is one step.",
+                    },
+                    "max_steps": {
+                        "type": "integer",
+                        "description": "Maximum LLM rounds before forced completion (default: 100)",
+                        "default": 100,
+                    },
+                },
+                "required": ["goal"],
+            },
+        },
+    },
 ]
 
 # ============ TOOL_SCHEMAS_CLEAN (alias - no dot-replace needed; all names already use underscores) ============
@@ -2785,6 +2820,49 @@ def exec_ask_user(args: dict) -> dict:
     }
 
 
+
+def exec_create_background_task(args: dict) -> dict:
+    """Create a persistent background task for autonomous multi-step execution.
+
+    Calls task_state.create_task() to persist a task to disk. The main
+    worker loop's "RESUME ACTIVE TASKS" section will pick it up on the
+    next iteration and execute it via task_handler.run_task().
+
+    Args:
+        args: Dict with 'goal' (required), optional 'plan' (list of strings),
+              and 'max_steps' (int, default 100).
+
+    Returns:
+        Dict with task_id, status, and the created goal.
+    """
+    goal = args.get("goal", "")
+    if not goal:
+        return {"error": "goal is required"}
+    plan = args.get("plan", [])
+    max_steps = args.get("max_steps", 100)
+    try:
+        from tical_code.core.task_state import create_task
+        task = create_task(
+            goal=goal,
+            plan=plan if plan else None,
+            max_steps=min(max_steps, 500),
+        )
+        logger.info("Background task created: %s - %s", task.task_id, goal[:80])
+        return {
+            "success": True,
+            "task_id": task.task_id,
+            "goal": goal,
+            "plan_steps": len(plan),
+            "max_steps": max_steps,
+            "message": f"Background task '{goal[:60]}' created (id={task.task_id}). The task engine will execute it autonomously."
+        }
+    except ImportError:
+        return {"error": "task_state module not available"}
+    except Exception as e:
+        logger.error("Failed to create background task: %s", e)
+        return {"error": str(e)}
+
+
 def execute(name: str, args: dict, base_dir: str = "") -> dict:
     """Unified dispatch entry point for all tool execution.
 
@@ -2866,6 +2944,7 @@ def execute(name: str, args: dict, base_dir: str = "") -> dict:
         "capability_list": exec_capability_list,
         "capability_call": exec_capability_call,
         "ask_user": exec_ask_user,
+        "start_background_task": exec_create_background_task,
     }
     handler = _PLUGIN_TOOLS.get(name) or dispatch.get(name)
     if not handler:
