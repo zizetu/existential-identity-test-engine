@@ -57,6 +57,20 @@ An evaluation framework for AI agents, providing structured testing, benchmarkin
 > - `WORKSPACE_DIR` (or default ~/eite-agent will be used)
 > - `ANCHOR_URL` for anchor API
 >
+> ### Communication Channels
+>
+> The agent supports Telegram as an input/output channel. To enable it:
+>
+> 1. Create a bot via [@BotFather](https://t.me/botfather) on Telegram
+> 2. Set environment variables before starting the worker:
+>    ```bash
+>    export TG_BOT_TOKEN="your_bot_token_here"       # e.g. 1234567890:AA...hash
+>    export TG_CHAT_ID="your_telegram_chat_id"       # your personal chat ID
+>    ```
+> 3. Or add them to a `.env` file loaded by systemd or your init system
+>
+> The bot token is read from `TG_BOT_TOKEN` at runtime via `os.environ.get()` — never hardcode tokens in source code.
+>
 > See each script's header comment or `config/default.json` for the full list of env vars.
 
 ## Overview
