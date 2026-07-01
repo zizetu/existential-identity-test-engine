@@ -1,5 +1,5 @@
 {
-  "comment": "Global defaults for all workers. Set TG_BOT_TOKEN=your_bot_token and TG_CHAT_ID=your_chat_id in env to enable Telegram communication. The bot token is read from the TG_BOT_TOKEN environment variable at runtime — never hardcode tokens in config files.",
+  "comment": "Global defaults for all workers. Communication channels: Telegram (set TG_BOT_TOKEN + TG_CHAT_ID env vars) and tical-chat (set TICAL_CHAT_URL + TICAL_CHAT_KEY). All credentials are read from environment variables at runtime — never hardcode tokens in config files. See tical_code/core/channel.py for the channel class hierarchy.",
   "verify_level": "strict",
   "log_level": "INFO",
   "strict_host_check": false,

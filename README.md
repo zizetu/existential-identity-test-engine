@@ -59,8 +59,16 @@ An evaluation framework for AI agents, providing structured testing, benchmarkin
 >
 > ### Communication Channels
 >
-> The agent supports Telegram as an input/output channel. To enable it:
+> The agent uses a pluggable channel architecture (`Channel` base class → `TelegramChannel`, `TicalChatChannel`, etc.). All channels are polled concurrently — one slow channel never blocks another.
 >
+> **Built-in channels:**
+>
+> | Channel | Env vars | How it works |
+> |---------|----------|-------------|
+> | **Telegram** | `TG_BOT_TOKEN` + `TG_CHAT_ID` | Polls `api.telegram.org` via Bot API (getUpdates/sendMessage) |
+> | **tical-chat** | `TICAL_CHAT_URL` + `TICAL_CHAT_KEY` | HTTP long-poll to a chat queue server with shared-key auth |
+>
+> **To enable Telegram:**
 > 1. Create a bot via [@BotFather](https://t.me/botfather) on Telegram
 > 2. Set environment variables before starting the worker:
 >    ```bash
@@ -69,7 +77,9 @@ An evaluation framework for AI agents, providing structured testing, benchmarkin
 >    ```
 > 3. Or add them to a `.env` file loaded by systemd or your init system
 >
-> The bot token is read from `TG_BOT_TOKEN` at runtime via `os.environ.get()` — never hardcode tokens in source code.
+> **To use your own channel:** subclass `Channel` in `channel.py`, implement `poll()` and `send()`, and register it in the worker's channel init block. All channel configs come from environment variables — never hardcode tokens in source code.
+>
+> All tokens and secrets are read at runtime via `os.environ.get()` — never hardcoded.
 >
 > See each script's header comment or `config/default.json` for the full list of env vars.
 
