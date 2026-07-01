@@ -17,7 +17,17 @@
 # Original repository: https://github.com/zizetu/eite-agent
 #
 
-"""channel layer - message send/receive abstraction."""
+"""channel layer - message send/receive abstraction.
+
+Channel hierarchy:
+  Channel (abstract base)
+   ├── TelegramChannel   – polls Telegram Bot API (TG_BOT_TOKEN env)
+   └── TicalChatChannel  – polls tical-chat HTTP API (TICAL_CHAT_URL + TICAL_CHAT_KEY env)
+
+To add a custom channel: subclass Channel, implement poll() + send(),
+then wire it into unified_worker.py's channel init block.
+All credentials are read from environment variables at runtime.
+"""
 
 import os
 import json
