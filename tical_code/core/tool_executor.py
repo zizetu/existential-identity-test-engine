@@ -2842,10 +2842,24 @@ def exec_create_background_task(args: dict) -> dict:
     max_steps = args.get("max_steps", 100)
     try:
         from tical_code.core.task_state import create_task
+        # Detect workspace the same way config._find_workspace() does
+        _ws = ""
+        for _ev in ["TICAL_CODE_ROOT", "TICOBOT_DIR"]:
+            _d = os.environ.get(_ev, "")
+            if _d:
+                _ws = _d
+                break
+        if not _ws:
+            _home = os.path.expanduser("~")
+            for _cand in [os.path.join(_home, "tical-agent"), os.path.join(_home, "eitelite")]:
+                if os.path.isdir(_cand):
+                    _ws = _cand
+                    break
         task = create_task(
             goal=goal,
             plan=plan if plan else None,
             max_steps=min(max_steps, 500),
+            workspace=_ws,
         )
         logger.info("Background task created: %s - %s", task.task_id, goal[:80])
         return {
