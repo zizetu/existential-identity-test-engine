@@ -85,7 +85,7 @@ from tical_code.core.clarify import ClarifyAnswer, ClarifyStatus, ClarifyStrateg
 from tical_code.core.response_formatter import format_result
 from tical_code.core.prompt import build_power_mode_suffix, strip_and_inject_power_mode
 from tical_code.core.permission_checker import PermissionChecker, PermissionMode
-ModelStatus = str  # Stub: ModelStatus not available in this build
+from tical_code.core.decision_engine import ModelStatus
 
 # Conditional imports — may be None on light installs
 try:

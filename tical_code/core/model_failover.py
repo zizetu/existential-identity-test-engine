@@ -515,10 +515,12 @@ class ModelFailover:
                 continue
             if not bypass_min_interval and p.last_used > 0 and (now - p.last_used) < MIN_INTERVAL_SECONDS:
                 # Fallback providers (is_fallback=True) are exempt from MIN_INTERVAL.
-                # They are the last line of defense - blocking them for 2s when everything
-                # else is exhausted adds meaningless latency. They have their own rate limits.
                 if not p.is_fallback:
-                    continue
+                    n_non_fallback = sum(1 for pp in self.providers if not pp.is_fallback)
+                    if n_non_fallback <= 1:
+                        pass
+                    else:
+                        continue
             if p.state == HealthState.COOLED_DOWN and now < p.cooldown_until:
                 continue
             elif p.state == HealthState.HALF_OPEN:

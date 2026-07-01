@@ -64,6 +64,14 @@ class EvalPhase(Enum):
     FINAL = "final"          # Final summary and report
 
 
+class ModelStatus(Enum):
+    """Status of the LLM model for failover/monitoring."""
+    AVAILABLE = "available"
+    TIMEOUT = "timeout"
+    UNAVAILABLE = "unavailable"
+    DEGRADED = "degraded"
+
+
 class TestStatus(Enum):
     """Status of a test case during evaluation."""
     PENDING = "pending"        # Not yet run
