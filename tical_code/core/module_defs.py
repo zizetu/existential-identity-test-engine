@@ -705,9 +705,17 @@ def _init_plugin_host(worker: Any, cfg: dict):
             for tool_name, tool_handler in inst.get_tools().items():
                 full_name = f"{inst.metadata.name}_{tool_name}"
                 # Sync wrapper for async plugin tools (default arg captures current handler)
+                # Uses a persistent event loop to avoid asyncio.run() create-destroy cycle
+                # that breaks aiohttp sessions and other persistent async resources.
+                _plugin_loop = None
                 def _make_sync(handler):
                     def _wrapper(args: dict, _h=handler):
-                        return _asyncio.run(_h(args))
+                        nonlocal _plugin_loop
+                        if _plugin_loop is None or _plugin_loop.is_closed():
+                            _plugin_loop = _asyncio.new_event_loop()
+                            _asyncio.set_event_loop(_plugin_loop)
+                        task = _plugin_loop.create_task(_h(args))
+                        return _plugin_loop.run_until_complete(task)
                     return _wrapper
                 register_plugin_tool(full_name, _make_sync(tool_handler))
                 logger.info("plugin_host: wired %s", full_name)

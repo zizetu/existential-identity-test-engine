@@ -119,7 +119,13 @@ def register_mcp_tools(client, tool_registry=None) -> int:
             def _sync_wrapper(args: dict, _h=_async_handler, _s=_server, _t=_tool) -> dict:
                 """Synchronous bridge for async MCP handlers."""
                 try:
-                    return asyncio.run(_h(args))
+                    import asyncio as _aio
+                    loop = _aio.get_event_loop()
+                    if loop.is_closed():
+                        loop = _aio.new_event_loop()
+                        _aio.set_event_loop(loop)
+                    task = loop.create_task(_h(args))
+                    return loop.run_until_complete(task)
                 except Exception as exc:
                     return {"error": f"MCP tool {_s}/{_t} failed: {exc}"}
 
@@ -138,7 +144,13 @@ def register_mcp_tools(client, tool_registry=None) -> int:
 
                     def _reg_sync(args: dict, _h=_reg_handler, _s=_server, _t=_tool) -> dict:
                         try:
-                            return asyncio.run(_h(args))
+                            import asyncio as _aio
+                            loop = _aio.get_event_loop()
+                            if loop.is_closed():
+                                loop = _aio.new_event_loop()
+                                _aio.set_event_loop(loop)
+                            task = loop.create_task(_h(args))
+                            return loop.run_until_complete(task)
                         except Exception as exc:
                             return {"error": f"MCP tool {_s}/{_t} failed: {exc}"}
 

@@ -305,7 +305,11 @@ class ModelFailover:
         """Cleanup aiohttp session on garbage collection."""
         if self._session is not None and not self._session.closed:
             try:
-                asyncio.get_event_loop().run_until_complete(self._session.close())
+                loop = asyncio.get_event_loop()
+                if loop.is_closed():
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                loop.run_until_complete(self._session.close())
             except (RuntimeError, Exception):
                 pass
             self._session = None
