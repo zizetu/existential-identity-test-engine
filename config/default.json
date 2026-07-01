@@ -1,5 +1,5 @@
 {
-  "comment": "Global defaults for all workers",
+  "comment": "Global defaults for all workers. Set TG_BOT_TOKEN=your_bot_token and TG_CHAT_ID=your_chat_id in env to enable Telegram communication. The bot token is read from the TG_BOT_TOKEN environment variable at runtime — never hardcode tokens in config files.",
   "verify_level": "strict",
   "log_level": "INFO",
   "strict_host_check": false,
