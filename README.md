@@ -1,18 +1,19 @@
 # EITE-agent: Existential Identity Test Engine
 
-*Copyright (C) 2026 zizetu*
+[![CI](https://github.com/zizetu/eite-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/zizetu/eite-agent/actions/workflows/ci.yml)
 
-> This project is licensed under the **GNU Affero General Public License v3.0**
-> (see [LICENSE](./LICENSE)). Any commercial use, closed-source deployment, or
-> SaaS hosting without purchasing a commercial license is prohibited.
-> Contributions are governed by the same AGPLv3 license; by submitting PRs you
-> agree your contributions are licensed under AGPLv3.
->
-> Project home: [https://github.com/zizetu/eite-agent](https://github.com/zizetu/eite-agent)
+**EITE** is an **AI agent runtime** with built-in identity verification, multi-provider failover, and pluggable communication channels. It deploys as a worker that:
 
-**EITE** stands for **Existential Identity Test Engine** — a system that tests whether an AI agent truly *is* what it claims to be, not just whether it *says* it is.
+- **Runs autonomously** — polls Telegram / HTTP for messages, calls LLMs, executes tools, sends replies
+- **Never hardcodes secrets** — all API keys, tokens, and endpoints come from environment variables
+- **Switches models at runtime** — change providers without restarting
+- **Verifies its own identity** — detects impersonation and maintains behavioral consistency across sessions
 
-The core insight: an agent that can recite its identity but cannot *act* consistently with that identity has no real identity — it has a script. EITE probes the gap between claimed and demonstrated identity through adversarial testing, scenario-based evaluation, and behavioral verification.
+Think of it as a self-hosted AI assistant you can talk to via Telegram, deploy on a $5 VPS, and trust to use your API keys securely.
+
+*Copyright (C) 2026 zizetu — AGPLv3 licensed (see [LICENSE](./LICENSE))*
+
+---
 
 > **Key Question**: If you erase an agent's memory of who it is, can it *reconstruct* its identity from its own behavioral patterns? If not, that identity was never real.
 
@@ -20,9 +21,6 @@ The core insight: an agent that can recite its identity but cannot *act* consist
 
 ```
 EITE (Existential Identity Test Engine)
-  |
-  +-- Bench (benchmarking)        -- Run standardized agent benchmarks (BFCL, tau-bench)
-  |     +-- Guardian              -- Auto-swap detection for resource-constrained hosts
   |
   +-- Being (identity testing)    -- Adversarial identity stability tests
   |     +-- Decision Trace        -- Record and replay cognitive decision chains
