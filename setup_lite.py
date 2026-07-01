@@ -43,8 +43,8 @@ Core Features:
 Designed for resource-constrained environments.
 """,
     long_description_content_type="text/markdown",
-    author="tical-code Team",
-    url="https://github.com/tical-code/tical-code",
+    author="zizetu",
+    url="https://github.com/zizetu/eite-agent",
     
     packages=find_packages(exclude=["tests", "tests.*", "docs"]),
     package_data={
@@ -74,6 +74,6 @@ Designed for resource-constrained environments.
     install_requires=LITE_DEPS,
     
     keywords=["ai", "agent", "deployment", "ssh", "automation", "minimal"],
-    license="MIT",
+    license="AGPL-3.0-only",
     zip_safe=False,
 )

@@ -89,13 +89,18 @@ class TelegramChannel(Channel):
         self._api = f"https://api.telegram.org/bot{token}"
         self._last_update = 0
         self._telegram_file_api = f"https://api.telegram.org/file/bot{token}"
-        logger.info("Telegram channel initialized")
+        token_preview = token[:6] + "..." + token[-4:] if len(token) > 12 else "(invalid)"
+        logger.info("Telegram channel initialized (token: %s)", token_preview)
         # Lazy-load STT model on first voice message
         self._stt_model = None
 
     def _transcribe_ogg(self, ogg_path: str) -> str:
         """Transcribe OGG audio file to text using faster-whisper."""
-        import faster_whisper
+        try:
+            import faster_whisper  # optional — install with [full] extras
+        except ImportError:
+            logger.warning("faster-whisper not installed — voice transcription unavailable. pip install eite-agent[full]")
+            return ""
         try:
             if self._stt_model is None:
                 self._stt_model = faster_whisper.WhisperModel("tiny", device="cpu", compute_type="int8")
@@ -123,6 +128,9 @@ class TelegramChannel(Channel):
 
     def _extract_pdf_text(self, file_bytes: bytes) -> str:
         """Extract plain text from .pdf file using pdftotext (poppler-utils)."""
+        if subprocess.call(["which", "pdftotext"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) != 0:
+            logger.warning("pdftotext not found — PDF extraction unavailable. Install poppler-utils")
+            return ""
         tmp_path = None
         try:
             with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:

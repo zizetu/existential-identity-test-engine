@@ -68,6 +68,12 @@ An evaluation framework for AI agents, providing structured testing, benchmarkin
 > | **Telegram** | `TG_BOT_TOKEN` + `TG_CHAT_ID` | Polls `api.telegram.org` via Bot API (getUpdates/sendMessage) |
 > | **tical-chat** | `TICAL_CHAT_URL` + `TICAL_CHAT_KEY` | HTTP long-poll to a chat queue server with shared-key auth |
 >
+> > **Note on optional dependencies:** Voice transcription (`faster-whisper`) and PDF extraction (`poppler-utils`) are loaded on demand. Install them separately if needed:
+> > ```bash
+> > pip install eite-agent[full]          # includes faster-whisper
+> > sudo apt install poppler-utils        # for pdftotext (PDF extraction)
+> > ```
+>
 > **To enable Telegram:**
 > 1. Create a bot via [@BotFather](https://t.me/botfather) on Telegram
 > 2. Set environment variables before starting the worker:

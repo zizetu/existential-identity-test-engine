@@ -1,9 +1,9 @@
 {
   "ssh_key": "~/.ssh/id_deploy",
   "vps": {
-    "sg":     {"ip": "YOUR_SG_IP",     "user": "ubuntu", "workdir": "/home/ubuntu/tical-code"},
-    "taiwan": {"ip": "YOUR_TAIWAN_IP", "user": "ubuntu", "workdir": "/home/ubuntu/tical-code"},
-    "oracle": {"ip": "YOUR_ORACLE_IP", "user": "ubuntu", "workdir": "/home/ubuntu/tical-code"},
-    "kael":   {"ip": "YOUR_KAEL_IP",   "user": "root",   "workdir": "/root/tical-code"}
+    "sg":     {"ip": "YOUR_NODE_IP",    "user": "ubuntu", "workdir": "/home/ubuntu/eite-agent"},
+    "taiwan": {"ip": "YOUR_NODE_IP",    "user": "ubuntu", "workdir": "/home/ubuntu/eite-agent"},
+    "oracle": {"ip": "YOUR_NODE_IP",    "user": "ubuntu", "workdir": "/home/ubuntu/eite-agent"},
+    "kael":   {"ip": "YOUR_NODE_IP",    "user": "ubuntu", "workdir": "/home/ubuntu/eite-agent"}
   }
 }

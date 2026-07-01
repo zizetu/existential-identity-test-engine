@@ -106,7 +106,7 @@ class ProviderRegistry:
                     len(discovered),
                 )
 
-        # Load worker config
+        # Load worker config (optional — config/worker-configs/ may not exist in fresh installs)
         worker_path = (
             self.repo_root
             / "config"
@@ -114,9 +114,16 @@ class ProviderRegistry:
             / f"{self.worker_name}.json"
         )
         if worker_path.exists():
-            with open(worker_path) as f:
-                self._worker_config = json.load(f)
-            logger.info("Loaded worker config for %s", self.worker_name)
+            try:
+                with open(worker_path) as f:
+                    self._worker_config = json.load(f)
+                logger.info("Loaded worker config for %s", self.worker_name)
+            except (json.JSONDecodeError, OSError) as e:
+                logger.warning("Failed to load worker config %s: %s", worker_path, e)
+                self._worker_config = {}
+        else:
+            logger.info("No worker config at %s (optional, using defaults)", worker_path)
+            self._worker_config = {}
 
         self._loaded = True
         return self

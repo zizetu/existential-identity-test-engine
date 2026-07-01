@@ -53,8 +53,8 @@ full = [
     "beautifulsoup4>=4.10.0",
     "requests>=2.28.0",
     "tweepy>=4.14.0",
-    "telepot>=12.7",
-    "aiohttp>=3.8.0",
+    # Telegram bot (python-telegram-bot is the maintained option)
+    "python-telegram-bot>=20.0.0",
     # Trading APIs
     "ib_insync>=0.9.50",
     # Vision
@@ -80,7 +80,7 @@ all = [
     "beautifulsoup4>=4.10.0",
     "requests>=2.28.0",
     "tweepy>=4.14.0",
-    "telepot>=12.7",
+    "python-telegram-bot>=20.0.0",
     "pytest>=7.0.0",
     "pytest-asyncio>=0.18.0",
     "black>=22.0.0",

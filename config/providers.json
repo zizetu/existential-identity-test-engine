@@ -1,5 +1,5 @@
 {
-  "_comment": "Provider registry \u2014 add any OpenAI-compatible provider here without code changes.",
+  "_comment": "Provider registry \u2014 add any OpenAI-compatible provider here without code changes. WARNING: You MUST set at least one provider API key via environment variable (e.g. DEEPSEEK_API_KEY) for the agent to function.",
   "_usage": "Each provider entry defines how to discover itself from env vars. Users can add/remove/reorder providers by editing this file. The from_env() function reads this file at startup.",
   "_example_new_provider": {
     "name": "my-custom-api",
@@ -38,7 +38,7 @@
   "auth_styles": {
     "bearer": "Authorization: Bearer {api_key}",
     "api-key": "api-key: {api_key}",
-    "mimo-free-jwt": "Authorization: Bearer {jwt}"
+    "mimo-free-jwt": "Authorization: Bearer {jwt_token}"
   },
   "failover": {
     "per_call_timeout": 30,

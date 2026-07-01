@@ -19,6 +19,9 @@ from typing import Optional
 PORT = int(os.getenv("ANCHOR_PORT", "9878"))
 ANCHOR_FILE = Path(os.getenv("ANCHOR_FILE", str(Path.home() / "anchors/ops-anchor.json")))
 
+# Auto-create anchor directory on first import
+ANCHOR_FILE.parent.mkdir(parents=True, exist_ok=True)
+
 # In-memory worker state (sibling worker status)
 worker_states: dict = {}
 state_lock = threading.Lock()
