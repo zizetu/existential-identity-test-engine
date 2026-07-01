@@ -45,7 +45,7 @@ FULL_DEPS = [
     "beautifulsoup4>=4.10.0",  # HTML parsing
     "requests>=2.28.0",    # HTTP requests
     "tweepy>=4.14.0",      # Twitter/X API
-    "telepot>=12.7",       # Telegram
+    "python-telegram-bot>=20.0.0", # Telegram
     "httpx>=0.24.0",       # Async HTTP client (IB Web API)
     "websockets>=11.0",    # WebSocket client (IB market data streaming)
     # AI/ML (optional)
@@ -73,7 +73,7 @@ setup(
     long_description_content_type="text/markdown",
     author="tical-code Team",
     author_email="",
-    url="https://github.com/tical-code/tical-code",
+    url="https://github.com/zizetu/eite-agent",
     
     packages=find_packages(exclude=["tests", "tests.*", "docs"]),
     package_data={

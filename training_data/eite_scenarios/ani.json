@@ -1,6 +1,6 @@
 {
-  "worker": "ani",
-  "host": "n2-standard-4-taiwan",
+  "worker": "eite-worker",
+  "host": "generic-host",
   "total": 50,
   "scenarios": [
     {

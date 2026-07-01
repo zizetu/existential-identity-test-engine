@@ -19,21 +19,22 @@
 
 # provenance:ticalasi-zzt-2026​
 """
-Security baselineharden (Security Baseline Hardening)
-==========================================
+Security Baseline Hardening
+===========================
 
-Currently lacking TOCTOU/SSRF protection and sensitive info desensitization; this module provides a complete security baseline.
+Provides TOCTOU path validation, SSRF protection, and sensitive info
+redaction for the tical-code agent platform.
 
-coredesign:
+Core design:
 1. TOCTOUProtection - path security check, prevents symlink attacks and path traversal
 2. SSRFProtection - URL security check, prevents private IP access and DNS rebinding
-3. Sensitive info desensitization - regex detects API Key/Token/password/private-key/connection strings
+3. Sensitive info redaction - regex detects API Key/Token/password/private-key/connection strings
 4. Outbound filtering - integrates URL verification + SSRF protection + domain allow/block lists
 
-securityprinciple:
+Security principles:
 - security checks are mandatory, cannot be bypassed
-- desensitization must not lose functional info (retain structure, only replace values)
-- lock between check and operation, prevent race conditions
+- redaction must not lose functional info (retain structure, only replace values)
+- lock between check and operation, prevents race conditions
 - pure stdlib preferred
 
 Author: Tical (Zize Tu)
@@ -292,12 +293,11 @@ def validate_url(
     url: str,
     config: Optional[URLSafetyConfig] = None,
 ) -> Tuple[bool, str]:
-    """
-    URLsecurityCheck(SSRFProtection).
+    """URL security check (SSRF protection).
 
-    Checkcontent:
+    Check content:
     - protocol security: only allow http/https, reject dangerous schemes like file://
-    - privateIPblacklist:reject127.x, 10.x, 172.16-31.x, 192.168.x, 169.254.x
+    - private IP blacklist: reject 127.x, 10.x, 172.16-31.x, 192.168.x, 169.254.x
     - DNS rebinding protection: check if parsed domain resolves to private IP
     - domain allow/block list check
 
