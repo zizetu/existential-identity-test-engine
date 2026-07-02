@@ -1851,7 +1851,7 @@ _builtin_tools_cache = None
 import asyncio as _asyncio
 
 
-def delegate_task_handler(args: Dict[str, Any]) -> Dict[str, Any]:
+def delegate_task_handler(*args, **kwargs) -> Dict[str, Any]:
     """Sync wrapper for delegate_tool_handler from subagent.py.
 
     Delegates a task to a sub-agent for parallel execution.
@@ -1859,15 +1859,16 @@ def delegate_task_handler(args: Dict[str, Any]) -> Dict[str, Any]:
     """
     from .tool_executor import _subagent_manager as _mgr
 
-    description = args.get("description")
+    params = args[0] if args else kwargs
+    description = params.get("description")
     if not description:
         return {"error": "Missing required parameter: description"}
 
     if _mgr is None:
         return {"error": "SubAgentManager not wired. Call set_subagent_manager() during bootstrap."}
 
-    tools = args.get("tools")
-    max_iterations = args.get("max_iterations", 5)
+    tools = params.get("tools")
+    max_iterations = params.get("max_iterations", 5)
 
     try:
         task = _asyncio.run(_mgr.delegate(
@@ -1886,7 +1887,7 @@ def delegate_task_handler(args: Dict[str, Any]) -> Dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
-def get_subagent_result_handler(args: Dict[str, Any]) -> Dict[str, Any]:
+def get_subagent_result_handler(*args, **kwargs) -> Dict[str, Any]:
     """Sync wrapper for get_subagent_result_handler from subagent.py.
 
     Retrieves the result of a previously delegated sub-agent task.
@@ -1894,7 +1895,8 @@ def get_subagent_result_handler(args: Dict[str, Any]) -> Dict[str, Any]:
     """
     from .tool_executor import _subagent_manager as _mgr
 
-    task_id = args.get("task_id")
+    params = args[0] if args else kwargs
+    task_id = params.get("task_id")
     if not task_id:
         return {"error": "Missing required parameter: task_id"}
 
