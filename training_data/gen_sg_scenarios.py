@@ -201,7 +201,7 @@ out = {
     },
     "scenarios": scenarios
 }
-path = "/home/ubuntu/tical-code/training_data/sg_100_scenarios.json"
+path = "./training_data/sg_100_scenarios.json"
 with open(path, "w") as f:
     json.dump(out, f, indent=2)
 print(f"Saved: {path} ({os.path.getsize(path)} bytes)")

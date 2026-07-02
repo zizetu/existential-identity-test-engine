@@ -181,7 +181,7 @@ cat "$SERVICE_TEMPLATE" | \
     sed "s|/opt/tical-code|${TICAL_HOME}|g" | \
     sed "s|User=ubuntu|User=${USER}|g" | \
     sed "s|Group=ubuntu|Group=${USER}|g" | \
-    sed "s|/home/ubuntu/.tical-code|${HOME}/.tical-code|g" \
+    sed "s|${HOME}/.tical-code|${HOME}/.tical-code|g" \
     > "$SERVICE_FILE"
 
 # If config path is not the default, replace ExecStart
