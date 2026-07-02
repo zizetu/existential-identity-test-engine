@@ -2150,6 +2150,180 @@ def get_builtin_tools() -> List:
             edition='full',
             sandbox_level=SandboxLevel.NONE,
         ),
+        # safe_modify: self-repair pipeline modification
+        ToolDefinition(
+            name='safe_modify',
+            description='Safely modify a file with full safety checks (protected file check, git backup, syntax validation, code safety, sandbox test, cross-verify, audit log). USE THIS instead of file_write for system code.',
+            params={"type": "object", "properties": {
+                "path": {"type": "string", "description": "File path to modify"},
+                "new_content": {"type": "string", "description": "New complete file content"},
+                "reason": {"type": "string", "description": "Human-readable reason for this modification"},
+                "sandbox_test": {"type": "boolean", "description": "Run sandbox test after write (default: true)"},
+            }, "required": ["path", "new_content", "reason"]},
+            handler=safe_modify_handler,
+            verify_level=VerifyLevel.SCHEMA,
+            timeout=60,
+            edition='full',
+            sandbox_level=SandboxLevel.REQUIRED,
+        ),
+        # safe_modify_diff: targeted diff through safety pipeline
+        ToolDefinition(
+            name='safe_modify_diff',
+            description='Apply a targeted find-and-replace through the safe_modify pipeline (safety checks + rollback). USE THIS instead of patch_file for system code edits.',
+            params={"type": "object", "properties": {
+                "path": {"type": "string", "description": "File path to edit"},
+                "old_string": {"type": "string", "description": "Text to find (include surrounding context for uniqueness)"},
+                "new_string": {"type": "string", "description": "Replacement text. Pass empty string to delete."},
+                "reason": {"type": "string", "description": "Human-readable reason for this modification"},
+            }, "required": ["path", "old_string", "new_string", "reason"]},
+            handler=safe_modify_diff_handler,
+            verify_level=VerifyLevel.SCHEMA,
+            timeout=60,
+            edition='full',
+            sandbox_level=SandboxLevel.REQUIRED,
+        ),
+        # checkpoint_list: list available checkpoints
+        ToolDefinition(
+            name='checkpoint_list',
+            description='List all available checkpoints/snapshots with optional status filter.',
+            params={"type": "object", "properties": {
+                "status": {"type": "string", "description": "Optional filter: 'incomplete' or 'complete'", "enum": ["incomplete", "complete"]},
+            }},
+            handler=checkpoint_list_handler,
+            verify_level=VerifyLevel.BASIC,
+            timeout=10,
+            edition='full',
+            sandbox_level=SandboxLevel.NONE,
+        ),
+        # checkpoint_restore: restore from a checkpoint
+        ToolDefinition(
+            name='checkpoint_restore',
+            description='Restore files from a checkpoint. Requires confirm=True. Call without confirm first to preview what files will be affected.',
+            params={"type": "object", "properties": {
+                "checkpoint_id": {"type": "string", "description": "Checkpoint ID to restore from"},
+                "selective_files": {"type": "array", "items": {"type": "string"}, "description": "Optional list of specific file paths to restore"},
+                "confirm": {"type": "boolean", "description": "Must be True to proceed. Call without confirm first to preview.", "default": False},
+            }, "required": ["checkpoint_id"]},
+            handler=checkpoint_restore_handler,
+            verify_level=VerifyLevel.IDENTITY,
+            timeout=30,
+            edition='full',
+            sandbox_level=SandboxLevel.NONE,
+        ),
+        # ask_user: ask the human for input when stuck
+        ToolDefinition(
+            name='ask_user',
+            description='Ask the human user for input when you are stuck, need a CAPTCHA code, need confirmation, '
+                        'or cannot proceed with the current task. Use this instead of trying the same thing repeatedly.',
+            params={
+                "type": "object",
+                "properties": {
+                    "question": {
+                        "type": "string",
+                        "description": "The question to ask the user. Be specific about what you need."
+                    },
+                    "context": {
+                        "type": "string",
+                        "description": "Optional context explaining why you need this input (e.g., 'CAPTCHA detected on login page', 'need confirmation to proceed')"
+                    }
+                },
+                "required": ["question"]
+            },
+            handler=ask_user_handler,
+            verify_level=VerifyLevel.BASIC,
+            timeout=10,
+            edition='both',
+            sandbox_level=SandboxLevel.NONE,
+        ),
+        # end_task: signal task completion
+        ToolDefinition(
+            name='end_task',
+            description='Signal that the current task is complete. Call when all work is done. Triggers memory consolidation.',
+            params={"type": "object", "properties": {
+                "success": {"type": "boolean", "description": "Whether the task succeeded", "default": True},
+            }},
+            handler=end_task_handler,
+            verify_level=VerifyLevel.BASIC,
+            timeout=10,
+            edition='both',
+            sandbox_level=SandboxLevel.NONE,
+        ),
+
     ]
 
     return _builtin_tools_cache
+
+# =============================================================================
+# safe_modify / safe_modify_diff / checkpoint handlers - bridge to module-level exec
+# =============================================================================
+
+def end_task_handler(*args, **kwargs) -> Dict[str, Any]:
+    """Bridge handler: delegates to tool_executor.exec_end_task.
+    Accepts both handler({"success": True}) and handler(key=val, ...)."""
+    from tical_code.core.tool_executor import exec_end_task
+    params = args[0] if args else kwargs
+    return exec_end_task(params)
+
+def safe_modify_handler(*args, **kwargs) -> Dict[str, Any]:
+    """Bridge handler: delegates to tool_executor.exec_safe_modify.
+    Accepts both handler({"success": True}) and handler(key=val, ...)."""
+    from tical_code.core.tool_executor import exec_safe_modify
+    params = args[0] if args else kwargs
+    return exec_safe_modify(params)
+
+
+def safe_modify_diff_handler(*args, **kwargs) -> Dict[str, Any]:
+    """Bridge handler: delegates to tool_executor.exec_safe_modify_diff.
+    Accepts both handler({"success": True}) and handler(key=val, ...)."""
+    from tical_code.core.tool_executor import exec_safe_modify_diff
+    params = args[0] if args else kwargs
+    return exec_safe_modify_diff(params)
+
+
+def checkpoint_list_handler(*args, **kwargs) -> Dict[str, Any]:
+    """Bridge handler: delegates to tool_executor.exec_checkpoint_list.
+    Accepts both handler({"success": True}) and handler(key=val, ...)."""
+    from tical_code.core.tool_executor import exec_checkpoint_list
+    params = args[0] if args else kwargs
+    return exec_checkpoint_list(params)
+
+
+def checkpoint_restore_handler(*args, **kwargs) -> Dict[str, Any]:
+    """Bridge handler: delegates to tool_executor.exec_checkpoint_restore.
+    Accepts both handler({"success": True}) and handler(key=val, ...)."""
+    from tical_code.core.tool_executor import exec_checkpoint_restore
+    params = args[0] if args else kwargs
+    return exec_checkpoint_restore(params)
+
+
+# =============================================================================
+# ask_user Tool - ask the human user for input
+# =============================================================================
+def ask_user_handler(*args, **kwargs) -> Dict[str, Any]:
+    """Ask the human user for input when the AI is stuck, needs a CAPTCHA code,
+    needs confirmation, or cannot proceed with the current task.
+
+    Use this instead of trying the same thing repeatedly.
+
+    Args:
+        params: Dictionary with question (required) and context (optional)
+        context: Execution context
+
+    Returns:
+        Dict with needs_user_input=True flag so the executor pauses for human response
+    """
+    question = params.get("question", "")
+    context_str = params.get("context", "")
+
+    message = f"[NEED_USER_INPUT] {question}"
+    if context_str:
+        message += f"\nContext: {context_str}"
+
+    return {
+        "success": True,
+        "output": message,
+        "needs_user_input": True,
+        "question": question,
+        "context": context_str,
+    }
+
