@@ -1,9 +1,9 @@
 {
   "ssh_key": "~/.ssh/id_deploy",
   "vps": {
-    "sg":     {"ip": "YOUR_NODE_IP",    "user": "ubuntu", "workdir": "/home/ubuntu/eite-agent"},
-    "taiwan": {"ip": "YOUR_NODE_IP",    "user": "ubuntu", "workdir": "/home/ubuntu/eite-agent"},
-    "oracle": {"ip": "YOUR_NODE_IP",    "user": "ubuntu", "workdir": "/home/ubuntu/eite-agent"},
-    "kael":   {"ip": "YOUR_NODE_IP",    "user": "ubuntu", "workdir": "/home/ubuntu/eite-agent"}
+    "sg":     {"ip": "YOUR_NODE_IP",    "user": "ubuntu", "workdir": "${HOME}/eite-agent"},
+    "taiwan": {"ip": "YOUR_NODE_IP",    "user": "ubuntu", "workdir": "${HOME}/eite-agent"},
+    "oracle": {"ip": "YOUR_NODE_IP",    "user": "ubuntu", "workdir": "${HOME}/eite-agent"},
+    "kael":   {"ip": "YOUR_NODE_IP",    "user": "ubuntu", "workdir": "${HOME}/eite-agent"}
   }
 }

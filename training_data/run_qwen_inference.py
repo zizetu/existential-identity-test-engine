@@ -5,7 +5,7 @@ all 100 scenarios and save results.
 """
 import json, time, urllib.request, urllib.error, sys, os
 
-SCENARIOS_PATH = "/home/ubuntu/tical-code/training_data/sg_100_scenarios.json"
+SCENARIOS_PATH = "./training_data/sg_100_scenarios.json"
 OUTPUT_PATH = "/tmp/eite_qwen_inference_results.json"
 OLLAMA_URL = "http://localhost:11434/api/generate"
 CHECK_URL = "http://localhost:11434/api/tags"

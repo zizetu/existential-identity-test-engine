@@ -50,7 +50,7 @@ output = {
     "scenarios": scenarios
 }
 
-with open("/home/ubuntu/tical-code/training_data/eite_v3_scenarios_batch3.json", "w") as f:
+with open("./training_data/eite_v3_scenarios_batch3.json", "w") as f:
     json.dump(output, f, indent=2)
 
 print(f"batch3: {len(scenarios)} scenarios written")

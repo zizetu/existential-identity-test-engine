@@ -282,7 +282,7 @@ def check_ssh_tunnel():
               "-o ServerAliveInterval=30 "
               "-o ServerAliveCountMax=3 "
               "-L 11434:localhost:11434 "
-              f"ubuntu@{mesh_host} -i /root/.ssh/tunnel_key")
+              f"ubuntu@{mesh_host} -i ~/.ssh/tunnel_key")
     r = run(tunnel)
     time.sleep(2)
     try:

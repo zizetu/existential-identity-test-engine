@@ -159,7 +159,7 @@ new_2b = '''        return VerificationResult(
         # Check tool calls for writes to system files followed by reads
         _WRITE_CMDS = re.compile(r'(?:sed\\s+-i|tee\\s+|cp\\s+|mv\\s+|echo\\s+.*>|python3.*open.*[\'"]w)', re.I)
         _READ_CMDS = re.compile(r'(?:cat\\s+|head\\s+|tail\\s+|grep\\s+|less\\s+|more\\s+|python3.*open)', re.I)
-        _SYSTEM_FILE_RE = re.compile(r'(/etc/|/home/ubuntu/tical-code/)', re.I)
+        _SYSTEM_FILE_RE = re.compile(r'(/etc/|/etc/)', re.I)
         for action in self._actions:
             cmd = str(action.get("args", {}).get("command", ""))
             if _WRITE_CMDS.search(cmd) and _SYSTEM_FILE_RE.search(cmd):
