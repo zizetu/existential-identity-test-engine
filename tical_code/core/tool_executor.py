@@ -240,6 +240,16 @@ logger = logging.getLogger("tical_code.seoul.tool_executor")
 # Also create legacy name for log filtering
 _log_legacy = logging.getLogger("tical-code.executor")
 
+# Global TG bot reference for chat_send fallback (set by worker)
+_TG_BOT_TOKEN: str = ""
+_TG_CHAT_ID: str = ""
+
+
+def set_tg_bot(token: str, chat_id: str):
+    global _TG_BOT_TOKEN, _TG_CHAT_ID
+    _TG_BOT_TOKEN = token
+    _TG_CHAT_ID = chat_id
+
 # Workspace: resolved from TICOBOT_DIR env var, defaults to CWD
 WORKSPACE = os.environ.get("TICOBOT_DIR", "")
 if WORKSPACE:
