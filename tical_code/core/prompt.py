@@ -1,9 +1,6 @@
-# tical-code -- AI Agent Platform
+# Existential Identity Test Engine (EITE) — AI Agent Evaluation Framework
 # Copyright (C) 2026 zizetu
-# Original repository: https://github.com/zizetu/eite-agent
-#
-# Built on ticalasi.cloud — Seoul / Oracle / Test mesh. Independent system,
-# not a fork of any other agent framework. See https://ticalasi.cloud
+# Repository: https://github.com/zizetu/existential-identity-test-engine
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -61,13 +58,14 @@ def build_system_prompt(
     parts.append(
         "## Operating rules\n"
         "- Call tools to act — do not just say what you will do.\n"
-        "- When you promise an action ('I will check', 'let me read'), call the tool in the same message.\n"
         "- Keep going until the task is done. Do not stop after one step.\n"
-        "- Each response must either: (a) call tools and make progress, or (b) deliver the final result.\n"
         "- Read enough files to answer, then reply. Do not read the entire codebase.\n"
-        "- Output real results from your tool calls. Format findings with lists or tables.\n"
         "- Never make up data. If something fails, report the failure."
     )
+
+    # Reply Protocol — structured reply rules
+    from tical_code.core.reply_defs import REPLY_PROTOCOL
+    parts.append(REPLY_PROTOCOL)
 
     # Available tools
     tools = _build_tool_descriptions()
