@@ -3,14 +3,14 @@
 ## 1. Current Verification Model
 
 ```
-User Request ──→ Kael ──→ Execute ──→ Owner Manual Verify ──→ Deliver
+User Request ──→ Worker Node ──→ Execute ──→ Owner Manual Verify ──→ Deliver
                    │                         ↑
-                   └──→ Ani(VPS) ────────────┘
+                   └──→ Verifier ────────────┘
                    └──→ External Model (Cross-Verify) ──┘
 ```
 
 - Owner as the sole ultimate verifier
-- Kael + Ani(VPS) + External Model (Cross-Verify)
+- Worker + Verifier + External Model (Cross-Verify)
 - Effective but not scalable — human bottleneck
 
 ---
