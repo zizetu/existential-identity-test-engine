@@ -71,6 +71,46 @@ class VerificationResult:
 # ===========================================================================
 
 # Declaration patterns - require "I have/I've" prefix to avoid false positives on casual speech
+# Chinese declaration patterns — same meaning as _DECL_VERB_MAP but in Chinese
+# These catch fabrication where the LLM claims work in Chinese without tool evidence
+_CN_DECL_VERB_MAP: dict[str, list[str]] = {
+    # "已启动" → started a task/process → requires start_background_task or shell_exec
+    "已启动":     ["start_background_task", "shell_exec", "bash"],
+    # "已创建" / "已建立" → created a file/workspace → requires file_write or bash
+    "已创建":     ["file_write", "bash"],
+    "已建立":     ["file_write", "bash"],
+    # "已修复" → fixed something → requires file_patch, bash, or file_write
+    "已修复":     ["file_patch", "bash", "file_write"],
+    # "已保存" / "已写入" → saved/wrote a file → requires file_write
+    "已保存":     ["file_write", "state_save"],
+    "已写入":     ["file_write"],
+    # "已部署" → deployed → requires bash
+    "已部署":     ["bash", "shell_exec"],
+    # "正在分析" / "正在检查" / "正在扫描" → analyzing/checking/scanning → requires file_read, search_files, or shell_exec
+    "正在分析":   ["file_read", "search_files", "shell_exec", "bash"],
+    "正在检查":   ["file_read", "shell_exec", "bash"],
+    "正在扫描":   ["file_read", "shell_exec", "search_files"],
+    # "正在逐步" → step by step analysis → requires tool calls
+    "正在逐步":   ["file_read", "search_files", "shell_exec"],
+    # "已完成" / "分析完成" / "执行完成" / "全部完成" → completed → requires tool calls
+    "已完成":     ["file_read", "shell_exec", "search_files", "bash", "file_write"],
+    "分析完成":   ["file_read", "search_files", "shell_exec"],
+    "执行完成":   ["shell_exec", "bash"],
+    "全部完成":   ["file_read", "shell_exec", "search_files", "file_patch"],
+    # "任务完成" / "检查完毕" → task done
+    "任务完成":   ["end_task", "start_background_task", "shell_exec"],
+    "检查完毕":   ["file_read", "shell_exec", "bash"],
+    # "正在下载" / "已下载" → downloading → requires web_fetch or bash
+    "正在下载":   ["web_fetch", "bash"],
+    "已下载":     ["web_fetch", "bash"],
+    # "已删除" → deleted → requires bash or file_write
+    "已删除":     ["bash", "file_write"],
+    # "已更新" / "已升级" → updated/upgraded → requires bash
+    "已更新":     ["bash", "shell_exec", "file_patch"],
+    "已升级":     ["bash", "shell_exec"],
+}# 中文编造检测
+
+# English declaration patterns - require "I have/I've" prefix
 _DECL_VERB_MAP: dict[str, list[str]] = {
     "saved":     ["file_write", "state_save", "memory_save"],
     "created":   ["file_write", "bash"],
@@ -129,7 +169,9 @@ _PLAN_KEYWORDS_RE = re.compile(r'\b(understand|plan|propose|approach|task|soluti
 _PROGRESS_RE = re.compile(
     r"\b(i still need to|working on|analyzing|let me first|let me check|looking into|"
     r"i'm going to|i will start|starting with|first,?\s+(let|i|we)|"
-    r"let me read|understanding the|examining the|investigating)\b",
+    r"let me read|understanding the|examining the|investigating)\b|"
+    # Chinese progress indicators
+    r"(正在分析|正在检查|正在扫描|正在逐步|正在查看|正在研究|需要进一步|准备开始|开始分析|开始检查|先看看)",
     re.I,
 )
 _DIFF_RAW_RE = re.compile(
@@ -472,7 +514,7 @@ class VerificationEngine:
         if _PROGRESS_RE.search(reply):
             return VerificationResult(passed=True, action="allow", violations=[], corrections=[])
 
-        # Rule 1-2: Declaration-evidence matching
+        # Rule 1-2: Declaration-evidence matching (English)
         for match in _DECL_RE.finditer(reply.lower()):
             verb = match.group(1)  # group 1 = the verb after prefix
             expected_tools = _DECL_VERB_MAP.get(verb, [])
@@ -491,6 +533,26 @@ class VerificationEngine:
                         rule=2, category="evidence",
                         claim=verb,
                         detail=f"The action '{verb}' did not complete successfully",
+                        severity="medium",
+                    ))
+
+        # Rule 1-2 (Chinese): Declaration-evidence matching for Chinese text
+        for cn_claim, expected_tools in _CN_DECL_VERB_MAP.items():
+            if cn_claim in reply:
+                executed = {a["tool_name"] for a in self._actions}
+                succeeded = {a["tool_name"] for a in self._actions if a["verified"]}
+                if not any(t in executed for t in expected_tools):
+                    violations.append(Violation(
+                        rule=1, category="evidence",
+                        claim=f"cn:{cn_claim}",
+                        detail=f"Chinese claim '{cn_claim}' without matching tool execution",
+                        severity="high",
+                    ))
+                elif not any(t in succeeded for t in expected_tools):
+                    violations.append(Violation(
+                        rule=2, category="evidence",
+                        claim=f"cn:{cn_claim}",
+                        detail=f"Chinese claim '{cn_claim}' but matching tools did not succeed",
                         severity="medium",
                     ))
 
