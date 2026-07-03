@@ -195,6 +195,16 @@ try:
 except ImportError:
     MessageAdapter = None
 
+try:
+    from tical_code.core.modules.sustained_task import SustainedTaskManager
+except ImportError:
+    SustainedTaskManager = None
+
+try:
+    from tical_code.core.modules.self_evolve import SelfEvolveEngine
+except ImportError:
+    SelfEvolveEngine = None
+
 logger = logging.getLogger("tical-code.worker")
 
 
@@ -483,6 +493,25 @@ class Worker:
         # Pending task file for cross-poll continuation
         self._pending_task_file = Path(cfg.get("workspace", ".")) / ".pending_task.json"
         self._pending_task = self._load_pending()
+
+        # SustainedTaskManager - persistent task queue with auto-recovery
+        if SustainedTaskManager is not None:
+            self._sustained_task_mgr = SustainedTaskManager()
+            self.logger.info("SustainedTaskManager initialized")
+        else:
+            self._sustained_task_mgr = None
+            self.logger.warning("SustainedTaskManager unavailable")
+
+        # SelfEvolveEngine - error pattern tracking and usage insights
+        if SelfEvolveEngine is not None:
+            self._self_evolve = SelfEvolveEngine(
+                db_path=self._data_dir + "/self_evolve.db"
+            )
+            self.logger.info("SelfEvolveEngine initialized")
+        else:
+            self._self_evolve = None
+            self.logger.warning("SelfEvolveEngine unavailable")
+
         self._session_family = {}  # session_id -> model family for session-affinity
         self._evidence_retry_count = 0
 
@@ -1635,6 +1664,21 @@ class AsyncWorker:
         """
         loop = asyncio.get_running_loop()
         self.logger.info("AsyncWorker %s entering async main loop", self.name)
+
+        # Recover interrupted sustained tasks on startup
+        if getattr(self, '_sustained_task_mgr', None) is not None:
+            try:
+                recovered = await self._sustained_task_mgr.recover_pending_tasks()
+                if recovered:
+                    self.logger.info(
+                        "Recovered %d pending tasks from previous run",
+                        recovered,
+                    )
+            except Exception as exc:
+                self.logger.warning(
+                    "Sustained task recovery failed: %s", exc
+                )
+
         cleanup_counter = 0
 
         while True:
