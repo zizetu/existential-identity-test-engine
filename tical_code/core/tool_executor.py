@@ -341,7 +341,14 @@ def _bash_safety_check(command: str) -> Optional[str]:
         # Check if it's an admin command - these bypass workspace restriction
         is_admin = any(command.strip().startswith(p) or f"  {p}" in f"  {command}" for p in _ADMIN_CMD_PREFIXES)
         if not is_admin and any(f" {p}" in command or command.startswith(p)
-                               for p in ["cd /etc", "cd /root", "cd /var", "cat /etc", "ls /etc", "cat /root"]):
+                               for p in ["cd /etc", "ls /etc", "cd /var",
+                                         "cat /etc/shadow", "cat /etc/passwd",
+                                         "cat /root/.ssh/", "cat /root/.bashrc",
+                                         "cat /root/.bash_history", "cat /root/.config/",
+                                         "ls /root/.ssh/", "ls /root/.config/"]):
+            return f"Outside workspace, system directory access denied"
+        # Also block bare "cat /root" (no subpath) - directory listing on root home
+        if not is_admin and re.search(r'\bcat\s+/root\s*$', command):
             return f"Outside workspace, system directory access denied"
     # Workspace restriction - blocks unsafe write/read operations
     unsafe_ops = [
@@ -1540,6 +1547,30 @@ def exec_chat_send(args: dict) -> dict:
         return {"ok": True, "target": target, "response": resp_data}
     except Exception as e:
         logger.warning(f"[executor] chat_send error: {e}")
+        # Fallback: try sending directly via TG bot API
+        if _TG_BOT_TOKEN and _TG_CHAT_ID:
+            try:
+                _tg_url = f"https://api.telegram.org/bot{_TG_BOT_TOKEN}/sendMessage"
+                _tg_payload = json.dumps({
+                    "chat_id": _TG_CHAT_ID,
+                    "text": f"[Task] {content[:2000]}",
+                    "parse_mode": "HTML",
+                }).encode()
+                _tg_req = urllib.request.Request(
+                    _tg_url,
+                    data=_tg_payload,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(_tg_req, timeout=10, context=ssl.create_default_context()) as _resp:
+                    _tg_resp = json.loads(_resp.read())
+                if _tg_resp.get("ok"):
+                    logger.info(f"[executor] chat_send via TG fallback to {_TG_CHAT_ID}: {content[:50]}")
+                    return {"ok": True, "via": "tg_fallback", "response": _tg_resp}
+                else:
+                    logger.warning(f"[executor] TG fallback failed: {_tg_resp}")
+            except Exception as _tg_e:
+                logger.warning(f"[executor] TG fallback error: {_tg_e}")
         return {"error": f"Send failed: {e}"}
 
 

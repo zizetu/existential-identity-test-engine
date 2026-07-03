@@ -242,7 +242,7 @@ TOOL_SCHEMAS_CLEAN = TOOL_SCHEMAS  # Use full schema with bash_execute
 # SECTION: Tool Call Limits
 # ─────────────────────────────────────────────────────────────
 # Tool call limits
-MAX_TOOL_ITERATIONS = 8
+MAX_TOOL_ITERATIONS = 12
 SOFT_HINT_AT = 5   # gentle nudge to wrap up
 HARD_STOP_AT = 8   # force stop
 
@@ -1786,8 +1786,16 @@ class AsyncWorker:
             return
 
         tool_iterations = 0
+        force_text = False
         while response.get("tool_calls") and tool_iterations < MAX_TOOL_ITERATIONS:
             tool_iterations += 1
+
+            # If model went 2+ rounds with NO text content, force a text summary
+            current_content = (response.get("content") or "").strip()
+            if tool_iterations >= 2 and not current_content:
+                force_text = True
+                break
+
             messages.append({"role": "assistant", **response})
 
             # Batch process tool calls: concurrent-safe tools run in parallel
@@ -1875,7 +1883,52 @@ class AsyncWorker:
                 )
                 break
 
+        # Collect tool names used for potential fallback
+        tool_names_used = []
+        for tc in response.get("tool_calls", []):
+            fn = tc.get("function", {})
+            name = fn.get("name", "") or tc.get("name", "")
+            if name:
+                tool_names_used.append(name)
+
         content = response.get("content", "") or ""
+        self.logger.info("[RPLY] tool_iterations=%d content_len=%d tools=%s",
+                         tool_iterations, len(content), tool_names_used[:3])
+
+        # If model did tools but no text reply, force a summary WITHOUT tools
+        if not content.strip() and tool_iterations > 0:
+            self.logger.info("[RPLY] forcing text summary after %d tool rounds", tool_iterations)
+            messages.append({
+                "role": "user",
+                "content": "Now reply to the user with a clear summary of what you found. "
+                           "Format the results — use bullet lists, group related findings, "
+                           "and highlight key file names and their purposes. "
+                           "Output the summary directly, do not call any tools."
+            })
+            try:
+                text_resp = await self._async_llm_call(messages, tools=[])
+            except Exception as e:
+                self.logger.error("[RPLY] summary call failed: %s", e)
+                text_resp = {"content": "", "tool_calls": None}
+            content = (text_resp.get("content") or "").strip()
+            if not content:
+                self.logger.info("[RPLY] summary still empty, using best tool result")
+                best_proof = ""
+                for m in reversed(messages):
+                    if isinstance(m, dict) and m.get("role") == "tool":
+                        r = (m.get("content") or "").strip()
+                        if len(r) > len(best_proof):
+                            best_proof = r
+                content = f"[shell]\n{best_proof[:3000]}" if best_proof else f"[ops: {', '.join(tool_names_used[:6])}]"
+            channel.send(Response(
+                content=content,
+                target=msg.sender, source=msg.source, chat_id=msg.chat_id,
+            ))
+            messages.append({"role": "assistant", "content": content})
+            session["messages"] = messages
+            self.session_manager.touch(session_id)
+            return
+
         if content.strip():
             try:
                 formatted = format_result(content)
@@ -1893,7 +1946,7 @@ class AsyncWorker:
         session["messages"] = messages
         self.session_manager.touch(session_id)
 
-    async def _async_llm_call(self, messages: list) -> dict:
+    async def _async_llm_call(self, messages: list, tools=None) -> dict:
         """Make an async LLM call via the worker's LLM backend.
 
         Uses self.llm (the AsyncWorker's backend — always properly
@@ -1915,11 +1968,12 @@ class AsyncWorker:
             return {"content": "Error: LLM backend has no call() method", "tool_calls": None}
 
         _timeout = self._llm_hard_timeout
+        tool_schemas_arg = self.tool_schemas if tools is None else tools
         try:
             if asyncio.iscoroutinefunction(_call_fn):
                 # ModelFailover — async .call(), await with hard timeout
                 result = await asyncio.wait_for(
-                    _call_fn(messages, tools=self.tool_schemas),
+                    _call_fn(messages, tools=tool_schemas_arg),
                     timeout=_timeout,
                 )
             else:
@@ -1927,7 +1981,7 @@ class AsyncWorker:
                 loop = asyncio.get_running_loop()
                 result = await asyncio.wait_for(
                     loop.run_in_executor(
-                        None, _call_fn, messages, self.tool_schemas,
+                        None, _call_fn, messages, tool_schemas_arg,
                     ),
                     timeout=_timeout,
                 )
@@ -2127,7 +2181,9 @@ def async_main():
         PID_FILE.unlink(missing_ok=True)
 
 if __name__ == "__main__":
-    # AsyncWorker is the default and only supported path.
-    # Sync Worker is deprecated -- use AsyncWorker for proper async/await,
-    # single event loop, per-session task isolation, and hard timeouts.
-    async_main()
+    # Default to AsyncWorker — the sync Worker path is legacy and kept only
+    # for debugging/fallback.  ASYNC_WORKER=0 forces sync Worker explicitly.
+    if os.environ.get("ASYNC_WORKER", "").lower() in ("0", "false", "no"):
+        main()
+    else:
+        async_main()
