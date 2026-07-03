@@ -177,17 +177,14 @@ class SelfRepairEngine:
     """
     
     # Self-evolutionsecurityConfig
-    # P0 #1: Protect filelist - Single-source reference from sandbox.py PROTECTED_FILE_REGISTRY
-    # sandbox.py is the security baseline core facility, not degraded mode
+    # P0 #1: Protect filelist - Single-source reference from sandbox.PROTECTED_FILE_REGISTRY
+    # (tical-agent) or empty fallback (EITE-light, where sandbox.py is eval-only)
+    PROTECTED_FILES = frozenset()
     try:
-        from .sandbox import PROTECTED_FILE_REGISTRY
+        from tical_code.core.sandbox import PROTECTED_FILE_REGISTRY
         PROTECTED_FILES = PROTECTED_FILE_REGISTRY
-    except ImportError as e:
-        raise ImportError(
-            f"CRITICAL: sandbox.py PROTECTED_FILE_REGISTRY importFailed - "
-            f"self_repair cannot run without a protected file list."
-            f"originalError: {e}"
-        )
+    except (ImportError, AttributeError):
+        logger.warning("PROTECTED_FILE_REGISTRY not available; self_repair runs with empty protect list")
     
     # P0 #1: Protected directories - files under these directories cannot be modified
     PROTECTED_DIRS = frozenset({

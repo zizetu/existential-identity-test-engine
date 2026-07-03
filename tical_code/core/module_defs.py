@@ -1051,3 +1051,37 @@ def _init_axioms(worker: Any, cfg: dict):
         return None
     return AxiomEngine(enabled=True)
 
+
+# =============================================================================
+# Performance Metrics Collector (full profile)
+# =============================================================================
+
+@register(
+    name="metrics_collector",
+    attr_name="_metrics",
+    config_key="metrics",
+    default_enabled=True,
+    description=(
+        "Performance metrics: records tool execution latency, LLM call latency, "
+        "and error counts per tool. Uses a rolling window. "
+        "You CAN use check_metrics to see average latencies, slowest calls, "
+        "and error breakdowns. Useful for diagnosing slowdowns or tool failures."
+    ),
+    profile="light",
+)
+def _init_metrics(worker: Any, cfg: dict):
+    """Initialize the MetricsCollector and wire it into tool_executor."""
+    try:
+        from tical_code.core.metrics import MetricsCollector
+    except ImportError:
+        return None
+    collector = MetricsCollector(window_size=cfg.get("metrics_window", 200))
+    # Wire into tool_executor globals for tool-level recording
+    try:
+        from tical_code.core.tool_executor import set_metrics_collector
+        set_metrics_collector(collector)
+        logger.info("MetricsCollector wired into tool_executor")
+    except Exception as e:
+        logger.warning("MetricsCollector not wired into tool_executor: %s", e)
+    return collector
+

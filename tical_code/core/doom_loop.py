@@ -171,7 +171,7 @@ class DoomLoopConfig:
         semantic_threshold: semantic similarity threshold (0-1, above this treated as "same")
         recovery_enabled: whetherenableAuto-recovery
     """
-    enabled: bool = False
+    enabled: bool = True
     history_size: int = 30
     warn_threshold_base: int = 5
     critical_threshold_base: int = 8
