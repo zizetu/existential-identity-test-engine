@@ -1,6 +1,6 @@
 # EITE-agent: Existential Identity Test Engine
 
-> **ticalasi.cloud** · Built with tical-code · Seoul · Cang · Kael · Oracle · Test
+> **tical-code** · Self-hosted AI agent runtime
 
 [![CI](https://github.com/zizetu/eite-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/zizetu/eite-agent/actions/workflows/ci.yml)
 
