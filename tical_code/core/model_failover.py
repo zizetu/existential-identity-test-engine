@@ -684,6 +684,38 @@ class ModelFailover:
                         })
                     body["messages"][mi] = {**m, "tool_calls": formatted}
 
+        # Universal: ensure ALL tool_calls have OpenAI format regardless of provider.
+        for mi, m in enumerate(body.get("messages", [])):
+            tcs = m.get("tool_calls")
+            if not tcs:
+                continue
+            needs_fix = any(
+                tc.get("type") != "function" or
+                not isinstance(tc.get("function"), dict) or
+                (tc.get("name") is not None and "function" not in tc)
+                for tc in tcs
+            )
+            if needs_fix:
+                formatted = []
+                for tc in tcs:
+                    fn = tc.get("function", {})
+                    args_val = None
+                    if isinstance(fn, dict):
+                        args_val = fn.get("arguments")
+                    if args_val is None:
+                        args_val = tc.get("args", tc.get("arguments", ""))
+                    if isinstance(args_val, dict):
+                        args_val = json.dumps(args_val)
+                    formatted.append({
+                        "id": tc.get("id", f"call_{mi}"),
+                        "type": "function",
+                        "function": {
+                            "name": tc.get("name", fn.get("name", "") if isinstance(fn, dict) else ""),
+                            "arguments": args_val if args_val is not None else "",
+                        }
+                    })
+                body["messages"][mi] = {**m, "tool_calls": formatted}
+
         # Strip image_url parts for non-vision models only.
         # mimo-v2.5 (vision) keeps images; other models block them.
         if body.get("model") != "mimo-v2.5":

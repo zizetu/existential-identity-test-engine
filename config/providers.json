@@ -1,6 +1,13 @@
 {
-  "_comment": "Provider registry \u2014 add any OpenAI-compatible provider here without code changes. WARNING: You MUST set at least one provider API key via environment variable (e.g. DEEPSEEK_API_KEY) for the agent to function.",
-  "_usage": "Each provider entry defines how to discover itself from env vars. Users can add/remove/reorder providers by editing this file. The from_env() function reads this file at startup.",
+  "_comment": "Provider registry -- add any OpenAI-compatible provider here without code changes.",
+  "_usage": "Each provider entry defines how to discover itself from env vars. Users can add/remove/reorder providers by editing this file or setting environment variables. See .env.example for available env vars.",
+  "_instructions": [
+    "Copy .env.example to .env and set your API key(s).",
+    "Supported: DEEPSEEK_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, SILICONFLOW_API_KEY, CUSTOM_LLM_API_KEY",
+    "Providers are auto-discovered from env vars and sorted by priority (lower = first used).",
+    "Edit this file to add/remove/reorder providers without code changes.",
+    "You can set any model name in the env var (e.g. SILICONFLOW_MODEL for the model to use)."
+  ],
   "_example_new_provider": {
     "name": "my-custom-api",
     "family": "openai",
@@ -9,44 +16,24 @@
     "default_base_url": "https://api.myprovider.com/v1/chat/completions",
     "auth_style": "bearer",
     "default_model": "my-model-name",
-    "available_models": [
-      "my-model-name"
-    ],
+    "available_models": ["my-model-name"],
     "protocol": "openai",
     "priority": 10,
     "cost": "paid"
   },
-  "providers": {
-    "deepseek": {
-      "name": "DeepSeek",
-      "family": "deepseek",
-      "env_key": "DEEPSEEK_API_KEY",
-      "env_base_url": "DEEPSEEK_ENDPOINT",
-      "default_base_url": "https://api.deepseek.com/v1/chat/completions",
-      "auth_style": "bearer",
-      "default_model": "deepseek-v4-flash",
-      "available_models": [
-        "deepseek-v4-flash",
-        "deepseek-chat",
-        "deepseek-reasoner"
-      ],
-      "protocol": "openai",
-      "priority": 1,
-      "cost": "paid"
-    }
-  },
+  "providers": {},
   "auth_styles": {
-    "bearer": "Authorization: Bearer {api_key}",
+    "bearer": "Authentication: Bearer token",
     "api-key": "api-key: {api_key}",
-    "mimo-free-jwt": "Authorization: Bearer {jwt_token}"
+    "none": ""
   },
   "failover": {
     "per_call_timeout": 30,
-    "global_call_timeout": 180,
+    "global_call_timeout": 120,
     "cooldown_base_429": 15,
     "cooldown_base_5xx": 60,
     "cooldown_auth": 300,
-    "cooldown_timeout": 60,
+    "cooldown_timeout": 30,
     "cooldown_cap": 120,
     "min_interval_seconds": 1.0,
     "retry_jitter_min": 0.5,
