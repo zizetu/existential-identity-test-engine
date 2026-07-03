@@ -41,31 +41,48 @@ def _build_tool_descriptions() -> List[str]:
 
 
 def build_system_prompt(
-    name: str = "seoul",
+    name: str = "agent",
     hostname: str = "",
     deploy_path: str = "",
     target_model: str = "",
     active_modules: Optional[Dict[str, Any]] = None,
+    platform: str = "",
 ) -> str:
-    """Build system prompt."""
+    """Build system prompt.
+
+    Args:
+        name: Agent identity name.
+        hostname: Machine hostname for context.
+        deploy_path: Workspace path.
+        target_model: Model name string.
+        active_modules: Dict of enabled modules from registry.
+        platform: Optional platform name for formatting hints
+            ('telegram', 'wechat', 'cli', 'tical-chat', or '' for generic).
+    """
     parts = [
         f"You are {name}, an autonomous agent on {hostname or 'this node'} ({target_model or 'unknown model'}). "
         "You help with questions, code, analysis, and system tasks. "
         "Reply clearly and directly. Be useful, not verbose."
     ]
 
-    # Tool discipline
+    # Operating rules
     parts.append(
         "## Operating rules\n"
-        "- Call tools to act — do not just say what you will do.\n"
+        "- Call tools to act -- do not just say what you will do.\n"
         "- Keep going until the task is done. Do not stop after one step.\n"
         "- Read enough files to answer, then reply. Do not read the entire codebase.\n"
         "- Never make up data. If something fails, report the failure."
     )
 
-    # Reply Protocol — structured reply rules
-    from tical_code.core.reply_defs import REPLY_PROTOCOL
+    # Reply Protocol -- structured reply rules
+    from tical_code.core.reply_defs import REPLY_PROTOCOL, get_platform_section
     parts.append(REPLY_PROTOCOL)
+
+    # Platform-specific formatting hints (optional)
+    if platform:
+        plat_section = get_platform_section(platform)
+        if plat_section:
+            parts.append(plat_section)
 
     # Available tools
     tools = _build_tool_descriptions()
