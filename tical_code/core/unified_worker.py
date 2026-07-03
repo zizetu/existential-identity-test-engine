@@ -1426,6 +1426,9 @@ class AsyncWorker:
         self.workspace = cfg["workspace"]
         self.logger = logging.getLogger(f"tical-code.async_worker.{self.name}")
 
+        # SustainedTaskManager - initialized to None; Worker.__init__ creates it
+        self._sustained_task_mgr = None
+
         # Session management (LRU, 30-min idle timeout for long-term tracking)
         self.session_manager = SessionManager(
             max_sessions=cfg.get("max_sessions", 100),
