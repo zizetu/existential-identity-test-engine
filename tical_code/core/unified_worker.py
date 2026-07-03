@@ -1922,7 +1922,6 @@ class AsyncWorker:
                 messages.append({
                     "role": "tool",
                     "tool_call_id": tool_call_id,
-                    "type": "tool",
                     "content": result_str,
                 })
 
