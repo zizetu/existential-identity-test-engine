@@ -5,7 +5,7 @@
     "mode": "gateway",
     "base_url": "https://localhost:5000/v1/api",
     "timeout": 30,
-    "verify_ssl": false,
+    "verify_ssl": true,
     "tickle_interval": 60,
     "description": "Client Portal Gateway mode (personal, localhost)"
   },
@@ -14,7 +14,7 @@
     "mode": "gateway",
     "base_url": "https://localhost:5000/v1/api",
     "timeout": 30,
-    "verify_ssl": false,
+    "verify_ssl": true,
     "tickle_interval": 60,
     "paper_trading": true,
     "description": "Client Portal Gateway with Paper Trading account"
