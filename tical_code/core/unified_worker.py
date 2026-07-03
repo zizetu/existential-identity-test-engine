@@ -13,8 +13,13 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
-#
-# Original repository: https://github.com/zizetu/eite-agent
+
+# [ANCHOR] This is the PUBLIC, sanitized version (AGPL).
+# Private full version at zizetu/eite-agent. Sister project: zizetu/tical-agent.
+# Do NOT add VPS IPs, tokens, internal paths, or node topology here.
+# See STRATEGY.md for commercial context.
+
+from __future__ import annotations
 #
 
 # provenance:ticalasi-zzt-2026​
