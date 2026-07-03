@@ -1,30 +1,30 @@
 {
-  "kael": {
+  "node-a": {
     "user": "root",
-    "role": "worker, tical-chat relay",
+    "role": "worker, chat relay",
     "ip": "",
-    "repo": "~/eitelite",
-    "worker": "unified-worker-kael"
+    "repo": "~/eite-agent",
+    "worker": "unified-worker-node-a"
   },
-  "oracle": {
+  "node-b": {
     "user": "ubuntu",
-    "role": "worker (tico-oracle)",
+    "role": "worker",
     "ip": "",
-    "repo": "/home/ubuntu/eitelite",
-    "worker": "unified-worker-oracle"
+    "repo": "/home/ubuntu/eite-agent",
+    "worker": "unified-worker-node-b"
   },
-  "test": {
+  "node-c": {
     "user": "ubuntu",
-    "role": "worker (tico-test)",
+    "role": "worker",
     "ip": "",
-    "repo": "/home/ubuntu/eitelite",
-    "worker": "unified-worker-test"
+    "repo": "/home/ubuntu/eite-agent",
+    "worker": "unified-worker-node-c"
   },
-  "taiwan": {
+  "node-d": {
     "user": "ubuntu",
-    "role": "worker (ani), tical-chat server",
+    "role": "worker, chat server",
     "ip": "",
-    "repo": "/home/ubuntu/tical-agent",
-    "worker": "unified-worker-ani"
+    "repo": "/home/ubuntu/eite-agent",
+    "worker": "unified-worker-node-d"
   }
 }
