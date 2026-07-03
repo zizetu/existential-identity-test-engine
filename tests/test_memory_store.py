@@ -44,8 +44,8 @@ def memory_dir(tmp_path):
     # SOUL.md
     (tmp_path / "core_settings" / "SOUL.md").write_text(
         "# Kael\n\n"
-        "## Personality\n"
-        "Kael is a warm and perceptive AI assistant.\n"
+        "# Nova personality\n\n",
+        "Nova is a warm and perceptive AI assistant.\n",
         "Good at listening and empathizing.\n\n"
         "## Principles\n"
         "- Honesty first\n"
@@ -310,7 +310,7 @@ class TestSearch:
 
     def test_search_rank_ordering(self, store):
         """Test that results are ordered by relevance (rank)."""
-        results = store.search("Kael Personality", limit=10)
+        results = store.search("Nova Personality", limit=10)
         if len(results) > 1:
             # rank should be ascending (smaller = more relevant, FTS5 bm25 default)
             ranks = [r.rank for r in results]
