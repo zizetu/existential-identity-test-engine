@@ -49,10 +49,9 @@ logger = logging.getLogger("tical-code.channel")
 
 
 def _ssrf_guard(url_or_req):
-    """SSRF check before urlopen."""
+    """SSRF check before urlopen. Raises ValueError if blocked."""
     url = url_or_req if isinstance(url_or_req, str) else url_or_req.full_url
-    _check_ssrf(url)
-
+    _check_ssrf(url)  # raises ValueError on failure, returns None on success
 
 class Message:
     """Unified message format."""
