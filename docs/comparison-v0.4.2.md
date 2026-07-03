@@ -9,7 +9,7 @@
 ## Overview of Compared Systems
 
 ### tical-code v0.4.2
-A production-grade **infrastructure-autonomous agent** deployed across a 5-VPS mesh (Taiwan, Seoul, Oracle, Test, Kael). Features 7-model failover chain, circuit-breaker health states, multi-model verification broadcasting, Doom Loop detection (4 detection engines), self-repair engine with checkpoint recovery, FTS5 memory store, Constitution Enforcer, client-side context compactor, and a full-featured DecisionEngine with 6-step cognitive pipeline.
+A production-grade **infrastructure-autonomous agent** deployed across a multi-node distributed mesh. Features 7-model failover chain, circuit-breaker health states, multi-model verification broadcasting, Doom Loop detection (4 detection engines), self-repair engine with checkpoint recovery, FTS5 memory store, Constitution Enforcer, client-side context compactor, and a full-featured DecisionEngine with 6-step cognitive pipeline.
 
 ### EITElite v0.4.2
 Lightweight mirror of tical-code designed for 1C1G VPS environments. Same 7-model failover chain and security baseline but omits heavy modules: no DecisionEngine, no Self-Repair Engine, no checkpoint manager, no context compactor, no FTS5 memory store (uses simpler JSON memory).
@@ -174,8 +174,8 @@ Tool execution safety is tical-code's **strongest dimension**. The 8-layer safet
 
 | System | Score | Evidence |
 |--------|-------|----------|
-| **tical-code v0.4.2** | **9** | Multi-platform: Telegram bot interface + tical-chat mesh protocol. systemd service with watchdog for production Linux deployment. 5-VPS mesh topology with ops-anchor.json for topology awareness. git clone deployment. CLI interface. Cross-node SSH mesh with peer communication. |
-| **EITElite v0.4.2** | **8** | Same Telegram + tical-chat + systemd deployment. Optimized for 1C1G VPS. 2-VPS mesh (Oracle + Test). Lighter footprint enables deployment on extremely constrained hardware. |
+| **tical-code v0.4.2** | **9** | Multi-platform: Telegram bot interface + tical-chat mesh protocol. systemd service with watchdog for production Linux deployment. Multi-node mesh topology with ops-anchor.json for topology awareness. git clone deployment. CLI interface. Cross-node SSH mesh with peer communication. |
+| **EITElite v0.4.2** | **8** | Same Telegram + tical-chat + systemd deployment. Optimized for 1C1G VPS. Minimal 2-node mesh. Lighter footprint enables deployment on extremely constrained hardware. |
 | **Claude Code** | **6** | npm global install. Linux/macOS/Windows via WSL. VS Code/JetBrains IDE extensions. No background daemon mode — interactive session only. tmux for persistence. |
 | **Codex CLI** | **5** | npm install. Linux/macOS/Windows. Background mode supported. No IDE integration. Sandbox requires Docker (Linux-native, Docker Desktop elsewhere). |
 | **Cursor Agent** | **5** | IDE-only (Cursor IDE). Windows/macOS/Linux desktop. No headless/CLI mode. No server deployment. Tightly coupled to GUI. |
