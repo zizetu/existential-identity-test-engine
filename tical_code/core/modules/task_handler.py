@@ -115,7 +115,40 @@ except ImportError:
 from tical_code.core.tool_executor import execute, TOOL_SCHEMAS
 from tical_code.core.response_formatter import format_result
 
+# PROGRESS: lazy import to avoid circular dep at module level
+_progress_Response = None
+def _get_response_class():
+    global _progress_Response
+    if _progress_Response is None:
+        from tical_code.core.channel import Response as _R
+        _progress_Response = _R
+    return _progress_Response
+
 logger = logging.getLogger("tical-code.task_handler")
+
+# ── Progress reporting helper ─────────────────────────────────────
+_PROGRESS_INTERVAL = 3  # report every N steps
+
+def _send_progress(ctx, state, step):
+    """Send a plain-text progress update through all active channels."""
+    if not ctx.channels:
+        return
+    # Use the default chat_id from environment
+    _chat_id = os.environ.get("TG_CHAT_ID", "")
+    plan = state.plan or []
+    plan_desc = plan[step] if step < len(plan) else state.goal[:80]
+    msg = (
+        f"[Task {step+1}/{state.max_steps}] {state.task_id}\n"
+        f"  {plan_desc}"
+    )
+    Resp = _get_response_class()
+    resp = Resp(content=msg, target=_chat_id or "broadcast", chat_id=_chat_id or None)
+    for ch in ctx.channels:
+        try:
+            ch.send(resp)
+        except Exception:
+            pass
+    logger.info("Progress: task=%s step=%d/%d", state.task_id, step+1, state.max_steps)
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -368,6 +401,10 @@ def run_task(ctx: SharedContext, task) -> None:
         # Track for heartbeat
         ctx._current_task_id = state.task_id
         ctx._current_task_step = step
+
+        # Send progress update every N steps
+        if step % _PROGRESS_INTERVAL == 0:
+            _send_progress(ctx, state, step)
 
         # Save pre-step checkpoint (raw conversation for replayability)
         if ctx.checkpoint:

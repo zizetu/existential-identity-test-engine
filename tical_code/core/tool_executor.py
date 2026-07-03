@@ -29,6 +29,14 @@ call from the AI passes through a multi-layered security architecture before exe
 2. **Rate limiting** - the RateLimiter class enforces a sliding-window rate cap
    (default: 5 calls/second) on network-facing tools like http_post.
 
+3. **Performance metrics** - every tool execution is timed and recorded via
+   MetricsCollector when available. Latency outliers and errors are tracked
+   per tool name for observability and debugging.
+
+4. **Block patterns** - the _bash_safety_check function blocks genuinely dangerous
+   commands (fork bombs, raw device writes, SSRF to private IPs, path traversal)
+   while allowing legitimate admin operations (systemctl, journalctl, docker).
+
 3. **BASH_BLACKLIST enforcement** - shell commands are regex-matched against a
    comprehensive blacklist of dangerous operations (reboot, rm -rf /, fork bombs,
    curl-pipe-shell, iptables flush, dd, mkfs, chmod 777 /, etc.).
@@ -74,6 +82,25 @@ from typing import Any, Dict, Optional
 from collections import deque
 
 import threading
+
+# Atomic JSON file write helper ──────────────────────────────────
+# Writes to tempfile then atomically renames (POSIX) to prevent
+# TOCTOU races on shared files like memory.json (AG-C5).
+import tempfile as _tempfile
+
+def _atomic_write_json(path: Path, data: dict) -> None:
+    """Write *data* as JSON to *path* via tempfile + os.rename (atomic on POSIX)."""
+    fd, tmp = _tempfile.mkstemp(suffix='.json', prefix='tc_atomic_', dir=str(path.parent))
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.rename(tmp, str(path))
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except Exception:
+            pass
+        raise
 
 # Rate Limiter
 _RATE_LIMIT_MAX_CALLS = 5
@@ -157,7 +184,7 @@ def list_plugin_tools() -> list:
     return list(_PLUGIN_TOOLS.keys())
 
 
-# Config file paths searched by exec_self_info for model configuration discovery.
+# Config file paths searched by model configuration discovery.
 # These are checked in order - the first existing file is used.
 _CONFIG_FILE_CANDIDATES = [
     Path.home() / "eite-agent" / "config.json",
@@ -186,6 +213,7 @@ TOOL_CONCURRENCY_MAP = {
     "check_self": True,
     "web_fetch": True,
     "vigil_status": True,
+    "check_metrics": True,
     "get_subagent_result": True,
     # Everything else (shell_exec, bash, file_write, file_patch,
     # memory_save, memory, state_save, chat_send, restart_self,
@@ -333,7 +361,13 @@ def _bash_safety_check(command: str) -> Optional[str]:
 
     # Explicitly blocked patterns - only genuinely dangerous commands
     # v0.6.0: curl is allowed (the web_fetch tool exists but LLMs may prefer curl for simple requests)
-    _BLOCKED_CMD_PATTERNS = ["> /dev/sda", "dd if=", ":(){ :|:& };:"]  # fork bomb
+    # v0.8.7: added path traversal, env leak, process kill, mass chmod
+    _BLOCKED_CMD_PATTERNS = [
+        "> /dev/sda", "dd if=", ":(){ :|:& };:",  # fork bomb / raw device
+        "kill -9", "killall", "pkill -9",         # process termination
+        "chmod 777", "chmod -R 777",              # excessive permissions
+        "chown -R",                                # mass ownership change
+    ]
     for blocked_pat in _BLOCKED_CMD_PATTERNS:
         if blocked_pat in command:
             return f"Command blocked by safety policy: {blocked_pat}"
@@ -356,6 +390,12 @@ def _bash_safety_check(command: str) -> Optional[str]:
         r"mv\s+/", r"cp\s+/",
         r"cat\s+/home/<user>/\.agents/", r"cat\s+/home/<user>/\.ssh/",
         r"(cat|curl|wget)\s+/etc/shadow", r"(cat|curl|wget)\s+/etc/passwd",
+        # Path traversal via relative paths
+        r"\.\./\S+",
+        # Env var leaks (API keys, tokens, secrets)
+        r'(echo|print|printf|cat)\s+\$?(API_KEY|BOT_TOKEN|TG_TOKEN|OPENAI_API|ANTHROPIC|DEEPSEEK|GITHUB_TOKEN|SECRET)',
+        # curl/wget with output to system paths
+        r"(curl|wget)\s+.*(-o|--output|-O)\s+/(etc|bin|sbin|root)",
     ]
     for p in unsafe_ops:
         if re.search(p, command):
@@ -894,6 +934,17 @@ TOOL_SCHEMAS = [
     {
         "type": "function",
         "function": {
+            "name": "check_metrics",
+            "description": "Return performance metrics: tool latency averages, LLM call latency, error counts per tool, and top 5 slowest tool calls. Returns inactive if MetricsCollector not initialized.",
+            "parameters": {
+                "type": "object",
+                "properties": {}
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "end_task",
             "description": "Signal that the current task is complete. Call when all work is done. Triggers memory consolidation.",
             "parameters": {
@@ -1378,8 +1429,19 @@ def exec_file_write(args: dict, base_dir: str = "") -> dict:
             except py_compile.PyCompileError as e:
                 import os; os.unlink(tmp.name)
                 return {"error": f"SyntaxError in Python file, write blocked: {e}"}
-        full_path.write_text(content)
-        logger.info(f"[executor] wrote {len(content)} bytes to {full_path}")
+            # Atomic write via tempfile + rename (AG-C5: TOCTOU fix)
+            fd2, tmp_path2 = _tempfile.mkstemp(suffix=full_path.suffix, prefix='tc_write_', dir=str(full_path.parent))
+            try:
+                with os.fdopen(fd2, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                os.rename(tmp_path2, str(full_path))
+            except BaseException:
+                try:
+                    os.unlink(tmp_path2)
+                except Exception:
+                    pass
+                raise
+            logger.info(f"[executor] wrote {len(content)} bytes to {full_path}")
         return {"ok": True, "path": str(full_path)}
     except Exception as e:
         return {"error": str(e)}
@@ -1408,10 +1470,13 @@ def exec_file_patch(args: dict) -> dict:
     full_path = _workspace_path(path)
     if full_path is None:
         return {"error": f"Path outside workspace: {path}"}
-    if not full_path.exists():
-        return {"error": f"File not found: {path}"}
     try:
         content = full_path.read_text()
+    except FileNotFoundError:
+        return {"error": f"File not found: {path}"}
+    except Exception as e:
+        return {"error": f"Cannot read {path}: {e}"}
+    try:
         if old_string in content:
             new_content = content.replace(old_string, new_string, 1)
             # CRITICAL: Validate syntax before writing .py files
@@ -1426,7 +1491,18 @@ def exec_file_patch(args: dict) -> dict:
                 except py_compile.PyCompileError as e:
                     import os; os.unlink(tmp.name)
                     return {"error": f"SyntaxError in Python file, patch blocked: {e}"}
-            full_path.write_text(new_content)
+            # Atomic write via tempfile + rename (AG-C5: TOCTOU fix)
+            fd2, tmp_path2 = _tempfile.mkstemp(suffix=full_path.suffix, prefix='tc_patch_', dir=str(full_path.parent))
+            try:
+                with os.fdopen(fd2, 'w', encoding='utf-8') as f:
+                    f.write(new_content)
+                os.rename(tmp_path2, str(full_path))
+            except BaseException:
+                try:
+                    os.unlink(tmp_path2)
+                except Exception:
+                    pass
+                raise
             import difflib
             diff = list(difflib.unified_diff(
                 content.splitlines(True), new_content.splitlines(True),
@@ -1470,7 +1546,7 @@ def exec_memory_save(args: dict, base_dir: str = "") -> dict:
             mem = {}
     mem.setdefault("entries", {})[key] = {"value": value, "time": time.time()}
     try:
-        mem_file.write_text(json.dumps(mem, ensure_ascii=False, indent=2))
+        _atomic_write_json(mem_file, mem)
     except Exception as e:
         return {"error": f"Failed to write memory: {e}"}
     return {"ok": True, "key": key}
@@ -2047,6 +2123,23 @@ def exec_vigil_status(args: dict = None) -> dict:
     }
 
 
+def exec_check_metrics(args: dict = None) -> dict:
+    """Return performance metrics summary from MetricsCollector.
+
+    Returns tool/LLM latency averages, error counts per tool, and
+    top slowest calls.  Returns inactive notice if no collector.
+    """
+    if _METRICS_COLLECTOR is None:
+        return {"active": False, "message": "metrics_collector not initialized"}
+    summary = _METRICS_COLLECTOR.summary()
+    slowest = _METRICS_COLLECTOR.top_slowest(n=5)
+    result = dict(summary)
+    if slowest:
+        result["slowest_tool_calls"] = slowest
+    result["active"] = True
+    return result
+
+
 def exec_memory(args: dict) -> dict:
     """Manage persistent memory with store/recall/search/forget actions.
 
@@ -2089,7 +2182,7 @@ def exec_memory(args: dict) -> dict:
             for k in old_keys:
                 del mem["entries"][k]
         try:
-            mem_file.write_text(json.dumps(mem, ensure_ascii=False, indent=2))
+            _atomic_write_json(mem_file, mem)
         except Exception as e:
             return {"ok": False, "error": f"Memory write failed: {e}"}
         return {"ok": True, "key": key, "action": "store"}
@@ -2122,7 +2215,7 @@ def exec_memory(args: dict) -> dict:
         if key in mem["entries"]:
             del mem["entries"][key]
             try:
-                mem_file.write_text(json.dumps(mem, ensure_ascii=False, indent=2))
+                _atomic_write_json(mem_file, mem)
             except Exception as e:
                 return {"ok": False, "error": f"Memory write failed: {e}"}
             return {"ok": True, "action": "forget", "key": key}
@@ -2394,6 +2487,18 @@ def chain_exec(args: dict) -> dict:
 #   4 = ALLOWED + skip all checks (full bypass - bypassPermissions equivalent)
 _SELF_MODIFY_PERMISSION = 0
 _SELF_REPAIR_ENGINE = None
+_METRICS_COLLECTOR = None  # injected by module_registry -> metrics_collector
+
+
+def set_metrics_collector(collector) -> None:
+    """Inject the worker's MetricsCollector into tool_executor.
+
+    Called by module_registry when the metrics_collector module is
+    loaded.  Every tool execution is timed and recorded via the
+    collector when this is set.
+    """
+    global _METRICS_COLLECTOR
+    _METRICS_COLLECTOR = collector
 _CHECKPOINT_MANAGER = None
 
 
@@ -2995,6 +3100,7 @@ def execute(name: str, args: dict, base_dir: str = "") -> dict:
         "delegate_task": _delegate_task_dispatch,
         "get_subagent_result": _get_subagent_result_dispatch,
         "vigil_status": exec_vigil_status,
+        "check_metrics": exec_check_metrics,
         "end_task": exec_end_task,
         "capability_list": exec_capability_list,
         "capability_call": exec_capability_call,
@@ -3007,7 +3113,17 @@ def execute(name: str, args: dict, base_dir: str = "") -> dict:
         return {"error": f"Unknown tool: {name}"}
 
     try:
+        import time as _time_mod
+        _t0 = _time_mod.time()
         result = handler(args)
+        _elapsed = _time_mod.time() - _t0
+        # Record in metrics collector if available
+        if _METRICS_COLLECTOR is not None:
+            if isinstance(result, dict) and "error" in result:
+                err_msg = result.get("error", "unknown")[:200]
+                _METRICS_COLLECTOR.record_tool_error(name, err_msg)
+            else:
+                _METRICS_COLLECTOR.record_tool_call(name, _elapsed)
         if isinstance(result, dict) and "error" in result and "explicit_error" not in result:
             logger.warning(f"[executor] {name} error: {result['error'][:100]}")
         # Sanitize tool output: scan for PII and secret key patterns
