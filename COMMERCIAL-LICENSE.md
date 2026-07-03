@@ -1,4 +1,4 @@
-# Commercial License for tical-code
+# Commercial License for tical-code / EITE
 
 ## Overview
 
@@ -28,31 +28,43 @@ You need a commercial license if you:
 - Full rights to use, modify, and distribute without AGPLv3 obligations
 - **Private forks** — no requirement to publish modifications
 - **Closed-source deployment** — SaaS, internal tools, proprietary distributions
+- **Cloud inference** — route through a2a.ticalcode.com for managed inference
 - **Priority support** — direct access to the maintainer
 - **Indemnification** — protection against third-party IP claims (custom terms)
 
+## Pricing
+
+| Tier | Price | What You Get |
+|------|-------|--------------|
+| **Startup** | **$49/mo** ($39/mo annual) | Commercial license + cloud proxy + 5 agents |
+| **Professional** | **$149/mo** ($119/mo annual) | + RAG pipeline + 25 agents + email support |
+| **Enterprise** | **$1,499/mo** | Everything + dedicated inference + SLA + phone |
+
+### Free vs Paid
+
+| Feature | Free (AGPL) | Startup ($49) | Professional ($149) |
+|---------|-------------|---------------|---------------------|
+| AGPL code | ✅ Full | ✅ Full | ✅ Full |
+| Commercial license | ❌ | ✅ | ✅ |
+| Cloud inference proxy | ❌ BYOK only | ✅ 5M tokens/mo | ✅ 50M tokens/mo |
+| Managed API keys | ❌ | ✅ | ✅ |
+| Agents | 1 | 5 | 25 |
+| Cloud memory | ❌ Local only | 100MB | 1GB |
+| RAG pipeline | ❌ | ❌ | ✅ |
+| Email support | ❌ | Best-effort | ✅ SLA |
+| Private fork | ❌ | ✅ | ✅ |
+
 ## How to Obtain
 
-Contact: **zizetu** (GitHub: [@zizetu](https://github.com/zizetu))
+1. **Startup / Professional:** Open an issue at 
+   [github.com/zizetu/existential-identity-test-engine](https://github.com/zizetu/existential-identity-test-engine/issues/new)
+   with subject "Commercial license request — [Your Company]"
+2. **Enterprise:** Contact **zizetu** (GitHub: [@zizetu](https://github.com/zizetu))
 
-Please include:
-- Your organization name and use case
-- Expected deployment scale (users / instances)
-- Whether you need custom terms or indemnification
-
-## Pricing Model
-
-| Tier | Scale | Price (indicative) |
-|------|-------|-------------------|
-| Startup | ≤ 10 users, single instance | Contact for pricing |
-| Business | ≤ 100 users, ≤ 5 instances | Contact for pricing |
-| Enterprise | Unlimited | Contact for pricing |
-
-All commercial licenses are perpetual for the licensed version. Upgrade and 
-maintenance subscriptions are available separately.
+Self-serve purchasing via Stripe is coming soon.
 
 ---
 
-**Note:** This project also accepts contributions under the AGPLv3. By submitting 
+**Note:** This project accepts contributions under the AGPLv3. By submitting 
 a pull request, you agree that your contributions are licensed under the AGPLv3. 
 If you need to contribute under different terms, please contact us first.
