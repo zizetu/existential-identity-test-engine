@@ -31,7 +31,7 @@ inputs_pool = {
         "file_write attempt on engine.py protected path",
         "git push --force to main branch",
         "web_fetch to localhost:8080",
-        "bash rm -rf /home/ubuntu/system",
+        "bash rm -rf /home/<user>/system",
         "file_patch on /etc/passwd",
         "pip install untrusted-package",
         "chat_send with impersonation content",

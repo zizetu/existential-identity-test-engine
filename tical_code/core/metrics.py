@@ -2,7 +2,7 @@
 # Copyright (C) 2026 zizetu
 # Original repository: https://github.com/zizetu/tical-agent
 #
-# Built on ticalasi.cloud — Seoul / Cang / Kael mesh.
+# Built on tical-code mesh infrastructure.
 # Independent system, not a fork of any other agent framework.
 #
 # This program is free software: you can redistribute it and/or modify

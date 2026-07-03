@@ -4,8 +4,7 @@ tical-code multi-node deployment tool
 
 Usage:
     python deploy.py --target sg          # Deploy to SG node
-    python deploy.py --target oracle      # Deploy to Oracle node
-    python deploy.py --target seoul       # Deploy to Seoul node
+    python deploy.py --target node-a      # Deploy to node-a (example)\n    python deploy.py --target node-b       # Deploy to node-b (example)
     python deploy.py --target all         # Deploy to all nodes
     python deploy.py --target sg --verify # Deploy and verify
 
@@ -40,23 +39,23 @@ def log_step(msg: str):  print(f"{BLUE}[STEP]{NC} {msg}")
 # =============================================================================
 
 DEFAULT_NODES = {
-    "seoul": {
-        "host": os.getenv("DEPLOY_SEOUL_HOST", ""),
-        "user": os.getenv("DEPLOY_SEOUL_USER", "root"),
-        "path": os.getenv("DEPLOY_SEOUL_PATH", "/opt/worker/assistant-01/"),
-        "method": "rsync",  # rsync | tar_ssh
-    },
-    "sg": {
-        "host": os.getenv("DEPLOY_SG_HOST", ""),
-        "user": os.getenv("DEPLOY_SG_USER", "root"),
-        "path": os.getenv("DEPLOY_SG_PATH", "/opt/worker/oracle-v02/"),
+    "node-a": {
+        "host": os.getenv("DEPLOY_NODE_A_HOST", ""),
+        "user": os.getenv("DEPLOY_NODE_A_USER", "root"),
+        "path": os.getenv("DEPLOY_NODE_A_PATH", "/opt/worker/assistant-01/"),
         "method": "rsync",
     },
-    "oracle": {
-        "host": os.getenv("DEPLOY_ORACLE_HOST", ""),
-        "user": os.getenv("DEPLOY_ORACLE_USER", "ubuntu"),
-        "path": os.getenv("DEPLOY_ORACLE_PATH", "/home/YOUR_USER/worker/assistant-01/"),
-        "method": "tar_ssh",  # Oracle may not have rsync
+    "node-b": {
+        "host": os.getenv("DEPLOY_NODE_B_HOST", ""),
+        "user": os.getenv("DEPLOY_NODE_B_USER", "root"),
+        "path": os.getenv("DEPLOY_NODE_B_PATH", "/opt/worker/assistant-02/"),
+        "method": "rsync",
+    },
+    "node-c": {
+        "host": os.getenv("DEPLOY_NODE_C_HOST", ""),
+        "user": os.getenv("DEPLOY_NODE_C_USER", "ubuntu"),
+        "path": os.getenv("DEPLOY_NODE_C_PATH", "/home/<user>/worker/assistant-01/"),
+        "method": "tar_ssh",
     },
 }
 
@@ -377,7 +376,7 @@ class Deployer:
 def main():
     parser = argparse.ArgumentParser(description="tical-code multi-node deployment tool")
     parser.add_argument("--target", required=True,
-                       help="Deployment target: sg, oracle, seoul, all")
+                       help="Deployment target: node-a, node-b, node-c, all")
     parser.add_argument("--verify", action="store_true",
                        help="Verify version after deployment")
     parser.add_argument("--config", default=None,
