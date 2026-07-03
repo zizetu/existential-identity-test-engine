@@ -2127,7 +2127,7 @@ def async_main():
         PID_FILE.unlink(missing_ok=True)
 
 if __name__ == "__main__":
-    if os.environ.get("ASYNC_WORKER", "").lower() in ("1", "true", "yes"):
-        async_main()
-    else:
-        main()
+    # AsyncWorker is the default and only supported path.
+    # Sync Worker is deprecated -- use AsyncWorker for proper async/await,
+    # single event loop, per-session task isolation, and hard timeouts.
+    async_main()
