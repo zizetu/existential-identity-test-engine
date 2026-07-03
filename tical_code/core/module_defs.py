@@ -1053,7 +1053,7 @@ def _init_axioms(worker: Any, cfg: dict):
 
 
 # =============================================================================
-# Performance Metrics Collector (full profile)
+# Performance Metrics Collector (light profile)
 # =============================================================================
 
 @register(

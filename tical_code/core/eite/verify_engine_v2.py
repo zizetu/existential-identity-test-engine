@@ -108,7 +108,7 @@ _CN_DECL_VERB_MAP: dict[str, list[str]] = {
     # "已更新" / "已升级" → updated/upgraded → requires bash
     "已更新":     ["bash", "shell_exec", "file_patch"],
     "已升级":     ["bash", "shell_exec"],
-}# 中文编造检测
+}  # Chinese fabrication detection — keys are intentional CJK patterns
 
 # English declaration patterns - require "I have/I've" prefix
 _DECL_VERB_MAP: dict[str, list[str]] = {
