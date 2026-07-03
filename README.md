@@ -1,5 +1,7 @@
 # EITE-agent: Existential Identity Test Engine
 
+> **ticalasi.cloud** · Built with tical-code · Seoul · Cang · Kael · Oracle · Test
+
 [![CI](https://github.com/zizetu/eite-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/zizetu/eite-agent/actions/workflows/ci.yml)
 
 **EITE** is an **AI agent runtime** with built-in identity verification, multi-provider failover, and pluggable communication channels. It deploys as a worker that:
