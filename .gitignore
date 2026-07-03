@@ -59,3 +59,5 @@ eite_inference_results.json
 eite_zero_scenarios.json
 translate_v*.py
 anchor.json
+# VPS topology (contains real IPs - DO NOT COMMIT)
+vps_mesh_status.json
