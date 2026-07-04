@@ -63,6 +63,8 @@ class CheckResult:
     ok: bool
     detail: str
     severity: str  # P0 (critical), P1 (high), P2 (medium)
+    file_path: str = ""
+    metadata: dict = field(default_factory=dict)
 
 
 # ── Core helpers ──────────────────────────────────────────────────────────

@@ -157,6 +157,7 @@ class RepairResult:
 # =============================================================================
 
 class SelfRepairEngine:
+    __tical_module__ = True
     """
     Auto-detect exceptions and recover from Anchor.
     
