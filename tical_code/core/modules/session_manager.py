@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -28,7 +28,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger("tical-code.session_manager")
+logger = logging.getLogger("EITElite.session_manager")
 
 class SessionManager:
     """Thread-safe SQLite session store with archival support."""

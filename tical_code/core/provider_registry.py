@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -26,7 +26,7 @@ import os
 from pathlib import Path
 from typing import Dict, List, Optional
 
-logger = logging.getLogger("tical-code.provider_registry")
+logger = logging.getLogger("EITElite.provider_registry")
 
 
 class ProviderRegistry:
@@ -55,7 +55,7 @@ class ProviderRegistry:
         provided. Configuration is not loaded until load() is called.
 
         Args:
-            repo_root: Absolute path to the tical-code repository root directory.
+            repo_root: Absolute path to the EITElite repository root directory.
                 If None, uses the TICAL_CODE_ROOT env var or os.getcwd().
             worker_name: Name identifier for this worker instance, used to locate
                 the worker-specific config file under config/worker-configs/.

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""tical-code cross-VPS deployment tool
+"""EITElite cross-VPS deployment tool
 
 Usage:
   python3 scripts/deploy.py status              # View all worker status
@@ -43,4 +43,4 @@ with open(CONFIG_PATH) as f:
 VPS = config.get("vps", {})
 SSH_KEY = os.path.expanduser(config.get("ssh_key", "~/.ssh/id_deploy"))
 HOME = os.path.expanduser("~")
-TICAL_SRC = os.path.join(HOME, "tical-code")
+TICAL_SRC = os.path.join(HOME, "EITElite")

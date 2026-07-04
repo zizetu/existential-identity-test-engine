@@ -6,7 +6,7 @@ Tests Agent in real terminal environment:
 - Multi-step operation composition
 - Error recovery
 
-tical-code existing foundation:
+EITElite existing foundation:
 - worker_loop + agent_runtime bash execution
 - security_baseline command security review
 - FileTool file read/write
@@ -25,7 +25,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from benchmarks.bench_base import BenchAdapter, BenchResult
 
-logger = logging.getLogger("tical-code.benchmark.terminal")
+logger = logging.getLogger("EITElite.benchmark.terminal")
 
 
 class TerminalBenchAdapter(BenchAdapter):

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-WebArena Browser Test Adapter - tical-code integrated version
+WebArena Browser Test Adapter - EITElite integrated version
 ============================================
 Inherits BenchAdapter, uses agent-browser CLI to control Chrome,
 Tests AI models' browser task execution capability.

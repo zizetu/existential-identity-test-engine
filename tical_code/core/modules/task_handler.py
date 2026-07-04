@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -77,7 +77,7 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
-# ── tical-code internal imports ──────────────────────────────────────
+# ── EITElite internal imports ──────────────────────────────────────
 from tical_code.core.shared_context import SharedContext, _get_rss_mb
 from tical_code.core.trace import TraceEvent
 
@@ -124,7 +124,7 @@ def _get_response_class():
         _progress_Response = _R
     return _progress_Response
 
-logger = logging.getLogger("tical-code.task_handler")
+logger = logging.getLogger("EITElite.task_handler")
 
 # ── Progress reporting helper ─────────────────────────────────────
 _PROGRESS_INTERVAL = 3  # report every N steps

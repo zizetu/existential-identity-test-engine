@@ -1,4 +1,4 @@
-"""EITElite / tical-code Anchor HTTP Server
+"""EITElite / EITElite Anchor HTTP Server
 
 Worker reads/writes shared state through this service:
   - Anchor data (ops-anchor.json + ai_workers)
@@ -97,19 +97,19 @@ class AnchorHandler(BaseHTTPRequestHandler):
                 _sp.run(["rm", "-rf", tmp], capture_output=True)
             except Exception:
                 pass
-        # tical-code incomplete -> same as above
+        # EITElite incomplete -> same as above
         if tical.get("py_files", 0) < 10:
             try:
                 import subprocess as _sp, tempfile
                 tmp = tempfile.mkdtemp(prefix="tical_count_")
                 _sp.run(["git", "clone", "--depth", "1",
-                    "https://github.com/ticalzzt/tical-code.git",
-                    tmp + "/tical-code"], capture_output=True, timeout=60)
-                tical = self._count_py_files(tmp + "/tical-code")
+                    "https://github.com/ticalzzt/EITElite.git",
+                    tmp + "/EITElite"], capture_output=True, timeout=60)
+                tical = self._count_py_files(tmp + "/EITElite")
                 _sp.run(["rm", "-rf", tmp], capture_output=True)
             except Exception:
                 pass
-        return {"eitelite": eite, "tical-code": tical}
+        return {"eitelite": eite, "EITElite": tical}
     
     def _worker_list(self) -> dict:
         """Return sibling worker status (for _anchor_api('anchor/work'))"""
@@ -244,7 +244,7 @@ class AnchorHandler(BaseHTTPRequestHandler):
 
 def main():
     if not ANCHOR_FILE.exists():
-        fallback = Path.home() / ".tical-code" / "anchor.json"
+        fallback = Path.home() / ".EITElite" / "anchor.json"
         if fallback.exists():
             os.environ["ANCHOR_FILE"] = str(fallback)
     

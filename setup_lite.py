@@ -1,5 +1,5 @@
 """
-Setup Configuration for tical-code-lite
+Setup Configuration for EITElite-lite
 =======================================
 
 Lite edition: Minimal dependencies, 1C1G compatible (~50MB idle)
@@ -25,10 +25,10 @@ LITE_DEPS = [
 
 
 setup(
-    name="tical-code-lite",
+    name="EITElite-lite",
     version=VERSION,
-    description="tical-code Lite: Honest AI Agent Deployment (Minimal)",
-    long_description="""tical-code Lite Edition
+    description="EITElite Lite: Honest AI Agent Deployment (Minimal)",
+    long_description="""EITElite Lite Edition
 ========================
 
 Minimal dependencies, runs on 1C1G systems (~50MB idle).

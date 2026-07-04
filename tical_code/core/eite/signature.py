@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -26,7 +26,7 @@ import hmac
 import secrets
 import logging
 
-logger = logging.getLogger("tical-code.eite.signature")
+logger = logging.getLogger("EITElite.eite.signature")
 
 _KEY_DIR = os.path.expanduser("~/.eite")
 _KEY_FILE = os.path.join(_KEY_DIR, "secret.key")

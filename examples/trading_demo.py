@@ -277,7 +277,7 @@ async def run_demo(mode: str) -> None:
     print("  Demo complete! ✨")
     print()
     print("  What you can do next:")
-    print("    • Integrate TradingPlugin into your tical-code agent")
+    print("    • Integrate TradingPlugin into your EITElite agent")
     print("    • Build automated trading strategies")
     print("    • Use WebSocket streaming for real-time data")
     print("    • Explore all tools: " + ", ".join(sorted(plugin.get_tools().keys())))
@@ -288,7 +288,7 @@ async def run_demo(mode: str) -> None:
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description="tical-code Trading Plugin Demo",
+        description="EITElite Trading Plugin Demo",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 ⚠️  SAFETY NOTICE:
@@ -332,7 +332,7 @@ Examples:
     # Print banner
     print()
     print("  ╔══════════════════════════════════════════════╗")
-    print("  ║       tical-code Trading Plugin Demo         ║")
+    print("  ║       EITElite Trading Plugin Demo         ║")
     print("  ╚══════════════════════════════════════════════╝")
     print()
     mode_icons = {"demo": "🎮", "paper": "📝", "live": "🔴"}

@@ -3,7 +3,7 @@
 Deployment Script
 =================
 
-Deploy tical-code to worker nodes via SSH.
+Deploy EITElite to worker nodes via SSH.
 """
 
 import asyncio
@@ -29,7 +29,7 @@ async def deploy_worker(
     package_url: Optional[str] = None,
 ):
     """
-    Deploy tical-code to a worker node.
+    Deploy EITElite to a worker node.
     
     Args:
         host: Worker host
@@ -88,17 +88,17 @@ async def deploy_worker(
         install_script = f"""#!/bin/bash
 set -e
 
-echo "Installing tical-code {edition}..."
+echo "Installing EITElite {edition}..."
 
 # Create tical user directory
 mkdir -p ~/.tical
 cd ~/.tical
 
 # Clone or update repo (placeholder)
-# git clone https://github.com/your-org/tical-code.git
+# git clone https://github.com/your-org/EITElite.git
 
 # Or install from PyPI
-pip install tical-code{'==' + edition if edition != 'lite' else ''}
+pip install EITElite{'==' + edition if edition != 'lite' else ''}
 
 # Create config
 cat > config.json << 'EOF'
@@ -186,7 +186,7 @@ async def rollback_worker(
     identity_file: Optional[str],
 ):
     """
-    Rollback tical-code on a worker.
+    Rollback EITElite on a worker.
     
     Args:
         host: Worker host
@@ -211,7 +211,7 @@ async def rollback_worker(
             return False
         
         rollback_cmd = """
-        pip uninstall tical-code -y || true
+        pip uninstall EITElite -y || true
         rm -rf ~/.tical
         echo "Rollback complete"
         """
@@ -234,7 +234,7 @@ async def rollback_worker(
 # =============================================================================
 
 def main():
-    parser = argparse.ArgumentParser(description="Deploy tical-code to workers")
+    parser = argparse.ArgumentParser(description="Deploy EITElite to workers")
     parser.add_argument('--host', help='Worker host')
     parser.add_argument('--port', type=int, default=22, help='SSH port')
     parser.add_argument('--user', default='root', help='SSH user')

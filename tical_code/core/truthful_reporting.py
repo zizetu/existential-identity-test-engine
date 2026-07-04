@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -31,7 +31,7 @@ Five core rules:
 
 Author: Tical (Zize Tu)
 Version: see tical_code.__version__
-Spec: https://github.com/ticalzzt/tical-code-dev/blob/main/docs/truthful-reporting-spec.md
+Spec: https://github.com/ticalzzt/EITElite-dev/blob/main/docs/truthful-reporting-spec.md
 """
 
 import asyncio
@@ -1036,7 +1036,7 @@ class TruthReporter:
             except (PermissionError, OSError):
                 continue
         # Last fallback
-        return os.path.expanduser('~/.tical-code/truth_logs')
+        return os.path.expanduser('~/.EITElite/truth_logs')
 
     def _load_trust_state(self) -> Dict:
         """

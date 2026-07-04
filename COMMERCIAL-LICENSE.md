@@ -1,4 +1,4 @@
-# Commercial License for tical-code / EITE
+# Commercial License for EITElite / EITE
 
 ## Overview
 

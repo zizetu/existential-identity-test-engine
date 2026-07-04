@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -17,11 +17,11 @@
 # Original repository: https://github.com/zizetu/eite-agent
 #
 
-"""Trace System - observability module for tical-code.
+"""Trace System - observability module for EITElite.
 
 Records structured trace events (LLM calls, tool executions, decisions, errors)
 for debugging and observability. Thread-safe, writes JSONL log files to
-~/.tical-code/traces/{trace_id}.jsonl.
+~/.EITElite/traces/{trace_id}.jsonl.
 
 Usage:
     from tical_code.core.trace import TraceLogger, TraceEvent
@@ -63,7 +63,7 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Dict, List, Optional
 
-logger = logging.getLogger("tical-code.trace")
+logger = logging.getLogger("EITElite.trace")
 
 
 @dataclass
@@ -94,13 +94,13 @@ class TraceLogger:
     """Thread-safe trace event logger with in-memory ring buffer and JSONL output.
 
     Events are appended to both an in-memory ring buffer (last N events) and
-    a JSONL file on disk under ~/.tical-code/traces/{trace_id}.jsonl.
+    a JSONL file on disk under ~/.EITElite/traces/{trace_id}.jsonl.
 
     Thread-safe: all operations that mutate shared state acquire a lock.
     JSONL writes happen outside the lock to avoid I/O contention.
     """
 
-    _DEFAULT_OUTPUT_DIR = "~/.tical-code/traces"
+    _DEFAULT_OUTPUT_DIR = "~/.EITElite/traces"
     _DEFAULT_RING_SIZE = 100
 
     def __init__(self, output_dir: Optional[str] = None, ring_size: int = _DEFAULT_RING_SIZE):

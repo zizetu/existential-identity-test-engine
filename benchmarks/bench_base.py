@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 
-logger = logging.getLogger("tical-code.benchmark")
+logger = logging.getLogger("EITElite.benchmark")
 
 
 @dataclass

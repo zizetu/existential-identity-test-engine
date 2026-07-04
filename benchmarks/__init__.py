@@ -1,8 +1,8 @@
 """
-benchmarks/ - tical-code benchmark adapter layer
+benchmarks/ - EITElite benchmark adapter layer
 
 Non-invasive, pure additive module.
-Each adapter handles: load benchmark data → convert to tical-code tool-calling format → execute → validate → score.
+Each adapter handles: load benchmark data → convert to EITElite tool-calling format → execute → validate → score.
 
 Adapted benchmarks:
 - BFCL v3: Tool-calling accuracy (Berkeley Function-Calling Leaderboard)

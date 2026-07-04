@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""Self-heal executor for tical-code system.
+"""Self-heal executor for EITElite system.
 
 Hermes-compatible script that runs security_self_check.py and auto-fixes
 FAIL items where safe automated remediation is possible.

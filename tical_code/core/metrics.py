@@ -1,8 +1,8 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
-# Original repository: https://github.com/zizetu/tical-agent
+# Original repository: https://github.com/zizetu/EITE-agent
 #
-# Built on tical-code mesh infrastructure.
+# Built on EITElite mesh infrastructure.
 # Independent system, not a fork of any other agent framework.
 #
 # This program is free software: you can redistribute it and/or modify
@@ -26,7 +26,7 @@ import time
 from collections import defaultdict, deque
 from typing import Any, Dict, List
 
-logger = logging.getLogger("tical-code.metrics")
+logger = logging.getLogger("EITElite.metrics")
 
 
 class MetricsCollector:

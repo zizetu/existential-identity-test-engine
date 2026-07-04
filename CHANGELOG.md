@@ -10,10 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Continuous improvements and bug fixes aligned with tical-agent v0.8.3+.
+- Continuous improvements and bug fixes aligned with EITE-agent v0.8.3+.
 
 ### Changed
-- Tracks upstream tical-agent core refactors as they land.
+- Tracks upstream EITE-agent core refactors as they land.
 
 ---
 
@@ -31,7 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Orthos Chain v3 — structured generator/classifier/tool pipeline for evaluation tasks.
 - **CLI module** with stub commands for the `tical` command-line interface.
 - `tool_executor_clean.py` — clean-room implementation of tool executor for evaluation contexts.
-- `security_self_check` and `self_heal` scripts synced from tical-agent.
+- `security_self_check` and `self_heal` scripts synced from EITE-agent.
 - Configuration via `config/providers.json` and `config/default.json`.
 
 ### Changed
@@ -39,7 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Code quality**: Full i18n cleanup — 867 fullwidth punctuation characters converted to ASCII across all source files.
 - All Hermes-specific path references and framework traces removed for standalone operation.
 - Personal environment details decoupled from the codebase — configurable via environment variables and default config.
-- CLI absolute imports synced from tical-agent for pip-install compatibility.
+- CLI absolute imports synced from EITE-agent for pip-install compatibility.
 - ASCII-only characters enforced (Windows GBK compatibility).
 
 ### Fixed

@@ -53,7 +53,7 @@ package distributions, or at [SPDX](https://spdx.org/licenses/).
 
 ## This Project's License
 
-The tical-code project itself is licensed under the **GNU Affero General Public 
+The EITElite project itself is licensed under the **GNU Affero General Public 
 License v3.0 (AGPLv3)** — see the [LICENSE](./LICENSE) file.
 
 Commercial licenses are available for users who cannot comply with AGPLv3 — 

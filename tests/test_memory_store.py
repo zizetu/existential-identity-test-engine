@@ -18,7 +18,7 @@ Covers:
 
 Minimum: 15 tests
 
-Author: tical-code Team
+Author: EITElite Team
 Version: v0.4.2
 """
 
@@ -60,8 +60,8 @@ def memory_dir(tmp_path):
         "User prefers concise reply style.\n"
         "User primarily communicates in English.\n\n"
         "## Project Experience\n"
-        "### tical-code\n"
-        "tical-code is an AI Agent framework project.\n"
+        "### EITElite\n"
+        "EITElite is an AI Agent framework project.\n"
         "Written in Python, currently version v0.4.\n\n"
         "### IB Trading\n"
         "Interactive Brokers trading plugin.\n"

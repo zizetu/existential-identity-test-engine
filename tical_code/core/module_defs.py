@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -67,7 +67,7 @@ from typing import Any
 
 from tical_code.core.module_registry import register
 
-logger = logging.getLogger("tical-code.modules")
+logger = logging.getLogger("EITElite.modules")
 
 
 # =============================================================================
@@ -221,7 +221,7 @@ def _init_security_baseline(worker: Any, cfg: dict):
 
 
 # =============================================================================
-# Full-profile modules (tical-code only - heavy features)
+# Full-profile modules (EITElite only - heavy features)
 # =============================================================================
 
 @register(
@@ -542,7 +542,7 @@ def _init_cron_scheduler(worker: Any, cfg: dict):
         task_type="shell",
         task_params={
             "cmd": (
-                "find ~/.tical-code/logs/ -name '*.log' -size +50M "
+                "find ~/.EITElite/logs/ -name '*.log' -size +50M "
                 "-exec truncate -s 0 {} + 2>/dev/null; "
                 "echo 'Log cleanup complete'"
             ),

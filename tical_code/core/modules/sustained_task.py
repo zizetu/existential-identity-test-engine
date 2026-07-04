@@ -1,4 +1,4 @@
-"""Persistent task queue with auto-recovery for tical-code.
+"""Persistent task queue with auto-recovery for EITElite.
 
 This module provides a SQLite-backed task queue that survives process
 restarts. Tasks transition through a well-defined state machine and
@@ -83,7 +83,7 @@ class SustainedTaskManager:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self, db_path: str = "~/.tical-code/sustained_tasks.db") -> None:
+    def __init__(self, db_path: str = "~/.EITElite/sustained_tasks.db") -> None:
         if getattr(self, "_initialized", False):
             return
         self._initialized: bool = True

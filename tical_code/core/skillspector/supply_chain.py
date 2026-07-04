@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -21,7 +21,7 @@
 
 Parses requirements.txt and pyproject.toml for Python dependencies,
 queries the OSV.dev batch API for known vulnerabilities, and maps
-findings to the tical-code AuditResult / Finding types.
+findings to the EITElite AuditResult / Finding types.
 
 Uses only stdlib (urllib, tomllib, re, time, dataclasses) - no
 additional dependencies required.
@@ -348,7 +348,7 @@ class SupplyChainAnalyzer:
 
     Parses ``requirements.txt`` (pip) and ``pyproject.toml`` (PEP 508)
     dependency declarations, queries the OSV.dev batch API for matching
-    vulnerabilities, and returns findings mapped to the tical-code
+    vulnerabilities, and returns findings mapped to the EITElite
     :class:`AuditResult` / :class:`Finding` types.
 
     Uses **only stdlib** - ``urllib`` for HTTP, ``tomllib`` for TOML.
@@ -584,7 +584,7 @@ class SupplyChainAnalyzer:
         dep_name: str,
         dep_version: str | None,
     ) -> Finding:
-        """Convert a :class:`VulnResult` to a tical-code :class:`Finding`."""
+        """Convert a :class:`VulnResult` to a EITElite :class:`Finding`."""
         version_info = f" {dep_version}" if dep_version else ""
         msg_parts: list[str] = [f"[{vuln.vuln_id}]"]
         if vuln.summary:

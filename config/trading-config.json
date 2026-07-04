@@ -1,5 +1,5 @@
 {
-  "_comment": "Trading Plugin configuration for tical-code (IB Web API)",
+  "_comment": "Trading Plugin configuration for EITElite (IB Web API)",
 
   "gateway": {
     "mode": "gateway",

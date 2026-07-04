@@ -1,4 +1,4 @@
-"""Self-evolving engine for tical-agent.
+"""Self-evolving engine for EITE-agent.
 
 Singleton SQLite-backed engine that records error patterns and usage insights,
 enabling the agent to learn from past failures and successes. Integrates with

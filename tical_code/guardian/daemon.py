@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -22,7 +22,7 @@
 """
 Autonomous self-healing daemon for eite-agent workers.
 
-Zero dependency on tical-code worker modules - runs independently.
+Zero dependency on EITElite worker modules - runs independently.
 Polls GitHub → runs checks.py → applies healer.py actions → alerts via Telegram.
 
 Usage:
@@ -51,7 +51,7 @@ MAX_CONSECUTIVE_RESTARTS = 3
 DEFAULT_WORKER_SERVICE = os.environ.get("GUARDIAN_SERVICE", "unified-worker")
 
 SYSTEMD_UNIT = """[Unit]
-Description=tical-code Guardian - Autonomous Self-Healing Daemon
+Description=EITElite Guardian - Autonomous Self-Healing Daemon
 After=network-online.target
 Wants=network-online.target
 
@@ -389,7 +389,7 @@ class Guardian:
 
 def main() -> None:
     import argparse
-    parser = argparse.ArgumentParser(description="tical-code Guardian Daemon")
+    parser = argparse.ArgumentParser(description="EITElite Guardian Daemon")
     parser.add_argument("repo", nargs="?", help="Path to repo (eite-agent)")
     parser.add_argument("--poll-interval", type=int, default=DEFAULT_POLL_INTERVAL,
                         help=f"GitHub poll interval in seconds (default: {DEFAULT_POLL_INTERVAL})")

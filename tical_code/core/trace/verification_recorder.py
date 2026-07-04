@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -38,7 +38,7 @@ import logging
 import time
 from pathlib import Path
 
-logger = logging.getLogger("tical-code.verification_recorder")
+logger = logging.getLogger("EITElite.verification_recorder")
 
 
 class VerificationEventRecorder:

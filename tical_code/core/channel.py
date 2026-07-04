@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -45,7 +45,7 @@ from typing import Optional
 from tical_code.core.security_baseline import _check_ssrf
 
 _UA = "eite-agent/0.1.0 (Cloudflare bypass)"
-logger = logging.getLogger("tical-code.channel")
+logger = logging.getLogger("EITElite.channel")
 
 
 def _ssrf_guard(url_or_req):

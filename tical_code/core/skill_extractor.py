@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -22,9 +22,9 @@ Skill Extractor - auto-generates SKILL.md from completed task workflows.
 
 When a task finishes with 5+ tool calls, the extractor analyzes the tool-call
 sequence and distills it into a reusable skill document. This is the mechanism
-that makes tical-code compound over time instead of starting from zero each session.
+that makes EITElite compound over time instead of starting from zero each session.
 
-Skills are saved to ~/.tical-code/skills/<name>.md and loaded on next startup.
+Skills are saved to ~/.EITElite/skills/<name>.md and loaded on next startup.
 """
 
 import hashlib
@@ -36,7 +36,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-logger = logging.getLogger("tical-code.skills")
+logger = logging.getLogger("EITElite.skills")
 
 
 # Minimum tool calls before a workflow is considered skill-worthy
@@ -46,7 +46,7 @@ MIN_TOOL_CALLS_FOR_SKILL = 5
 MAX_SKILLS = 50
 
 # Skills directory
-SKILLS_DIR = Path.home() / ".tical-code" / "skills"
+SKILLS_DIR = Path.home() / ".EITElite" / "skills"
 
 
 @dataclass

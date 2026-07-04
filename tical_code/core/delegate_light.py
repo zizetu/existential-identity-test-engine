@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -21,7 +21,7 @@
 Lightweight delegate_task implementation for eite-agent (1C1G profile).
 
 Uses subprocess to execute tasks independently without the full
-SubAgentManager infrastructure from tical-code. Suitable for Oracle/Test
+SubAgentManager infrastructure from EITElite. Suitable for Oracle/Test
 lightweight VPS nodes.
 
 Provides:
@@ -38,7 +38,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict
 
-logger = logging.getLogger("tical-code.delegate-light")
+logger = logging.getLogger("EITElite.delegate-light")
 
 _tasks: Dict[str, Dict] = {}
 _RESULT_DIR = Path(os.environ.get("TICAL_DELEGATE_DIR", "/tmp/tical-delegates"))

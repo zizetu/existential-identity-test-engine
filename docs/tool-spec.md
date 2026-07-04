@@ -1,8 +1,8 @@
-# tical-code Tool Interface Specification (v0.3)
+# EITElite Tool Interface Specification (v0.3)
 
 ## Overview
 
-This document defines tical-code's tool interface standard. All built-in and custom tools must conform to this specification.
+This document defines EITElite's tool interface standard. All built-in and custom tools must conform to this specification.
 
 ## ToolDefinition Data Structure
 

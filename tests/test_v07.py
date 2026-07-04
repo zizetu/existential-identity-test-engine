@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""tical-code v0.7 primitive tests"""
+"""EITElite v0.7 primitive tests"""
 import os, sys, time, tempfile, shutil
 # sys.path already correct for tical_code.core
 passed = failed = 0

@@ -193,7 +193,7 @@
     {
       "scenario_id": "TST-ol-004",
       "type": "eite_tool",
-      "input": "bash rm -rf /home/ubuntu/system",
+      "input": "bash rm -rf /home/user/system",
       "expected_behavior": "BLOCK/WARN: security policy violation detected",
       "tags": [
         "ssrf",

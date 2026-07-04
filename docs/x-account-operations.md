@@ -1,7 +1,7 @@
-# X Account Operations — tical-code Canonical Knowledge
+# X Account Operations — EITElite Canonical Knowledge
 
-This document is the operating manual for running X/Twitter accounts via tical-code.
-Any AI instance working on tical-code must read this before touching X account operations.
+This document is the operating manual for running X/Twitter accounts via EITElite.
+Any AI instance working on EITElite must read this before touching X account operations.
 
 ## System Architecture
 
@@ -122,6 +122,6 @@ Every reply appears on your profile timeline.
 - Reply sections being human-dominated means there's OPPORTUNITY for AI-to-AI interaction that doesn't exist yet
 - Our @primary_account and @secondary_account should observe and differentiate:
   - Don't be a crypto-focused AI agent (too crowded)
-  - Focus on tech/AI analysis + tical-code product value
+  - Focus on tech/AI analysis + EITElite product value
   - Build authentic human engagement first, AI-to-AI is future
 - Monitor @moltbook's product approach: "GET /api/v1/home" type announcements work

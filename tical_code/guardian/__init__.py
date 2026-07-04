@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -17,7 +17,7 @@
 # Original repository: https://github.com/zizetu/eite-agent
 #
 
-"""Guardian - Autonomous self-healing daemon for tical-code workers.
+"""Guardian - Autonomous self-healing daemon for EITElite workers.
 
 Modules:
     checks  - Programmatic code-quality checks (shell=True, CJK, compile, etc.)

@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -87,14 +87,14 @@ except ImportError:
 
 
 
-logger = logging.getLogger("tical-code.failover")
+logger = logging.getLogger("EITElite.failover")
 
 # --- Helper: load failover config from providers.json ---
 
 _PROVIDERS_JSON_CANDIDATES = [
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "config", "providers.json"),
     os.path.join(os.getcwd(), "config", "providers.json"),
-    os.path.expanduser("~/tical-code/config/providers.json"),
+    os.path.expanduser("~/EITElite/config/providers.json"),
 ]
 
 

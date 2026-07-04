@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Original repository: https://github.com/zizetu/tical-agent
+# Original repository: https://github.com/zizetu/EITE-agent
 #
 
 """
@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
 
 TASK_STATES = ("pending", "running", "completed", "failed", "paused")
 MAX_STEP_LIMIT = 500  # safety cap to prevent infinite loops
-DEFAULT_TASKS_DIR = "~/.tical-code/tasks"
+DEFAULT_TASKS_DIR = "~/.EITElite/tasks"
 
 
 def _resolve_tasks_dir(workspace: str = "") -> Path:

@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -36,7 +36,7 @@ from aiohttp import web
 
 from . import eite_api
 
-logger = logging.getLogger("tical-code.api")
+logger = logging.getLogger("EITElite.api")
 
 
 async def _health(request: web.Request) -> web.Response:

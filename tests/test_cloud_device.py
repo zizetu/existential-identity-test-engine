@@ -1,5 +1,5 @@
 """
-Tests for Cloud Device Plugin (tical-code v0.3)
+Tests for Cloud Device Plugin (EITElite v0.3)
 ==============================================
 
 P1-8: Optional dependency tests use pytest.importorskip instead of try/except ImportError.

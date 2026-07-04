@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -17,7 +17,7 @@
 # Original repository: https://github.com/zizetu/eite-agent
 #
 
-"""Vigil - Quiet watcher for tical-code.
+"""Vigil - Quiet watcher for EITElite.
 Public API: build_vigil(), Vigil.patrol(), Vigil.evaluate_instruction()
 """
 from .vigil_config import VigilConfig, load_config

@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -23,7 +23,7 @@ Security Baseline Hardening
 ===========================
 
 Provides TOCTOU path validation, SSRF protection, and sensitive info
-redaction for the tical-code agent platform.
+redaction for the EITElite agent platform.
 
 Core design:
 1. TOCTOUProtection - path security check, prevents symlink attacks and path traversal

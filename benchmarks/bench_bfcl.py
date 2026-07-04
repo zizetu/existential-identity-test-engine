@@ -9,7 +9,7 @@ Data format: BFCL v3 JSON (function definitions + query + expected call)
 GitHub: https://github.com/ShishirPatil/gorilla
 
 Adaptation strategy:
-- BFCL function definitions → directly feed into tical-code's tool-calling pipeline
+- BFCL function definitions → directly feed into EITElite's tool-calling pipeline
 - Validation: function name + parameter names+values exact match
 """
 
@@ -21,7 +21,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from benchmarks.bench_base import BenchAdapter, BenchResult
 
-logger = logging.getLogger("tical-code.benchmark.bfcl")
+logger = logging.getLogger("EITElite.benchmark.bfcl")
 
 
 @dataclass

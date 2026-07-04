@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-tical-code multi-node deployment tool
+EITElite multi-node deployment tool
 
 Usage:
     python deploy.py --target sg          # Deploy to SG node
@@ -165,7 +165,7 @@ class Deployer:
             return False
 
         version = self.get_version()
-        log_step(f"Deploy tical-code {version} → {node_name} ({user}@{host}:{remote_path})")
+        log_step(f"Deploy EITElite {version} → {node_name} ({user}@{host}:{remote_path})")
 
         files = self.collect_files()
         if not files:
@@ -374,7 +374,7 @@ class Deployer:
 # =============================================================================
 
 def main():
-    parser = argparse.ArgumentParser(description="tical-code multi-node deployment tool")
+    parser = argparse.ArgumentParser(description="EITElite multi-node deployment tool")
     parser.add_argument("--target", required=True,
                        help="Deployment target: node-a, node-b, node-c, all")
     parser.add_argument("--verify", action="store_true",
@@ -392,7 +392,7 @@ def main():
     if args.dry_run:
         files = deployer.collect_files()
         version = deployer.get_version()
-        print(f"tical-code {version} - {len(files)} files pending sync:")
+        print(f"EITElite {version} - {len(files)} files pending sync:")
         for f in files:
             print(f"  {f}")
         return
@@ -408,7 +408,7 @@ def main():
         sys.exit(1)
 
     version = deployer.get_version()
-    log_info(f"tical-code {version} → {targets}")
+    log_info(f"EITElite {version} → {targets}")
 
     results = {}
     for target in targets:

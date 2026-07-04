@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -75,7 +75,7 @@ import unicodedata
 import datetime as _dt
 from typing import Any, Optional
 
-# ── tical-code internal imports ──────────────────────────────────────
+# ── EITElite internal imports ──────────────────────────────────────
 from tical_code.core.shared_context import SharedContext, _get_rss_mb
 from tical_code.core.trace import TraceLogger, TraceEvent
 from tical_code.core.channel import Message, Response
@@ -120,14 +120,14 @@ except ImportError:
     SkillAuditRunner = None
     _SKILL_AUDIT_AVAILABLE = False
 
-logger = logging.getLogger("tical-code.message_handler")
+logger = logging.getLogger("EITElite.message_handler")
 
 # ── EITE Data Directory ──────────────────────────────────────────
 # All persistent data lives under this base directory (passwords, logs,
 # memory, sessions, checkpoints).  Override via EITE_DATA_DIR env var
 # or change the default below for non-standard deployments.
 _EITE_DATA_DIR = os.path.expanduser(
-    os.environ.get("EITE_DATA_DIR", "~/.tical-code")
+    os.environ.get("EITE_DATA_DIR", "~/.EITElite")
 )
 
 # ── Per-User Password System ──────────────────────────────────────
