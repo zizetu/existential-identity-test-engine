@@ -404,6 +404,16 @@ class Worker:
             logger.info("MemoryBoot: cold-start identity/memory deferred to first run()")
         except Exception as e:
             logger.warning("MemoryBoot init failed: %s", e)
+
+        # Build FTS5 index from memory markdown files (memory_sense)
+        # Without this, memory_search() returns empty results.
+        try:
+            from tical_code.core.memory_sense import memory_index
+            _indexed = memory_index(_mem_dir)
+            logger.info("memory_sense FTS5 index built: %d files", _indexed)
+        except Exception as e:
+            logger.warning("memory_sense FTS5 index build failed: %s", e)
+
         self._task_counter = 0
         self.checkpoint = None  # set by CheckpointManager if available
         # Self-repair engine - autonomous health monitoring + auto-recovery
@@ -526,6 +536,19 @@ class Worker:
         profile = "full" if cfg.get("profile", "full") == "full" else "light"
         self._active_modules = load_modules(self, cfg, profile=profile)
         logger.info("Modules loaded: %d active (profile=%s)", len(self._active_modules), profile)
+
+        # Verify critical subsystems loaded correctly
+        if not getattr(self, 'memory_evolver', None):
+            logger.warning("MemoryEvolver not loaded -- autonomous memory evolution disabled")
+        if not getattr(self, 'memory_store', None):
+            logger.warning("MemoryFTSStore not loaded -- memory_search will be empty")
+
+        # Cleanup old snapshots to prevent directory bloat
+        try:
+            from tical_code.core.session_snapshot import cleanup_old_snapshots
+            cleanup_old_snapshots(self.name, keep=5)
+        except Exception as e:
+            logger.debug("Snapshot cleanup skipped: %s", e)
 
         # Register doom_loop recovery callbacks (Fix 1: close self-healing control loop)
         self._register_doom_loop_recovery_callbacks()

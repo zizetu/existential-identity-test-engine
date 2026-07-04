@@ -101,6 +101,7 @@ class TaskState:
     errors: List[Dict] = field(default_factory=list)
     model_family: str = ""
     max_steps: int = 50
+    max_wall_time_seconds: int = 3600  # 1 hour wall-clock timeout
     created_at: str = ""
     updated_at: str = ""
     metadata: Dict = field(default_factory=dict)
@@ -115,7 +116,7 @@ class TaskState:
         return self.status in ("completed", "failed")
 
     def is_stuck(self) -> bool:
-        """Detect if task is stuck (too many steps, repeated errors)."""
+        """Detect if task is stuck (too many steps, repeated errors, or wall-clock timeout)."""
         if self.step >= self.max_steps:
             return True
         # Check for repeated identical errors (3+ in a row)
@@ -123,6 +124,16 @@ class TaskState:
             last_three = self.errors[-3:]
             if all(e.get("type") == last_three[0].get("type") for e in last_three):
                 return True
+        # Wall-clock timeout: prevent tasks from running forever
+        if self.created_at and self.max_wall_time_seconds > 0:
+            try:
+                from datetime import datetime, timezone
+                created = datetime.fromisoformat(self.created_at)
+                elapsed = (datetime.now(timezone.utc) - created).total_seconds()
+                if elapsed > self.max_wall_time_seconds:
+                    return True
+            except Exception:
+                pass
         return False
 
     def add_action(self, action: Dict) -> None:
@@ -161,6 +172,7 @@ class TaskState:
             "errors": self.errors,
             "model_family": self.model_family,
             "max_steps": self.max_steps,
+            "max_wall_time_seconds": self.max_wall_time_seconds,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "metadata": self.metadata,
@@ -181,6 +193,7 @@ class TaskState:
             errors=d.get("errors", []),
             model_family=d.get("model_family", ""),
             max_steps=d.get("max_steps", 50),
+            max_wall_time_seconds=d.get("max_wall_time_seconds", 3600),
             created_at=d.get("created_at", ""),
             updated_at=d.get("updated_at", ""),
             metadata=d.get("metadata", {}),
