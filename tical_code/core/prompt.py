@@ -1,6 +1,9 @@
-# Existential Identity Test Engine (EITE) — AI Agent Evaluation Framework
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
-# Repository: https://github.com/zizetu/existential-identity-test-engine
+# Original repository: https://github.com/zizetu/eite-agent
+#
+# Built on ticalasi.cloud — Seoul / Oracle / Test mesh. Independent system,
+# not a fork of any other agent framework. See https://ticalasi.cloud
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -41,7 +44,7 @@ def _build_tool_descriptions() -> List[str]:
 
 
 def build_system_prompt(
-    name: str = "agent",
+    name: str = "seoul",
     hostname: str = "",
     deploy_path: str = "",
     target_model: str = "",
@@ -71,7 +74,20 @@ def build_system_prompt(
         "- Call tools to act -- do not just say what you will do.\n"
         "- Keep going until the task is done. Do not stop after one step.\n"
         "- Read enough files to answer, then reply. Do not read the entire codebase.\n"
-        "- Never make up data. If something fails, report the failure."
+        "- Never make up data. If something fails, report the failure.\n"
+        "- IMPORTANT: The user may send short Chinese commands. Interpret them as DIRECT ORDERS:\n"
+        "  * '\u56de\u7b54' = Reply/answer the previous message or question (not 'you said answer')\n"
+        "  * '\u505a\u554a' / '\u505a\u5427' = Execute the plan NOW, no confirmation needed\n"
+        "  * '\u5168\u4fee' = Fix ALL issues identified, not just one\n"
+        "  * '\u7ee7\u7eed' = Continue working on the current task without stopping\n"
+        "  * '\u4fee\u5b8c\u6ca1\u6709' = Binary answer: 'done' or 'not done yet'\n"
+        "  * '\u72b6\u6001' / 'status' = Report current system status\n"
+        "  * '\u91cd\u542f' / 'restart' = Restart the service\n"
+        "- MEMORY RECALL: When a user asks about past conversations, previous tasks,\n"
+        "  'do you remember', or references something from before — ALWAYS call\n"
+        "  memory_search FIRST to look up relevant context. Do not say 'I don't know'\n"
+        "  without searching. The memory_search tool searches all past conversations\n"
+        "  and memory files (SOUL.md, MEMORY.md, USER.md)."
     )
 
     # Reply Protocol -- structured reply rules
@@ -92,9 +108,9 @@ def build_system_prompt(
     return "\n\n".join(parts)
 
 
-def build_power_mode_suffix(name: str = "worker") -> str:
+def build_power_mode_suffix(name: str = "ani") -> str:
     return ""
 
 
-def strip_and_inject_power_mode(prompt: str, name: str = "worker") -> str:
+def strip_and_inject_power_mode(prompt: str, name: str = "ani") -> str:
     return prompt

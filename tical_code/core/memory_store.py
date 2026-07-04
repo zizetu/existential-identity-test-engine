@@ -14,15 +14,15 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Original repository: https://github.com/zizetu/eite-agent
+# Original repository: https://github.com/zizetu/tical-agent
 #
 
 """
-Memory Store - EITE Evaluation Data Storage
-=============================================
+Memory Store - SQLite + FTS5 Full-Text Search for Memory Files
+==============================================================
 
-Provides a SQLite-backed full-text search index layer over evaluation
-session data files (SOUL.md, MEMORY.md, TOOLS.md, USER.md, SECRET.md).
+Provides a SQLite-backed full-text search index layer over markdown memory
+files (SOUL.md, MEMORY.md, TOOLS.md, USER.md, SECRET.md).
 
 Design Principles:
 - SQLite is the INDEX layer; markdown files remain the SOURCE OF TRUTH
@@ -63,7 +63,8 @@ MEMORY_FILE_MAP = {
 # Markdown section title regex (## Title format)
 _SECTION_RE = re.compile(r'^(#{1,3})\s+(.+)$', re.MULTILINE)
 
-# CJK character preprocessing: insert spaces before indexing
+# CJK character preprocessing: unicode61 tokenizer skips CJK characters (Unicode Lo category)
+# Solution: insert spaces between CJK characters before indexing so unicode61 can recognize them
 _CJK_RE = re.compile(r'([\u4e00-\u9fff])')
 
 
@@ -128,6 +129,7 @@ CREATE TRIGGER IF NOT EXISTS memory_au AFTER UPDATE ON memory_content BEGIN
 END;
 """
 
+# Meta-info table (used for file change detection)
 _CREATE_META_TABLE = """
 CREATE TABLE IF NOT EXISTS memory_meta(
     file_key TEXT PRIMARY KEY,
@@ -137,6 +139,7 @@ CREATE TABLE IF NOT EXISTS memory_meta(
 );
 """
 
+# Search SQL
 _SEARCH_SQL = """
 SELECT
     mc.file_key,
@@ -151,6 +154,7 @@ ORDER BY rank
 LIMIT ?;
 """
 
+# Search SQL filtered by file_key
 _SEARCH_SQL_WITH_FILE_KEY = """
 SELECT
     mc.file_key,
@@ -185,7 +189,7 @@ class SearchResult:
 # =============================================================================
 
 class MemoryFTSStore:
-    """SQLite+FTS5 memory storage engine for EITE evaluation data.
+    """SQLite+FTS5 memory storage engine.
 
     Design Principles:
     - SQLite is the index layer; markdown files are the source of truth
@@ -197,7 +201,7 @@ class MemoryFTSStore:
     Usage:
         store = MemoryFTSStore(memory_dir="/path/to/memory")
         count = store.build_index()
-        results = store.search("evaluation criteria", limit=5)
+        results = store.search("Kael personality", limit=5)
         store.close()
     """
 
@@ -205,24 +209,27 @@ class MemoryFTSStore:
         """Initialize MemoryFTSStore.
 
         Args:
-            memory_dir: Memory file directory
+            memory_dir: Memory file directory (contains SOUL.md/MEMORY.md etc.)
             db_path: SQLite database path, defaults to memory_dir/.memory.db
         """
         self.memory_dir = os.path.expanduser(memory_dir)
         self.db_path = db_path or os.path.join(self.memory_dir, ".memory.db")
 
+        # Ensure directory exists
         os.makedirs(self.memory_dir, exist_ok=True)
 
+        # Ensure db_path parent directory also exists
         db_dir = os.path.dirname(self.db_path)
         if db_dir:
             os.makedirs(db_dir, exist_ok=True)
 
+        # Initialize database
         self._conn: Optional[sqlite3.Connection] = None
         self._init_db()
 
     def _init_db(self):
         """Initialize SQLite database with FTS5 tables and triggers."""
-        self._conn = sqlite3.connect(self.db_path)
+        self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
 
@@ -235,14 +242,14 @@ class MemoryFTSStore:
         cursor.execute(_CREATE_META_TABLE)
         self._conn.commit()
 
-        logger.debug(f"[EITE MemoryFTSStore] Database initialized: {self.db_path}")
+        logger.debug(f"[MemoryFTSStore] Database initialized: {self.db_path}")
 
     # =========================================================================
     # Index Building
     # =========================================================================
 
     def build_index(self) -> int:
-        """Build FTS5 index from evaluation markdown files.
+        """Build FTS5 index from markdown files.
 
         Parses each markdown file into sections (by ## headings) and indexes
         each section as a separate entry. Clears existing index first.
@@ -252,6 +259,7 @@ class MemoryFTSStore:
         """
         total_entries = 0
 
+        # Clear existing index
         self._conn.execute("DELETE FROM memory_content")
         self._conn.execute("DELETE FROM memory_meta")
         self._conn.commit()
@@ -259,13 +267,14 @@ class MemoryFTSStore:
         for file_key, rel_path in MEMORY_FILE_MAP.items():
             file_path = os.path.join(self.memory_dir, rel_path)
             if not os.path.exists(file_path):
-                logger.debug(f"[EITE MemoryFTSStore] Skip nonexistent file: {rel_path}")
+                logger.debug(f"[MemoryFTSStore] Skip nonexistent file: {rel_path}")
                 continue
 
             try:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     content = f.read()
 
+                # Parse into sections
                 sections = self._parse_sections(content)
                 entry_count = 0
 
@@ -274,6 +283,7 @@ class MemoryFTSStore:
                         self.index_entry(file_key, section_title, section_content)
                         entry_count += 1
 
+                # Record file meta-info
                 stat = os.stat(file_path)
                 self._conn.execute(
                     "INSERT OR REPLACE INTO memory_meta (file_key, mtime, size, entry_count) VALUES (?, ?, ?, ?)",
@@ -282,15 +292,15 @@ class MemoryFTSStore:
 
                 total_entries += entry_count
                 logger.info(
-                    f"[EITE MemoryFTSStore] Indexed {file_key}: {entry_count} entries, "
+                    f"[MemoryFTSStore] Indexed {file_key}: {entry_count} entries, "
                     f"mtime={stat.st_mtime:.1f}"
                 )
 
             except Exception as e:
-                logger.error(f"[EITE MemoryFTSStore] Index failed for {file_key}: {e}")
+                logger.error(f"[MemoryFTSStore] Index failed for {file_key}: {e}")
 
         self._conn.commit()
-        logger.info(f"[EITE MemoryFTSStore] Index build complete: {total_entries} entries")
+        logger.info(f"[MemoryFTSStore] Index build complete: {total_entries} entries")
         return total_entries
 
     def _parse_sections(self, content: str) -> List[tuple]:
@@ -306,19 +316,23 @@ class MemoryFTSStore:
             List of (section_title, section_content) tuples
         """
         sections = []
+        # Find all heading positions
         matches = list(_SECTION_RE.finditer(content))
 
         if not matches:
+            # No headings, treat entire file as one section
             if content.strip():
                 sections.append(("_top", content.strip()))
             return sections
 
+        # Content before the first heading
         first_match = matches[0]
         if first_match.start() > 0:
             preamble = content[:first_match.start()].strip()
             if preamble:
                 sections.append(("_top", preamble))
 
+        # Content for each heading
         for i, match in enumerate(matches):
             title = match.group(2).strip()
             start = match.end()
@@ -333,27 +347,31 @@ class MemoryFTSStore:
     # =========================================================================
 
     def index_entry(self, file_key: str, section_title: str, content: str) -> None:
-        """Index an evaluation memory entry.
+        """Index a memory entry.
 
         Args:
-            file_key: Memory file identifier
+            file_key: Memory file identifier (soul/user/memory/secret/tools/email_rules)
             section_title: Section title
             content: Section content
         """
+        # Preprocess CJK characters for FTS5 index (both content and section_title need it)
         processed_content = _preprocess_cjk(content)
         processed_title = _preprocess_cjk(section_title)
 
+        # Check if an entry with same file_key + raw_section_title already exists
         existing = self._conn.execute(
             "SELECT rowid FROM memory_content WHERE file_key = ? AND raw_section_title = ?",
             (file_key, section_title),
         ).fetchone()
 
         if existing:
+            # Update existing entry
             self._conn.execute(
                 "UPDATE memory_content SET section_title = ?, content = ?, raw_content = ? WHERE rowid = ?",
                 (processed_title, processed_content, content, existing[0]),
             )
         else:
+            # Insert new entry
             self._conn.execute(
                 "INSERT INTO memory_content (file_key, section_title, raw_section_title, content, raw_content) VALUES (?, ?, ?, ?, ?)",
                 (file_key, processed_title, section_title, processed_content, content),
@@ -362,7 +380,7 @@ class MemoryFTSStore:
         self._conn.commit()
 
     def remove_entry(self, file_key: str, section_title: str) -> bool:
-        """Remove an evaluation memory entry from the index.
+        """Remove a memory entry from the index.
 
         Args:
             file_key: Memory file identifier
@@ -388,16 +406,17 @@ class MemoryFTSStore:
         limit: int = 10,
         file_key: Optional[str] = None,
     ) -> List[SearchResult]:
-        """FTS5 full-text search over evaluation data.
+        """FTS5 full-text search.
 
         Args:
             query: Search query (FTS5 query syntax)
             limit: Maximum number of results
-            file_key: Limit search to a specific file
+            file_key: Limit search to a specific file (soul/user/memory/secret/tools/email_rules)
 
         Returns:
             SearchResult list sorted by relevance
         """
+        # FTS5 query requires escaped special characters
         fts_query = self._sanitize_fts_query(query)
         if not fts_query:
             return []
@@ -427,15 +446,17 @@ class MemoryFTSStore:
             return results
 
         except sqlite3.OperationalError as e:
-            logger.warning(f"[EITE MemoryFTSStore] Search query failed: {e}")
+            logger.warning(f"[MemoryFTSStore] Search query failed: {e}")
             return []
 
     def _sanitize_fts_query(self, query: str) -> str:
         """Sanitize user query for FTS5.
 
-        Strips FTS5 special operators, wraps each token in quotes,
-        and joins with OR. CJK characters are preprocessed consistently
-        with indexing.
+        FTS5 has special syntax, requiring sanitization of user input:
+        - Remove FTS5 operators (AND, OR, NOT, NEAR, *, etc.)
+        - Wrap each token in double quotes for exact matching
+        - Join multiple tokens with OR
+        - CJK characters require preprocessing (char-by-char spacing), consistent with indexing
 
         Args:
             query: Original user query
@@ -446,20 +467,24 @@ class MemoryFTSStore:
         if not query or not query.strip():
             return ""
 
-        cleaned = re.sub(r'[\"\'*()\^:{}]', '', query)
+        # Remove FTS5 special operators
+        cleaned = re.sub(r'[\"\'\*\(\)\^:{}]', '', query)
 
+        # Split by spaces/punctuation
         tokens = re.split(r'[\s,;,；,]+', cleaned)
         tokens = [t for t in tokens if t]
 
         if not tokens:
             return ""
 
+        # Remove bare FTS5 keywords
         fts_keywords = {'AND', 'OR', 'NOT', 'NEAR'}
         tokens = [t for t in tokens if t.upper() not in fts_keywords]
 
         if not tokens:
             return ""
 
+        # Preprocess CJK in each token (consistent with indexing)
         processed_tokens = []
         for t in tokens:
             processed = _preprocess_cjk(t).strip()
@@ -469,6 +494,7 @@ class MemoryFTSStore:
         if not processed_tokens:
             return ""
 
+        # Join multiple tokens with OR
         return " OR ".join(processed_tokens)
 
     # =========================================================================
@@ -491,6 +517,7 @@ class MemoryFTSStore:
             file_path = os.path.join(self.memory_dir, rel_path)
 
             if not os.path.exists(file_path):
+                # File does not exist, check if index has old entries for this file_key
                 count = self._conn.execute(
                     "SELECT COUNT(*) FROM memory_content WHERE file_key = ?",
                     (file_key,),
@@ -503,28 +530,33 @@ class MemoryFTSStore:
                         "DELETE FROM memory_meta WHERE file_key = ?", (file_key,)
                     )
                     self._conn.commit()
-                    logger.info(f"[EITE MemoryFTSStore] Removed index entries for deleted file: {file_key}")
+                    logger.info(f"[MemoryFTSStore] Removed index entries for deleted file: {file_key}")
                 continue
 
             try:
                 stat = os.stat(file_path)
 
+                # Check meta-info table
                 meta = self._conn.execute(
                     "SELECT mtime, size, entry_count FROM memory_meta WHERE file_key = ?",
                     (file_key,),
                 ).fetchone()
 
                 if meta and meta[0] == stat.st_mtime and meta[1] == stat.st_size:
+                    # File unchanged
                     skipped += 1
                     continue
 
+                # File changed, re-index
                 with open(file_path, 'r', encoding='utf-8') as f:
                     content = f.read()
 
+                # Delete old entries
                 self._conn.execute(
                     "DELETE FROM memory_content WHERE file_key = ?", (file_key,)
                 )
 
+                # Parse and re-index
                 sections = self._parse_sections(content)
                 entry_count = 0
                 for section_title, section_content in sections:
@@ -532,6 +564,7 @@ class MemoryFTSStore:
                         self.index_entry(file_key, section_title, section_content)
                         entry_count += 1
 
+                # Update meta-info
                 self._conn.execute(
                     "INSERT OR REPLACE INTO memory_meta (file_key, mtime, size, entry_count) VALUES (?, ?, ?, ?)",
                     (file_key, stat.st_mtime, stat.st_size, entry_count),
@@ -539,14 +572,14 @@ class MemoryFTSStore:
                 self._conn.commit()
 
                 synced += 1
-                logger.info(f"[EITE MemoryFTSStore] Synced {file_key}: {entry_count} entries")
+                logger.info(f"[MemoryFTSStore] Synced {file_key}: {entry_count} entries")
 
             except Exception as e:
                 errors += 1
-                logger.error(f"[EITE MemoryFTSStore] Sync failed for {file_key}: {e}")
+                logger.error(f"[MemoryFTSStore] Sync failed for {file_key}: {e}")
 
         result = {"synced": synced, "skipped": skipped, "errors": errors}
-        logger.info(f"[EITE MemoryFTSStore] Sync complete: {result}")
+        logger.info(f"[MemoryFTSStore] Sync complete: {result}")
         return result
 
     def get_stats(self) -> Dict[str, Any]:
@@ -594,9 +627,9 @@ class MemoryFTSStore:
         if self._conn:
             try:
                 self._conn.close()
-                logger.debug("[EITE MemoryFTSStore] Database connection closed")
+                logger.debug("[MemoryFTSStore] Database connection closed")
             except Exception as e:
-                logger.warning(f"[EITE MemoryFTSStore] Failed to close database: {e}")
+                logger.warning(f"[MemoryFTSStore] Failed to close database: {e}")
             finally:
                 self._conn = None
 
