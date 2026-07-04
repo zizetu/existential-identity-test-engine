@@ -2001,6 +2001,13 @@ class AsyncWorker:
             messages.append({"role": "assistant", "content": content})
             session["messages"] = messages
             self.session_manager.touch(session_id)
+            # Persist to SQLite for cross-restart memory
+            if getattr(self, 'sessions', None):
+                try:
+                    _sid = self.sessions.get_session_id(msg.source, str(msg.chat_id))
+                    self.sessions.save_messages(_sid, messages)
+                except Exception as _e:
+                    self.logger.warning("Session save failed: %s", _e)
             return
 
         if content.strip():
@@ -2019,6 +2026,13 @@ class AsyncWorker:
         messages.append({"role": "assistant", "content": content})
         session["messages"] = messages
         self.session_manager.touch(session_id)
+        # Persist to SQLite for cross-restart memory
+        if getattr(self, 'sessions', None):
+            try:
+                _sid = self.sessions.get_session_id(msg.source, str(msg.chat_id))
+                self.sessions.save_messages(_sid, messages)
+            except Exception as _e:
+                self.logger.warning("Session save failed: %s", _e)
 
     async def _async_llm_call(self, messages: list, tools=None) -> dict:
         """Make an async LLM call via the worker's LLM backend.
