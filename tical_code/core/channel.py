@@ -409,7 +409,17 @@ class TicalChatChannel(Channel):
                     source="tical-chat",
                     raw=m))
             return msgs
-        except (ConnectionError, ConnectionRefusedError, urllib.error.URLError, TimeoutError) as e:
+        except urllib.error.URLError as e:
+            code = getattr(e, 'code', 0) or 0
+            if code in (401, 403):
+                now_m = int(time.time()) // 300
+                if getattr(self, '_chat_poll_auth_ts', -1) != now_m:
+                    self._chat_poll_auth_ts = now_m
+                    logger.error(f"chat_poll auth error (HTTP {code}): {e}")
+            else:
+                logger.debug(f"chat_poll URLError: {e}")
+            return []
+        except (ConnectionError, ConnectionRefusedError, TimeoutError) as e:
             logger.error(f"chat_poll error: {e}")
             return []
         except Exception as e:

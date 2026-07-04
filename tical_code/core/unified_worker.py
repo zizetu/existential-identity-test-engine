@@ -2207,6 +2207,10 @@ def async_main():
     The PID lock file is always cleaned up in the finally block,
     even on crash or signal-triggered exit.
 
+    If the worker crashes, a diagnostics file is written to
+    /tmp/crash_diagnostics.json with exception info, env key
+    presence, and disk status for root-cause analysis.
+
     To use: ASYNC_WORKER=1 python -m tical_code.core.unified_worker
     """
     logger.info("tical-code async-worker starting")
@@ -2228,6 +2232,27 @@ def async_main():
         cfg = load_config()
         worker = AsyncWorker(cfg)
         asyncio.run(worker.run())
+    except Exception as exc:
+        import json as _json
+        import traceback as _tb
+        import shutil as _shutil
+        diag = {
+            "timestamp": time.time(),
+            "exception": repr(exc),
+            "traceback": _tb.format_exc(),
+            "type": type(exc).__name__,
+            "tg_token_present": bool(os.environ.get("TG_BOT_TOKEN")),
+            "api_key_present": bool(os.environ.get("DEEPSEEK_API_KEY")),
+            "disk_free_gb": _shutil.disk_usage("/").free // (1024**3),
+        }
+        try:
+            Path("/tmp/crash_diagnostics.json").write_text(
+                _json.dumps(diag, indent=2)
+            )
+            logger.critical("Worker crashed — diagnostics written to /tmp/crash_diagnostics.json")
+        except Exception:
+            pass
+        raise
     finally:
         PID_FILE.unlink(missing_ok=True)
 
