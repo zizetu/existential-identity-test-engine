@@ -108,9 +108,9 @@ def build_system_prompt(
     return "\n\n".join(parts)
 
 
-def build_power_mode_suffix(name: str = "ani") -> str:
+def build_power_mode_suffix(name: str = "worker") -> str:
     return ""
 
 
-def strip_and_inject_power_mode(prompt: str, name: str = "ani") -> str:
+def strip_and_inject_power_mode(prompt: str, name: str = "worker") -> str:
     return prompt
