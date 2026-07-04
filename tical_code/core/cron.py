@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Original repository: https://github.com/zizetu/eite-agent
+# Original repository: https://github.com/zizetu/tical-agent
 #
 
 """
@@ -158,6 +158,8 @@ class CronJob:
     # Audit
     created_by: str = "ai"  # ai / human / system
     review_source: Optional[str] = None
+    allowed_roles: List[str] = field(default_factory=lambda: ["user"])
+    sandbox_level: str = "restricted"
     created_at: float = field(default_factory=time.time)
 
     def calculate_next_run(self) -> float:
@@ -314,7 +316,7 @@ class CronManager:
 
     def _init_db(self):
         """Initialize SQLite database schema."""
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, check_same_thread=False)
         cursor = conn.cursor()
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS cron_jobs (
@@ -346,7 +348,7 @@ class CronManager:
     async def load_jobs(self):
         """Load all jobs from database into memory."""
         async with self._lock:
-            conn = sqlite3.connect(self.db_path)
+            conn = sqlite3.connect(self.db_path, check_same_thread=False)
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM cron_jobs")
             rows = cursor.fetchall()
@@ -383,7 +385,7 @@ class CronManager:
 
     def _save_job(self, job: CronJob):
         """Persist a single job to database."""
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, check_same_thread=False)
         cursor = conn.cursor()
         data = job.to_dict()
 
@@ -456,7 +458,7 @@ class CronManager:
             job = self._jobs.pop(job_id)
 
             # Remove from database
-            conn = sqlite3.connect(self.db_path)
+            conn = sqlite3.connect(self.db_path, check_same_thread=False)
             cursor = conn.cursor()
             cursor.execute("DELETE FROM cron_jobs WHERE job_id = ?", (job_id,))
             conn.commit()
@@ -683,11 +685,35 @@ class CronManager:
         return f"Prompt queued for AI: {prompt_text[:100]}..."
 
     async def _execute_shell(self, job: CronJob) -> str:
-        """Execute a shell command task."""
+        """Execute a shell command task with BASH_BLACKLIST and timeout (AG-C2)."""
         cmd = job.task_params.get('cmd') or job.task_params.get('command')
 
         if not cmd:
             raise ValueError("task_params must include 'cmd' or 'command'")
+
+        # AG-C2: enforce BASH_BLACKLIST
+        try:
+            from tical_code.core.tool_executor import BASH_BLACKLIST_RE, _bash_safety_check
+            blocked = _bash_safety_check(cmd)
+            if blocked:
+                raise ValueError(f"BASH_BLACKLIST blocked: {blocked}")
+        except ImportError:
+            # Fallback: basic blacklist
+            BASH_BLACKLIST = [
+                r"\breboot\b", r"\bshutdown\b", r"\bhalt\b", r"\bpoweroff\b",
+                r"\brm\s+-rf\s+/\s*$", r"\brm\s+-rf\s+~$",
+                r"\bcurl\s+.*\|\s*(ba|sh)\b", r"\biptables\s+-F\b",
+                r"\bdd\s+if=/\w+\s+of=/\w+\b", r"\bmkfs\b",
+                r"\bmkswap\b", r"\bchmod\s+777\s+/",
+                r"\bsudo\s+rm\s+-rf\b",
+                r":\(\)\s*\{",  # fork bomb
+                r"\bwget\s+.*\|\s*(ba|sh)\b",
+                r"\bpkill\b", r"\bkillall\b",
+            ]
+            import re
+            for pattern in BASH_BLACKLIST:
+                if re.search(pattern, cmd.lower()):
+                    raise ValueError(f"BASH_BLACKLIST blocked: {pattern}")
 
         # Use framework's shell_exec tool if available
         if hasattr(self.framework, 'execute_tool'):
@@ -699,11 +725,9 @@ class CronManager:
 
             return exec_result.get('data')
 
-        # Direct subprocess execution (less safe) - use exec+shlex to prevent shell injection
-        import shlex
-        cmd_parts = shlex.split(cmd)
-        process = await asyncio.create_subprocess_exec(
-            *cmd_parts,
+        # Direct subprocess execution with total timeout (AG-C2)
+        process = await asyncio.create_subprocess_shell(
+            cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -711,7 +735,7 @@ class CronManager:
         try:
             stdout, stderr = await asyncio.wait_for(
                 process.communicate(),
-                timeout=job.timeout
+                timeout=min(job.timeout, 300)  # Cap at 5 min
             )
             output = stdout.decode() if stdout else ""
             error = stderr.decode() if stderr else ""
@@ -834,6 +858,13 @@ def create_cron_tools(cron_manager: CronManager) -> Dict[str, Any]:
             return {
                 'success': False,
                 'error': f"Invalid schedule. Valid: {valid_schedules}",
+            }
+
+        # AG-M3: AI cannot create shell cron jobs
+        if task_type == "shell":
+            return {
+                'success': False,
+                'error': "AI cannot create shell cron jobs - only human/system can",
             }
 
         # Create job
