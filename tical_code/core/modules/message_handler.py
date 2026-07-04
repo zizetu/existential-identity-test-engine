@@ -2286,7 +2286,9 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
                     if m.get("tool_call_id"):
                         entry["tool_call_id"] = m["tool_call_id"]
                     new_msgs.append(entry)
-                ctx.sessions.save_messages(session_id, new_msgs)
+                _saved = ctx.sessions.save_messages(session_id, new_msgs)
+                if not _saved:
+                    logger.warning("Session save FAILED for %s (%d msgs)", session_id[:12], len(new_msgs))
             # Module 1b: Save conversation to FTS5 for cross-session search
             try:
                 from tical_code.core.memory_sense import conversation_save
