@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -151,7 +151,7 @@ class MemoryBoot:
     Usage:
         from tical_code.core.memory import PersistentMemory
 
-        pm = PersistentMemory(db_path="~/.tical-code/memory.db")
+        pm = PersistentMemory(db_path="~/.EITElite/memory.db")
         boot = MemoryBoot(memory_dir=os.path.expanduser("~/.tical/memory/"), persistent_memory=pm)
 
         report = await boot.boot()

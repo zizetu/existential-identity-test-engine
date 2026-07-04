@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""tical-code Identity Proof Toolkit (IPT)"""
+"""EITElite Identity Proof Toolkit (IPT)"""
 
 # ─── Build Watermark ──────────────────────────────────────────────
 # This string identifies the build provenance. Public builds always

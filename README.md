@@ -1,6 +1,6 @@
 # EITE-agent: Existential Identity Test Engine
 
-> **tical-code** · Self-hosted AI agent runtime
+> **EITElite** · Self-hosted AI agent runtime
 
 [![CI](https://github.com/zizetu/eite-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/zizetu/eite-agent/actions/workflows/ci.yml)
 
@@ -49,7 +49,7 @@ The name is deliberate. In philosophy, existentialism holds that existence prece
 - **Test**: Provides structured, repeatable evaluation scenarios
 - **Engine**: Automates the testing process so it can run continuously in production
 
-An evaluation framework for AI agents, providing structured testing, benchmarking, and scenario-based validation. Originally forked from tical-code worker framework.
+An evaluation framework for AI agents, providing structured testing, benchmarking, and scenario-based validation. Originally forked from EITElite worker framework.
 
 > **CONFIGURATION REQUIRED**
 > This repo uses environment variables for all sensitive configuration. You MUST set the following before running:

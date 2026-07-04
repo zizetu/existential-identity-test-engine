@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -38,7 +38,7 @@ from aiohttp import web
 from tical_code.core.eite import engine
 from tical_code.core.eite import config
 
-logger = logging.getLogger("tical-code.api.eite")
+logger = logging.getLogger("EITElite.api.eite")
 
 _EITE_API_KEY = os.environ.get("EITE_API_KEY", "")
 

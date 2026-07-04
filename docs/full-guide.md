@@ -1,8 +1,8 @@
-# tical-code Full Edition Guide
+# EITElite Full Edition Guide
 
 ## Overview
 
-tical-code Full includes all core features plus a comprehensive plugin system for specialized capabilities.
+EITElite Full includes all core features plus a comprehensive plugin system for specialized capabilities.
 
 ## System Requirements
 
@@ -145,7 +145,7 @@ Post and search tweets.
 
 ```python
 plugin = XUrlPlugin()
-await plugin.post({'text': 'Hello from tical-code!'})
+await plugin.post({'text': 'Hello from EITElite!'})
 ```
 
 #### Vision Plugin
@@ -166,7 +166,7 @@ Multi-platform messaging.
 plugin = MessengerPlugin()
 await plugin.send_telegram({
     'chat_id': '123456',
-    'message': 'Alert from tical-code!'
+    'message': 'Alert from EITElite!'
 })
 ```
 
@@ -186,9 +186,9 @@ tical plugin disable browser
 ## Installation
 
 ```bash
-pip install tical-code[full]
+pip install EITElite[full]
 # or
-pip install tical-code  # Full is default
+pip install EITElite  # Full is default
 ```
 
 ## Trading Safety

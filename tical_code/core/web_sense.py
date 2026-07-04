@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -19,7 +19,7 @@
 
 #!/usr/bin/env python3
 """
-web_sense.py - tical-code v0.7 web-sense primitive
+web_sense.py - EITElite v0.7 web-sense primitive
 
 Agent's eyes: fetch web pages and extract structured body text content.
 This is not a mode, but rather the Agent's sense-the-internet primitive.

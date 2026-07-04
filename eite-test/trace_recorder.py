@@ -23,7 +23,7 @@ import time
 from pathlib import Path
 from typing import Optional
 
-# --- Path: prefer EITE_DATA_ROOT, otherwise default to eitelite / tical-code project root ---
+# --- Path: prefer EITE_DATA_ROOT, otherwise default to eitelite / EITElite project root ---
 
 def _get_training_dir() -> Path:
     """Training data directory, controlled by EITE_DATA_ROOT environment variable"""
@@ -212,13 +212,13 @@ class TraceRecorder:
                 if resp.status == 200:
                     self._pending_count = 0
                     import logging
-                    logging.getLogger("tical-code.trace").info(
+                    logging.getLogger("EITElite.trace").info(
                         f"flushed {len(samples)} traces to {self.target_url}"
                     )
         except Exception as e:
             # Any failure does not clear pending_count, retry next time
             import logging
-            logging.getLogger("tical-code.trace").warning(
+            logging.getLogger("EITElite.trace").warning(
                 f"flush failed ({len(samples) if 'samples' in dir() else '?'} traces): {e}"
             )
 

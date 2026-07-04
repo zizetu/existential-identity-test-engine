@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -98,7 +98,7 @@ from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 
-logger = logging.getLogger("tical-code.molecule")
+logger = logging.getLogger("EITElite.molecule")
 
 
 # ═══════════════════════════════════════════════════════════════════

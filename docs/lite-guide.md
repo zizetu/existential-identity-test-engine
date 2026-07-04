@@ -1,8 +1,8 @@
-# tical-code Lite Edition Guide
+# EITElite Lite Edition Guide
 
 ## Overview
 
-tical-code Lite is the minimal edition designed for resource-constrained environments like micro VPS instances (Oracle Micro, etc.).
+EITElite Lite is the minimal edition designed for resource-constrained environments like micro VPS instances (Oracle Micro, etc.).
 
 ## System Requirements
 
@@ -24,7 +24,7 @@ tical-code Lite is the minimal edition designed for resource-constrained environ
 - SSH Worker Management
 
 ### CLI Commands
-- `tical setup` - Initialize tical-code
+- `tical setup` - Initialize EITElite
 - `tical config` - Manage configuration
 - `tical worker` - Manage workers
 - `tical anchor` - Manage anchors
@@ -45,12 +45,12 @@ The following are Full edition only:
 ## Installation
 
 ```bash
-pip install tical-code-lite
+pip install EITElite-lite
 ```
 
 Or via extras:
 ```bash
-pip install tical-code[lite]
+pip install EITElite[lite]
 ```
 
 ## Configuration
@@ -88,6 +88,6 @@ Lite config is stored at `~/.tical/config.json`:
 If you need plugins later:
 
 ```bash
-pip install tical-code[full]
+pip install EITElite[full]
 tical setup --edition full
 ```

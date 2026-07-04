@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -18,11 +18,11 @@
 #
 
 """
-Workflow Engine (tical-code v0.3 Core)
+Workflow Engine (EITElite v0.3 Core)
 =======================================
 
 Visual workflow orchestration in pure Python.
-Inspired by Coze Studio's Workflow, but with tical-code philosophy:
+Inspired by Coze Studio's Workflow, but with EITElite philosophy:
 - Every node MUST pass Force-Verify before proceeding
 - All execution is traced
 - Evidence hash for each node output

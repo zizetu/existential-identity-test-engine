@@ -10,7 +10,7 @@
 2. [Download and Install Client Portal Gateway](#2-download-and-install-client-portal-gateway)
 3. [Start and Authenticate Gateway](#3-start-and-authenticate-gateway)
 4. [Paper Trading Account Configuration](#4-paper-trading-account-configuration)
-5. [tical-code Trading Plugin Configuration](#5-tical-code-trading-plugin-configuration)
+5. [EITElite Trading Plugin Configuration](#5-EITElite-trading-plugin-configuration)
 6. [Connection Testing Steps](#6-connection-testing-steps)
 7. [Troubleshooting](#7-troubleshooting)
 
@@ -24,7 +24,7 @@
 - **Java Runtime**: JRE 8u192 or higher
   - Check: Run `java -version` in terminal
   - If not installed: Download from [Adoptium](https://adoptium.net/)
-- **Python 3.8+**: Required for tical-code
+- **Python 3.8+**: Required for EITElite
 - **Browser**: Chrome / Firefox / Safari (for Gateway authentication login)
 
 ### Optional
@@ -36,11 +36,11 @@
 
 | Term | Description | Port |
 |------|-------------|------|
-| **Client Portal Gateway** | Java gateway for Web API — this is what tical-code uses | 5000 |
+| **Client Portal Gateway** | Java gateway for Web API — this is what EITElite uses | 5000 |
 | **IB Gateway** | Lightweight version of TWS API (socket protocol) — **not** what we need | 4001/4002 |
 | **TWS** | Trader Workstation full desktop client | 7496/7497 |
 
-> ⚠️ tical-code Trading Plugin uses the **Web API (REST)**, which requires **Client Portal Gateway**, not IB Gateway (the socket protocol one).
+> ⚠️ EITElite Trading Plugin uses the **Web API (REST)**, which requires **Client Portal Gateway**, not IB Gateway (the socket protocol one).
 
 ---
 
@@ -129,7 +129,7 @@ If `authenticated` is `false`, you need to re-login through the browser.
 
 - Re-authentication is required after midnight each day (at least once)
 - Gateway automatically maintains heartbeat, but does not auto-re-login
-- tical-code's tickle mechanism sends heartbeat every 60 seconds to maintain connection
+- EITElite's tickle mechanism sends heartbeat every 60 seconds to maintain connection
 
 ### 3.5 Change Gateway Port (Optional)
 
@@ -145,7 +145,7 @@ vim ~/ibkr/clientportal.gw/root/conf.yaml
 # Restart Gateway
 ```
 
-If you change the port, update the `base_url` in tical-code's configuration accordingly.
+If you change the port, update the `base_url` in EITElite's configuration accordingly.
 
 ---
 
@@ -177,12 +177,12 @@ The returned account list should start with `DU` (Paper account), not `U` (Live 
 
 ---
 
-## 5. tical-code Trading Plugin Configuration
+## 5. EITElite Trading Plugin Configuration
 
-### 5.1 Install tical-code (Full Edition)
+### 5.1 Install EITElite (Full Edition)
 
 ```bash
-cd tical-code-v0.3
+cd EITElite-v0.3
 pip install -e ".[full]"
 ```
 
@@ -302,7 +302,7 @@ python examples/trading_demo.py
 ### 6.4 Run Tests
 
 ```bash
-cd tical-code-v0.3
+cd EITElite-v0.3
 pytest tests/test_trading.py -v
 ```
 
@@ -337,7 +337,7 @@ pytest tests/test_trading.py -v
 
 **Solution**:
 - In browser, click "Advanced" > "Continue to localhost"
-- tical-code's httpx client has `verify=False` set, unaffected
+- EITElite's httpx client has `verify=False` set, unaffected
 - Connection is local-only; Gateway-to-IBKR connection is encrypted, security is not compromised
 
 ### Q: macOS port 5000 occupied
@@ -373,7 +373,7 @@ pytest tests/test_trading.py -v
 
 **Solution**:
 1. Wait 1 second after the first request before requesting again
-2. tical-code automatically marks `preflight: true`, just re-request
+2. EITElite automatically marks `preflight: true`, just re-request
 3. Confirm you have subscribed to market data for the relevant instrument
 
 ### Q: `httpx` or `websockets` import fails
@@ -392,7 +392,7 @@ pip install httpx websockets
 **Solution**:
 - This is normal behavior — IBKR does not allow automated login
 - Consider writing a reminder script to prompt login before market open each day
-- Once logged in, tical-code's tickle maintains the session until midnight
+- Once logged in, EITElite's tickle maintains the session until midnight
 
 ### Q: How to switch between Paper Trading and Live
 
@@ -409,4 +409,4 @@ pip install httpx websockets
 - [Client Portal Gateway Download](https://www.interactivebrokers.com/en/index.php?f=16457)
 - [IBKR Campus Video Tutorials](https://ibkrcampus.eu/trading-lessons/launching-and-authenticating-the-gateway/)
 - [Web API Endpoint Reference](https://www.interactivebrokers.com/campus/ibkr-api-page/webapi-ref/)
-- [tical-code Trading Plugin Source](../tical_code/plugins/trading/__init__.py)
+- [EITElite Trading Plugin Source](../tical_code/plugins/trading/__init__.py)

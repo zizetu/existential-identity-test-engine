@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-EITElite / tical-code System Test Station - T1-T8 Full Inspection
+EITElite / EITElite System Test Station - T1-T8 Full Inspection
 Run on Test VPS (REPLACED_TEST_IP) after any system change.
 
 Usage:
@@ -438,7 +438,7 @@ def t9_deleted_files():
     ]
     for f in dead:
         assert not f.exists(), f"dead file still exists: {f.name}"
-    # Confirm tical-code specific files
+    # Confirm EITElite specific files
     if (ROOT / "tical_code" / "core" / "verify.py").parent.exists():
         pass  # parent dir always exists
 
@@ -468,7 +468,7 @@ def t10_anchor_vps():
     if not anchor.exists():
         return
     data = json.loads(anchor.read_text())
-    for name in ["sg", "taiwan", "oracle", "test", "kael"]:
+    for name in ["node1", "node2", "node3", "node4", "node5"]:
         assert name in data["vps"], f"Anchor missing {name}"
         v = data["vps"][name]
         assert "ip" in v
@@ -491,7 +491,7 @@ def t10_vps_version_consistency():
                           capture_output=True, text=True).stdout.strip()
     
     # Try SSH to same-repo VPS for comparison
-    targets = [("oracle", vps_list.get("oracle", {})),
+    targets = [("node3", vps_list.get("node3", {})),
                ("test", vps_list.get("test", {}))]
     
     for name, info in targets:

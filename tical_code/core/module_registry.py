@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -51,7 +51,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-logger = logging.getLogger("tical-code.registry")
+logger = logging.getLogger("EITElite.registry")
 
 _registry: Dict[str, "ModuleSpec"] = {}
 _load_order: List[str] = []  # topological sort result
@@ -67,7 +67,7 @@ class ModuleSpec:
     description: str                   # human-readable one-liner
     dependencies: List[str] = field(default_factory=list)  # must load before this
     init_fn: Optional[Callable] = None # fn(worker, cfg) -> instance or None
-    profile: str = "full"             # "full" (tical-code) or "light" (EITElite)
+    profile: str = "full"             # "full" (EITElite) or "light" (EITElite)
 
 
 def register(
@@ -89,7 +89,7 @@ def register(
         default_enabled: Whether ON by default.
         description: One-line description for prompt generation.
         dependencies: Names of modules that must load before this one.
-        profile: "full" (tical-code) or "light" (EITElite).
+        profile: "full" (EITElite) or "light" (EITElite).
     """
     def decorator(fn: Callable):
         spec = ModuleSpec(

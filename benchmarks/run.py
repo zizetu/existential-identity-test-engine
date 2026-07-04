@@ -19,7 +19,7 @@ Backends:
 - mimo: MiMo Token Plan (needs MIMO_API_KEY)
 - deepseek: DeepSeek (needs DEEPSEEK_API_KEY)
 - openai: OpenAI compatible (needs OPENAI_API_KEY+OPENAI_BASE_URL)
-- worker: tical-code worker internal
+- worker: EITElite worker internal
 - auto: auto-detect available backends
 """
 
@@ -29,7 +29,7 @@ import logging
 import os
 import sys
 
-# Ensure tical-code root is in path
+# Ensure EITElite root is in path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from benchmarks.bench_bfcl import BFCLAdapter
@@ -40,7 +40,7 @@ from benchmarks.bench_gaia import GAIAAdapter
 from benchmarks.real_agent import create_real_agent, mimo_agent, deepseek_agent
 from benchmarks.bench_bfcl import BFCLBenchReport, merge_agent_stats
 
-logger = logging.getLogger("tical-code.benchmark")
+logger = logging.getLogger("EITElite.benchmark")
 
 
 ADAPTERS = {
@@ -142,7 +142,7 @@ def resolve_agent(backend: str, model: str = "", mode: str = "raw"):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="tical-code Benchmark Runner")
+    parser = argparse.ArgumentParser(description="EITElite Benchmark Runner")
     parser.add_argument("--bench", type=str, default="all",
                         choices=list(ADAPTERS.keys()) + ["all"],
                         help="Benchmark to run")

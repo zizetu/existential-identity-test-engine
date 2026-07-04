@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 # Licensed under AGPLv3
 # Original repository: https://github.com/zizetu/eite-agent
@@ -10,7 +10,7 @@ Worker Framework compatibility shim for eite-agent.
 
 eite-agent uses unified_worker.py as its primary worker implementation.
 This module re-exports key types so that scripts can import from
-worker_framework without depending on the full tical-agent codebase.
+worker_framework without depending on the full EITE-agent codebase.
 """
 import json
 import logging
@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional
 
 from .unified_worker import Worker
 
-logger = logging.getLogger("tical-code.worker_framework")
+logger = logging.getLogger("EITElite.worker_framework")
 
 
 @dataclass

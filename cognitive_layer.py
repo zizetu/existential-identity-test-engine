@@ -26,7 +26,7 @@ from cognitive_protocol.protocol import SignalProtocol
 from cognitive_protocol.metabolism import CognitiveMetabolism, MetabolismConfig
 from cognitive_protocol.hive import HiveProtocol, HiveConfig, CollectivePattern
 
-logger = logging.getLogger("tical-code.cognitive_layer")
+logger = logging.getLogger("EITElite.cognitive_layer")
 
 
 class CognitiveLayer:

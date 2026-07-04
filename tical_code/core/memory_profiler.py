@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -53,7 +53,7 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-DEFAULT_SNAPSHOT_DIR = "~/.tical-code/memory-snapshots"
+DEFAULT_SNAPSHOT_DIR = "~/.EITElite/memory-snapshots"
 
 
 # ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -169,5 +169,5 @@ def get_verify():
         return _eite_verify_helper
     except Exception as e:
         import logging
-        logging.getLogger("tical-code.eite").error(f"VerificationEngine init failed: {e}")
+        logging.getLogger("EITElite.eite").error(f"VerificationEngine init failed: {e}")
         return None

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -17,10 +17,10 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """
-tical-code Worker Entry Script
+EITElite Worker Entry Script
 ===========================
 
-This is the standard way to start a tical-code worker.
+This is the standard way to start a EITElite worker.
 
 Usage:
     python scripts/run_worker.py --config config/worker-configs/tico-sg.json
@@ -39,7 +39,7 @@ P0 Bug root cause:
     Fix: bootstrap() only initializes, run_loop() is explicitly awaited by this script,
     signals only set the _shutdown flag to let run_loop exit naturally, then cleanup runs after exit.
 
-Author: tical-code Team
+Author: EITElite Team
 Version: see tical_code.__version__
 """
 
@@ -59,12 +59,12 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 # death log directory
-DEATH_LOG_DIR = os.path.expanduser("~/.tical-code/death-log")
+DEATH_LOG_DIR = os.path.expanduser("~/.EITElite/death-log")
 
 
 def _write_death_log(worker_name: str, reason: str, details: str = ""):
     """
-    Write death log to ~/.tical-code/death-log/<worker_name>_<timestamp>.log
+    Write death log to ~/.EITElite/death-log/<worker_name>_<timestamp>.log
 
     This is the last resort: even if the session_snapshot module is unavailable,
     it leaves a death record on disk to prevent silent exits from being undiagnosable.
@@ -86,7 +86,7 @@ def _write_death_log(worker_name: str, reason: str, details: str = ""):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='tical-code Worker - Autonomous AI Agent'
+        description='EITElite Worker - Autonomous AI Agent'
     )
     parser.add_argument(
         '--config', '-c',
@@ -135,7 +135,7 @@ def main():
         parser.error("Must specify --config or --deploy-id")
         return
 
-    logger.info(f"tical-code Worker starting: name={config.name}, edition={config.edition}, model={config.model}")
+    logger.info(f"EITElite Worker starting: name={config.name}, edition={config.edition}, model={config.model}")
 
     # Create Worker
     worker = WorkerFramework(config)

@@ -71,9 +71,9 @@ setup(
     description="AI Agent Evaluation Framework",
     long_description=read_file("README.md"),
     long_description_content_type="text/markdown",
-    author="tical-code Team",
+    author="EITElite Team",
     author_email="",
-    url="https://github.com/zizetu/eite-agent",
+    url="https://github.com/zizetu/existential-identity-test-engine",
     
     packages=find_packages(exclude=["tests", "tests.*", "docs"]),
     package_data={

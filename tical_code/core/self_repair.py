@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -179,7 +179,7 @@ class SelfRepairEngine:
     
     # Self-evolutionsecurityConfig
     # P0 #1: Protect filelist - Single-source reference from sandbox.PROTECTED_FILE_REGISTRY
-    # (tical-agent) or empty fallback (EITE-light, where sandbox.py is eval-only)
+    # (EITE-agent) or empty fallback (EITE-light, where sandbox.py is eval-only)
     PROTECTED_FILES = frozenset()
     try:
         from tical_code.core.sandbox import PROTECTED_FILE_REGISTRY
@@ -285,7 +285,7 @@ class SelfRepairEngine:
         # criticalFilelist(used forCheck)
         self.critical_files = [
             'anchor.json',
-            '~/.tical-code/sessions.db',
+            '~/.EITElite/sessions.db',
         ]
         
         # Self-evolutionstatus
@@ -846,7 +846,7 @@ class SelfRepairEngine:
 
     # ── Repair outcome tracking (v3: persistent success metrics) ─────────
 
-    REPAIR_HISTORY_PATH = os.path.join(str(Path.home()), ".tical-code", "repair_history.json")
+    REPAIR_HISTORY_PATH = os.path.join(str(Path.home()), ".EITElite", "repair_history.json")
 
     def _record_repair_outcome(self, healthy: bool, fixed: int, summary: str) -> None:
         """Persist repair outcome to repair_history.json for aggregate metrics.

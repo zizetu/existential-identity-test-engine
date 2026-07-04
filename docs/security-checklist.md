@@ -1,4 +1,4 @@
-# tical-code Security Baseline Self-Checklist
+# EITElite Security Baseline Self-Checklist
 
 > v0.5.6 Audit Lessons: All 3 P0 issues (shutdown reversed / f-string injection / SSL missing) were missed by "implementation mindset" testing
 > Must run through this checklist before every commit. Don't assume "no errors = it's correct"

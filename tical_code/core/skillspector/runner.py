@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -35,7 +35,7 @@ from .prompt_injection import PromptInjectAnalyzer
 from .supply_chain import SupplyChainAnalyzer
 from .types import AuditResult, Finding
 
-logger = logging.getLogger("tical-code.skillspector")
+logger = logging.getLogger("EITElite.skillspector")
 
 DEFAULT_MAX_BYTES = 1 * 1024 * 1024  # 1 MB
 

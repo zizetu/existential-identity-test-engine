@@ -9,7 +9,7 @@ Domains: retail, airline, telecom
 
 GitHub: https://github.com/sierra-research/tau-bench
 
-tical-code existing foundation:
+EITElite existing foundation:
 - worker_loop multi-turn dialogue
 - signal_calibrator's policy calibration logic
 - agent_runtime's tool schemas
@@ -29,7 +29,7 @@ from dataclasses import dataclass
 
 from benchmarks.bench_base import BenchAdapter, BenchResult
 
-logger = logging.getLogger("tical-code.benchmark.tau")
+logger = logging.getLogger("EITElite.benchmark.tau")
 
 
 @dataclass

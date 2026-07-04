@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -43,7 +43,7 @@ import logging
 import os
 from pathlib import Path
 
-logger = logging.getLogger("tical-code.config")
+logger = logging.getLogger("EITElite.config")
 
 
 def _find_config_json() -> Path | None:
@@ -61,7 +61,7 @@ def _find_config_json() -> Path | None:
     candidates.extend([
         home / "eite-agent" / "config.json",
         home / "eitelite" / "config.json",
-        Path(os.path.expanduser("~/.tical-code")) / "config.json",
+        Path(os.path.expanduser("~/.EITElite")) / "config.json",
     ])
 
     # CWD fallback

@@ -7,7 +7,7 @@ Meta + HuggingFace release, 466 general assistant tasks:
 
 Human baseline 92%, current best Agent ~74%
 
-tical-code capability mapping:
+EITElite capability mapping:
 - web_sense: web search + scraping
 - agent-browser: complex web browsing
 - FileTool: file read/write
@@ -32,7 +32,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from benchmarks.bench_base import BenchAdapter, BenchResult
 
-logger = logging.getLogger("tical-code.benchmark.gaia")
+logger = logging.getLogger("EITElite.benchmark.gaia")
 
 
 class GAIAGrader:

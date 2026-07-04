@@ -1,6 +1,6 @@
 # EITElite — Lightweight AI Worker for 1C1G VPS
 
-Stripped from tical-code full system. Keeps EITE core: verification, anti-hallucination, loop detection, behavioral constraints.
+Stripped from EITElite full system. Keeps EITE core: verification, anti-hallucination, loop detection, behavioral constraints.
 
 ## What's Included (~10K lines)
 
@@ -25,7 +25,7 @@ Stripped from tical-code full system. Keeps EITE core: verification, anti-halluc
 | prompt.py | System prompt builder |
 | response_formatter.py | Response formatting |
 
-## What's Removed (available in tical-code)
+## What's Removed (available in EITElite)
 
 self_repair, checkpoint, sandbox, worker_framework, decision_engine, hive, workflow,
 cron, subagent, memory_evolve, builtin_tools, eval, reflection, enhanced_router,
@@ -36,4 +36,4 @@ benchmarks, cli, vigil
 ## Deployment
 
 - Oracle and Test VPS run EITElite
-- Kael and Taiwan VPS run tical-code full
+- Kael and Taiwan VPS run EITElite full

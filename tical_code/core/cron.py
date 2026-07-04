@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -21,7 +21,7 @@
 Cron Task System (v0.3 P1)
 ===========================
 
-Lightweight cron-like scheduling for tical-code workers.
+Lightweight cron-like scheduling for EITElite workers.
 
 Features:
 - Pre-defined schedules: every_minute, every_5_minutes, hourly, daily, etc.
@@ -291,7 +291,7 @@ class CronManager:
         self.cron_manager.remove_job(job_id)
     """
 
-    def __init__(self, framework: Any, db_path: str = "~/.tical-code/cron.db"):
+    def __init__(self, framework: Any, db_path: str = "~/.EITElite/cron.db"):
         """
         Initialize CronManager.
 

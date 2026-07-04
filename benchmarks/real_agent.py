@@ -1,4 +1,4 @@
-"""Real Model Agent - connecting to tical-code LLM infrastructure
+"""Real Model Agent - connecting to EITElite LLM infrastructure
 
 Supports 3 backends:
 1. worker mode: directly calls call_ai_raw (inside worker process)
@@ -27,9 +27,9 @@ import urllib.request
 import ssl
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-logger = logging.getLogger("tical-code.benchmark.real_agent")
+logger = logging.getLogger("EITElite.benchmark.real_agent")
 
-# tical-code root directory
+# EITElite root directory
 # Error category constants
 ERROR_CATEGORIES = ["wrong function name", "wrong parameter type", "missing parameter", "wrong enum value", "extra parameter", "wrong format"]
 

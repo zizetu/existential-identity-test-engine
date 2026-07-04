@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -212,7 +212,7 @@ class SubAgentManager:
     def __init__(
         self,
         framework: Optional['WorkerFramework'] = None,
-        db_path: str = "~/.tical-code/subagents.db"
+        db_path: str = "~/.EITElite/subagents.db"
     ):
         """
         Initialize SubAgentManager.

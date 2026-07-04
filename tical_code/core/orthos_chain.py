@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -44,7 +44,7 @@ import urllib.request
 import urllib.error
 from typing import Any, Dict, List, Optional, Tuple
 
-logger = logging.getLogger("tical-code.orthos_chain")
+logger = logging.getLogger("EITElite.orthos_chain")
 
 OLLAMA_CHAT_URL = "http://localhost:11434/api/chat"
 OLLAMA_TAGS_URL = "http://localhost:11434/api/tags"
@@ -462,7 +462,7 @@ def chain_call(messages: List[Dict], max_tokens: int = 1000,
                deepseek_key: Optional[str] = None) -> Dict[str, Any]:
     """Main entry point for Orthos Chain v4.
 
-    Called from model_failover._call_single when provider is ollama/cang.
+    Called from model_failover._call_single when provider is ollama/local.
     Pipeline:
       1. Auto-discover models from Ollama /api/tags
       2. orthos-chain-model: unified safety + intent

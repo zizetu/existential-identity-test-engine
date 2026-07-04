@@ -39,7 +39,7 @@ within **5 business days**.
 
 This security policy covers:
 
-- The tical-code / eite-agent core codebase
+- The EITElite / eite-agent core codebase
 - Official deployments and configurations
 - Authentication and authorization mechanisms
 - Sandbox execution and permission systems

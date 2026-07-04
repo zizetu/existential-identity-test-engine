@@ -93,7 +93,7 @@ class HiveProtocol:
         hive = HiveProtocol()
 
         # Submit calibrated signal
-        hive.submit(signal, agent_id="kael")
+        hive.submit(signal, agent_id="worker")
 
         # Query collective wisdom
         patterns = hive.query("hallucination")

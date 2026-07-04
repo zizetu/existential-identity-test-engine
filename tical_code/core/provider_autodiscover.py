@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -28,7 +28,7 @@ import logging
 import os
 from typing import Dict, List, Optional
 
-logger = logging.getLogger("tical-code.provider_autodiscover")
+logger = logging.getLogger("EITElite.provider_autodiscover")
 
 # Well-known env vars mapped to provider definitions
 _KNOWN_PROVIDERS: List[Dict] = [

@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -20,7 +20,7 @@
 # provenance:ticalasi-zzt-2026​
 """Tool Executor - secure command execution with post-execution verification.
 
-This module provides the secure tool execution pipeline for tical-code. Every tool
+This module provides the secure tool execution pipeline for EITElite. Every tool
 call from the AI passes through a multi-layered security architecture before execution:
 
 1. **Sandbox pre-check** - tool_sandbox validates the tool name and arguments against
@@ -189,7 +189,7 @@ def list_plugin_tools() -> list:
 _CONFIG_FILE_CANDIDATES = [
     Path.home() / "eite-agent" / "config.json",
     Path.home() / "eitelite" / "config.json",
-    Path(os.path.expanduser("~/.tical-code")) / "config.json",
+    Path(os.path.expanduser("~/.EITElite")) / "config.json",
 ]
 
 
@@ -266,7 +266,7 @@ def configure_security(path_cfg=None, url_cfg=None, outbound_cfg=None):
 
 logger = logging.getLogger("tical_code.seoul.tool_executor")
 # Also create legacy name for log filtering
-_log_legacy = logging.getLogger("tical-code.executor")
+_log_legacy = logging.getLogger("EITElite.executor")
 
 # Global TG bot reference for chat_send fallback (set by worker)
 _TG_BOT_TOKEN: str = ""
@@ -2034,7 +2034,7 @@ def exec_end_task(args: dict = None) -> dict:
     workflow extraction from the tool-call trace.
 
     A successful task (5+ tool calls, no repeated errors) gets distilled
-    into a reusable skill saved to ~/.tical-code/skills/.
+    into a reusable skill saved to ~/.EITElite/skills/.
 
     The returned dict includes an ``__end_task__`` marker that the
     message_handler loop detects to stop further iteration.
@@ -2784,7 +2784,7 @@ def _fallback_memory_search(query: str, limit: int = 10) -> dict:
     import glob
     results = []
     memory_dirs = [
-        os.path.expanduser("~/.tical-code/memory"),
+        os.path.expanduser("~/.EITElite/memory"),
         os.path.expanduser("~/memory"),
     ]
     for md in memory_dirs:
@@ -2997,7 +2997,7 @@ def exec_create_background_task(args: dict) -> dict:
                 break
         if not _ws:
             _home = os.path.expanduser("~")
-            for _cand in [os.path.join(_home, "tical-agent"), os.path.join(_home, "eitelite")]:
+            for _cand in [os.path.join(_home, "EITE-agent"), os.path.join(_home, "eitelite")]:
                 if os.path.isdir(_cand):
                     _ws = _cand
                     break
@@ -3151,7 +3151,7 @@ class ToolExecutor:
 
     def __init__(self):
         """Initialize the ToolExecutor with a dedicated logger."""
-        self.logger = logging.getLogger("tical-code.executor")
+        self.logger = logging.getLogger("EITElite.executor")
 
     def execute(self, name: str, args: dict, base_dir: str = "") -> dict:
         """Execute a tool by name with type validation.

@@ -1,5 +1,5 @@
 """
-MCP integration for tical-code.
+MCP integration for EITElite.
 
 Wraps the existing MCPClient (from core/mcp_client.py) with:
   - Config file loading from config/mcp_servers.json
@@ -15,7 +15,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-logger = logging.getLogger("tical-code.mcp_integration")
+logger = logging.getLogger("EITElite.mcp_integration")
 
 
 def load_mcp_config(repo_root: Optional[str] = None) -> Dict[str, Any]:

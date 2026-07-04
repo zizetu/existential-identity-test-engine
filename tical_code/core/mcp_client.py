@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -40,7 +40,7 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-logger = logging.getLogger("tical-code.mcp_client")
+logger = logging.getLogger("EITElite.mcp_client")
 
 # ---------------------------------------------------------------------------
 # Allowed environment variables for subprocess sandboxing

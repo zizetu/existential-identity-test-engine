@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -15,7 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 # [ANCHOR] This is the PUBLIC, sanitized version (AGPL).
-# Private full version at zizetu/eite-agent. Sister project: zizetu/tical-agent.
+# Private full version at zizetu/eite-agent. Sister project: zizetu/EITE-agent.
 # Do NOT add VPS IPs, tokens, internal paths, or node topology here.
 # See STRATEGY.md for commercial context.
 
@@ -24,7 +24,7 @@ from __future__ import annotations
 
 # provenance:ticalasi-zzt-2026​
 """
-tical-code unified worker - main orchestrator loop.
+EITElite unified worker - main orchestrator loop.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 WORKER LIFECYCLE (the core loop, executed inside Worker.run())
@@ -205,7 +205,7 @@ try:
 except ImportError:
     SelfEvolveEngine = None
 
-logger = logging.getLogger("tical-code.worker")
+logger = logging.getLogger("EITElite.worker")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -266,7 +266,7 @@ HARD_STOP_AT = 8   # force stop
 # ─────────────────────────────────────────────────────────────
 
 class Worker:
-    """Central orchestrator for the tical-code AI worker.
+    """Central orchestrator for the EITElite AI worker.
 
     The Worker is the top-level runtime: it wires every subsystem
     together and runs the main poll→dispatch→reply loop indefinitely.
@@ -315,7 +315,7 @@ class Worker:
           1. Trace logger      - TraceLogger ring buffer
           2. Channels          - TelegramChannel + TicalChatChannel
           3. Error logger      - ErrorLogger with rotation
-          4. Memory evolver    - MemoryEvolver (~/.tical-code/memory)
+          4. Memory evolver    - MemoryEvolver (~/.EITElite/memory)
           5. Tool registry     - ToolRegistry + builtin tools
           6. LLM backend       - ModelFailover (preferred) or create_llm_backend (fallback)
           7. Pending task file - .pending_task.json in workspace
@@ -363,7 +363,7 @@ class Worker:
         self.error_logger = None
         if ErrorLogger is not None:
             try:
-                self.error_logger = ErrorLogger(log_dir="~/.tical-code/logs")
+                self.error_logger = ErrorLogger(log_dir="~/.EITElite/logs")
                 logger.info("ErrorLogger ready: %s", self.error_logger.error_log_path)
             except Exception as e:
                 logger.warning("ErrorLogger init failed: %s", e)
@@ -372,7 +372,7 @@ class Worker:
         # SECTION: Memory Evolver
         # ─────────────────────────────────────────────────────
         # Memory evolver for autonomous memory management
-        _mem_dir = os.path.expanduser("~/.tical-code/memory")
+        _mem_dir = os.path.expanduser("~/.EITElite/memory")
         self.memory_evolver = None
         if MemoryEvolver is not None:
             try:
@@ -1447,7 +1447,7 @@ class AsyncWorker:
         self.cfg = cfg
         self.name = cfg["name"]
         self.workspace = cfg["workspace"]
-        self.logger = logging.getLogger(f"tical-code.async_worker.{self.name}")
+        self.logger = logging.getLogger(f"EITElite.async_worker.{self.name}")
 
         # SustainedTaskManager - initialized to None; Worker.__init__ creates it
         self._sustained_task_mgr = None
@@ -1488,7 +1488,7 @@ class AsyncWorker:
         self.error_logger = None
         if ErrorLogger is not None:
             try:
-                self.error_logger = ErrorLogger(log_dir="~/.tical-code/logs")
+                self.error_logger = ErrorLogger(log_dir="~/.EITElite/logs")
                 self.logger.info("ErrorLogger ready")
             except Exception as e:
                 self.logger.warning("ErrorLogger init failed: %s", e)
@@ -1530,7 +1530,7 @@ class AsyncWorker:
 
         # Memory boot — load persistent identity/memory into prompt
         try:
-            _mem_dir = os.path.expanduser("~/.tical-code/memory")
+            _mem_dir = os.path.expanduser("~/.EITElite/memory")
             from tical_code.core.memory_boot import ensure_memory_files
             ensure_memory_files(_mem_dir)
             # Read memory files and inject into prompt
@@ -2154,7 +2154,7 @@ class AsyncWorker:
         }
 
 def main():
-    """Entry point for the tical-code unified worker.
+    """Entry point for the EITElite unified worker.
 
     Performs startup in this order:
       1. Acquires a PID lock to prevent duplicate instances.
@@ -2167,7 +2167,7 @@ def main():
     The PID lock file is always cleaned up in the finally block,
     even on crash or signal-triggered exit.
     """
-    logger.info("tical-code worker starting")
+    logger.info("EITElite worker starting")
 
     # PID lock - prevent duplicate instances
     PID_FILE = Path("/tmp/unified-worker.pid")
@@ -2236,7 +2236,7 @@ def async_main():
 
     To use: ASYNC_WORKER=1 python -m tical_code.core.unified_worker
     """
-    logger.info("tical-code async-worker starting")
+    logger.info("EITElite async-worker starting")
 
     # PID lock - prevent duplicate instances
     PID_FILE = Path("/tmp/unified-worker.pid")

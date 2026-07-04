@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Build-time watermark tool for tical-code / EITE.
+Build-time watermark tool for EITElite / EITE.
 
 The public repo always carries the open-source watermark.
 For commercial builds, see the private eite-agent repo's version

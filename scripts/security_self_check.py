@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""Security self-check script for tical-code system.
+"""Security self-check script for EITElite system.
 
 Performs 9 independent security and structural checks on the codebase.
 Outputs JSON-line results. Must be executed from the eite-agent workspace root.
