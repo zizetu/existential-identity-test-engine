@@ -1846,7 +1846,24 @@ class AsyncWorker:
         # on message[0], and without it the AI has no persona context.
         if not messages or messages[0].get("role") != "system":
             messages.insert(0, {"role": "system", "content": self.system_prompt})
-        messages.append({"role": "user", "content": msg.content})
+        # Build user message — include media (images, file content, transcripts)
+        if hasattr(msg, 'media_data') and msg.media_data:
+            content_parts = [{"type": "text", "text": msg.content}]
+            for _md in msg.media_data:
+                if _md.get("type") == "image":
+                    content_parts.append({
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{_md['mime']};base64,{_md['data']}"}
+                    })
+                elif _md.get("type") == "transcript":
+                    content_parts.append({"type": "text", "text": f"[voice transcript: {_md['text']}]"})
+                elif _md.get("type") == "document_text":
+                    content_parts.append({"type": "text", "text": f"[File {_md.get('filename','')} content:\n{_md['text']}]"})
+                elif _md.get("type") == "binary_saved":
+                    content_parts.append({"type": "text", "text": f"[File saved: {_md.get('filename','')} at {_md.get('path','')} — {_md.get('note','binary')}]"})
+            messages.append({"role": "user", "content": content_parts})
+        else:
+            messages.append({"role": "user", "content": msg.content})
 
         try:
             response = await self._async_llm_call(messages)
