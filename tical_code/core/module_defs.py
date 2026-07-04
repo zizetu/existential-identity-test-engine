@@ -886,6 +886,62 @@ def _init_memory_evolve(worker: Any, cfg: dict):
 
 
 # =============================================================================
+# Sustained Task Queue — persistent recoverable tasks
+# =============================================================================
+
+@register(
+    name="sustained_task",
+    attr_name="sustained_task",
+    config_key="sustained_task",
+    default_enabled=True,
+    description=(
+        "Persistent task queue: survives restarts, tracks multi-step tasks "
+        "with progress, timeouts, and automatic recovery. "
+        "You CAN use task_create, task_list, task_update tools."
+    ),
+    profile="light",
+)
+def _init_sustained_task(worker: Any, cfg: dict):
+    """Initialize SustainedTaskManager for persistent task queue."""
+    try:
+        from tical_code.core.modules.sustained_task import SustainedTaskManager
+    except ImportError:
+        return None
+    db_path = cfg.get("sustained_task_db", "~/.eitelite/sustained_tasks.db")
+    mgr = SustainedTaskManager(db_path=db_path)
+    logger.info("sustained_task: initialized at %s", db_path)
+    return mgr
+
+
+# =============================================================================
+# Self-Evolution Engine — error pattern tracking and usage insights
+# =============================================================================
+
+@register(
+    name="self_evolve",
+    attr_name="self_evolve",
+    config_key="self_evolve",
+    default_enabled=True,
+    description=(
+        "Self-evolution engine: tracks error patterns, usage insights, and "
+        "code improvement suggestions. Learns from failures to prevent repeats."
+    ),
+    profile="light",
+)
+def _init_self_evolve(worker: Any, cfg: dict):
+    """Initialize SelfEvolveEngine for error pattern tracking."""
+    try:
+        from tical_code.core.modules.self_evolve import SelfEvolveEngine
+    except ImportError:
+        return None
+    import os as _os
+    db_path = cfg.get("self_evolve_db", _os.path.expanduser("~/.eitelite/self_evolve.db"))
+    engine = SelfEvolveEngine(db_path=db_path)
+    logger.info("self_evolve: initialized")
+    return engine
+
+
+# =============================================================================
 # DESIGNED-NOT-DEAD → Active: MCP Client (light profile)
 # =============================================================================
 
