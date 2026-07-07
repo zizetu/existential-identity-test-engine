@@ -31,7 +31,7 @@ Five core rules:
 
 Author: Tical (Zize Tu)
 Version: see tical_code.__version__
-Spec: https://github.com/ticalzzt/EITElite-dev/blob/main/docs/truthful-reporting-spec.md
+Spec: https://github.com/zizetu/eite-agent/blob/main/docs/truthful-reporting-spec.md
 """
 
 import asyncio

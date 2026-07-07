@@ -7,7 +7,7 @@ from typing import Any, Callable, Deque, Dict, List, Optional, Set
 from collections import defaultdict, deque
 import json
 import uuid
-from .state import BeliefGraph, BeliefStrength, Hypothesis, MoodVector, Decision
+from .state import BeliefGraph, BeliefStrength, Hypothesis, MoodVector, Decision, Belief
 
 @dataclass
 class WorkspaceEntry:
@@ -186,6 +186,60 @@ class Workspace:
                 self._vector_clock = data.get('vector_clock', {self.node_id: 0})
         except (IOError, json.JSONDecodeError) as e:
             print(f"Workspace load failed: {str(e)}")
+
+    # ── Convenience API ─────────────────────────────────────────
+
+    def add_hypothesis(self, claim: str, confidence: float = 0.5,
+                       evidence: Optional[List[str]] = None) -> str:
+        """Add a hypothesis to the cognitive workspace.
+
+        Args:
+            claim: The hypothesis statement.
+            confidence: Confidence level 0.0–1.0.
+            evidence: Optional supporting evidence items.
+
+        Returns:
+            Hypothesis key (UUID string) for later reference.
+        """
+        if not self.enabled:
+            return ""
+        h = Hypothesis(claim=claim, confidence=confidence,
+                       evidence=evidence or [])
+        key = str(uuid.uuid4())
+        self._state.hypotheses[key] = h
+        self._persist()
+        return key
+
+    def add_belief(self, claim: str, confidence: float = 0.5,
+                   source: str = "") -> str:
+        """Register a belief in the cognitive workspace.
+
+        Args:
+            claim: The belief statement.
+            confidence: Confidence level 0.0–1.0 (mapped to BeliefStrength).
+            source: Optional provenance string.
+
+        Returns:
+            The claim string (used as the belief key in the graph).
+        """
+        if not self.enabled:
+            return ""
+        strength = BeliefStrength.STRONG
+        if confidence < 0.3:
+            strength = BeliefStrength.SPECULATIVE
+        elif confidence < 0.5:
+            strength = BeliefStrength.TENTATIVE
+        elif confidence < 0.7:
+            strength = BeliefStrength.MODERATE
+        elif confidence < 0.9:
+            strength = BeliefStrength.STRONG
+        else:
+            strength = BeliefStrength.CONFIRMED
+        b = Belief(claim=claim, strength=strength,
+                   sources=[source] if source else [])
+        self._state.beliefs.add_belief(b)
+        self._persist()
+        return claim
 
     def _gc_expired(self) -> None:
         """Remove expired entries."""

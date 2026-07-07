@@ -771,7 +771,7 @@ class Worker:
                 from pathlib import Path as _Path
                 _ws_persist = _Path(os.environ.get("WORKSPACE_DIR", "/tmp")) / ".cognitive"
                 self.cognitive_workspace = Workspace(
-                    node_id=os.environ.get("NODE_ID", cfg.get("name", "seoul-1")),
+                    node_id=os.environ.get("NODE_ID", cfg.get("name", "agent-1")),
                     persist_path=_ws_persist,
                     enabled=True,
                 )
@@ -1581,7 +1581,7 @@ class AsyncWorker:
                 from pathlib import Path as _Path
                 _ws_persist = _Path(os.environ.get("WORKSPACE_DIR", "/tmp")) / ".cognitive"
                 self.cognitive_workspace = Workspace(
-                    node_id=os.environ.get("NODE_ID", cfg.get("name", "seoul-1")),
+                    node_id=os.environ.get("NODE_ID", cfg.get("name", "agent-1")),
                     persist_path=_ws_persist,
                     enabled=True,
                 )

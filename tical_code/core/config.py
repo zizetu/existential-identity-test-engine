@@ -150,7 +150,7 @@ def load_config() -> dict:
     }
 
     # Worker name: env > worker_config.json > default
-    cfg["name"] = os.environ.get("WORKER_NAME", "seoul")
+    cfg["name"] = os.environ.get("WORKER_NAME", "agent")
     wc_path = Path(base) / "worker_config.json"
     if wc_path.exists():
         try:

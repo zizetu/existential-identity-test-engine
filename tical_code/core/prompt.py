@@ -43,7 +43,7 @@ def _build_tool_descriptions() -> List[str]:
 
 
 def build_system_prompt(
-    name: str = "seoul",
+    name: str = "agent",
     hostname: str = "",
     deploy_path: str = "",
     target_model: str = "",

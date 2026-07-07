@@ -91,7 +91,7 @@ class AnchorHandler(BaseHTTPRequestHandler):
                 import subprocess as _sp, tempfile
                 tmp = tempfile.mkdtemp(prefix="eite_count_")
                 _sp.run(["git", "clone", "--depth", "1",
-                    "https://github.com/ticalzzt/eitelite-codebase-audit.git",
+                    "https://github.com/zizetu/existential-identity-test-engine.git",
                     tmp + "/eitelite"], capture_output=True, timeout=60)
                 eite = self._count_py_files(tmp + "/eitelite")
                 _sp.run(["rm", "-rf", tmp], capture_output=True)
@@ -103,7 +103,7 @@ class AnchorHandler(BaseHTTPRequestHandler):
                 import subprocess as _sp, tempfile
                 tmp = tempfile.mkdtemp(prefix="tical_count_")
                 _sp.run(["git", "clone", "--depth", "1",
-                    "https://github.com/ticalzzt/EITElite.git",
+                    "https://github.com/zizetu/existential-identity-test-engine.git",
                     tmp + "/EITElite"], capture_output=True, timeout=60)
                 tical = self._count_py_files(tmp + "/EITElite")
                 _sp.run(["rm", "-rf", tmp], capture_output=True)

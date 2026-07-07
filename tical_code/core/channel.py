@@ -371,7 +371,7 @@ class TelegramChannel(Channel):
 
 class TicalChatChannel(Channel):
     def __init__(self, base_url: str = "http://localhost:8080",
-                 identity: str = "seoul", shared_key: str = os.environ.get("TICAL_CHAT_KEY", ""),
+                 identity: str = os.environ.get("WORKER_NAME", "agent"), shared_key: str = os.environ.get("TICAL_CHAT_KEY", ""),
                  api_key: str = None):
         if api_key is not None:
             shared_key = api_key

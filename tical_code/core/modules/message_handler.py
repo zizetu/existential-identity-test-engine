@@ -446,7 +446,7 @@ def _privacy_scan_response(text: str) -> str:
 # Security model:
 #   CMD_LEVEL_MASTER (0) — full access, including ``exec`` (arbitrary
 #       bash).  Restricted to senders listed in MASTER_IDS.
-#   CMD_LEVEL_ADMIN (1)  — AI admin (seoul worker).  Can deploy,
+#   CMD_LEVEL_ADMIN (1)  — AI admin (primary worker).  Can deploy,
 #       switch_model, status, report.
 #   CMD_LEVEL_WORKER (2) — self-manage only: ping, help, escalate,
 #       restart, log.  Workers can only target themselves.
@@ -459,7 +459,7 @@ def _privacy_scan_response(text: str) -> str:
 WORKER_IDS = set(os.environ.get("WORKER_IDS", "default-worker").split(","))
 
 CMD_LEVEL_MASTER = 0  # master -- full access
-CMD_LEVEL_ADMIN  = 1  # AI admin (seoul)
+CMD_LEVEL_ADMIN  = 1  # AI admin (primary worker)
 CMD_LEVEL_WORKER = 2  # Worker -- self-manage only
 
 # Master IDs: load from env MASTER_IDS (comma-separated) or use safe default
@@ -520,7 +520,7 @@ def _cmd_get_level(ctx: SharedContext, sender: str, msg: Message) -> int:
        ``MASTER_IDS`` (case-insensitive), they receive CMD_LEVEL_MASTER.
 
     3. **Worker IDs** — senders in ``WORKER_IDS`` map to ADMIN
-       (``seoul``) or WORKER (all others).
+       (primary worker) or WORKER (all others).
 
     4. **Telegram / Weixin sources** — default to WORKER as a fallback.
 
@@ -546,7 +546,7 @@ def _cmd_get_level(ctx: SharedContext, sender: str, msg: Message) -> int:
     if sender.lower() in {m.lower() for m in MASTER_IDS}:
         return CMD_LEVEL_MASTER
     if sender in WORKER_IDS:
-        if sender == "seoul":
+        if sender == os.environ.get("WORKER_NAME", "agent"):
             return CMD_LEVEL_ADMIN
         return CMD_LEVEL_WORKER
     if msg.source in ("telegram", "weixin"):
@@ -602,7 +602,7 @@ def _exec_cmd(ctx: SharedContext, cmd_name: str, cmd_args: list[str],
     * **switch_model** — changes the active AI model via
       ``ModelFailover`` or direct ``set_model()``; supports ``list``
       sub-command.
-    * **escalate** — sends an escalation notice to the ``seoul`` worker
+    * **escalate** — sends an escalation notice to the primary worker
       via ``chat_send``.
     * **exec** — runs an arbitrary bash command through the ``bash``
       tool (requires MASTER level, enforced by ``_handle_cmd``).
@@ -872,10 +872,10 @@ def _exec_cmd(ctx: SharedContext, cmd_name: str, cmd_args: list[str],
         _reason = " ".join(cmd_args) or "no details"
         try:
             execute("chat_send", {
-                "target": "seoul",
+                "target": os.environ.get("WORKER_NAME", "agent"),
                 "content": f"[ESCALATION from {ctx.name}] {_reason}",
             }, base_dir=ctx.workspace)
-            return f"[CMD] escalated to seoul: {_reason[:100]}"
+            return f"[CMD] escalated to {os.environ.get('WORKER_NAME', 'agent')}: {_reason[:100]}"
         except Exception as e:
             return f"[CMD] escalate error: {e}"
 

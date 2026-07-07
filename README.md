@@ -41,12 +41,12 @@ EITE (Existential Identity Test Engine)
         +-- Cognitive Workspace   -- Agent-level cognitive scaffold
               +-- Goal tracking + Hypothesis engine + Belief graph
               +-- Uncertainty tracking + Decision trace + Mood vector
-              +-- Vector clock CRDT sync (multi-node)
+              +-- Vector clock with LWW conflict resolution
 ```
 
 ## Cognitive Workspace
 
-The Cognitive Workspace provides **persistent, structured cognitive state** across LLM turns. Enable with `TICAL_COGNITIVE=1`.
+The Cognitive Workspace provides **persistent, structured cognitive state** across LLM turns. Enable with `TICAL_COGNITIVE=1`. (~350 LOC across `workspace.py` and `state.py`)
 
 ```python
 # Auto-initialized in unified_worker.py when TICAL_COGNITIVE=1

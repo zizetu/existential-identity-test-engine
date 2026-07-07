@@ -65,7 +65,7 @@ class SharedContext:
 
     # ── Core identity ──────────────────────────────────────────────
     cfg: dict  # Full worker configuration dict (YAML-loaded)
-    name: str  # Agent identity name (e.g. "eitelite", "seoul")
+    name: str  # Agent identity name (e.g. "worker", "agent_n")
     workspace: str  # Filesystem root for all agent file operations
 
     # ── Channels ───────────────────────────────────────────────────

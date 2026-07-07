@@ -95,7 +95,7 @@ mkdir -p ~/.tical
 cd ~/.tical
 
 # Clone or update repo (placeholder)
-# git clone https://github.com/your-org/EITElite.git
+# git clone https://github.com/zizetu/existential-identity-test-engine.git
 
 # Or install from PyPI
 pip install EITElite{'==' + edition if edition != 'lite' else ''}

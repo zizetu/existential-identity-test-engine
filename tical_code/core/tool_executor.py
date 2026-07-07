@@ -264,7 +264,7 @@ def configure_security(path_cfg=None, url_cfg=None, outbound_cfg=None):
     _SECURITY_URL_CFG = url_cfg
     _SECURITY_OUTBOUND_CFG = outbound_cfg
 
-logger = logging.getLogger("tical_code.seoul.tool_executor")
+logger = logging.getLogger("tical_code.agent.tool_executor")
 # Also create legacy name for log filtering
 _log_legacy = logging.getLogger("EITElite.executor")
 
@@ -1583,7 +1583,7 @@ def exec_chat_send(args: dict) -> dict:
 
     Posts a message to the tical-chat message service identified by
     TICAL_CHAT_URL and TICAL_CHAT_KEY environment variables. The sender
-    identity is taken from WORKER_NAME env var or defaults to 'seoul'.
+    identity is taken from WORKER_NAME env var or defaults to 'agent'.
 
     Args:
         args: Dict with required keys 'target' (str) and 'content' (str).
@@ -1601,7 +1601,7 @@ def exec_chat_send(args: dict) -> dict:
         import ssl
         chan_url = os.environ.get("TICAL_CHAT_URL", "")
         chan_key = os.environ.get("TICAL_CHAT_KEY", "")
-        identity = os.environ.get("WORKER_NAME", "seoul")
+        identity = os.environ.get("WORKER_NAME", "agent")
         payload = json.dumps({
             "sender": identity,
             "target": target,
