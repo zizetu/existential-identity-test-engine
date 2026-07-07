@@ -1,4 +1,4 @@
-# EITElite -- AI Agent Platform
+# tical-code -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -61,8 +61,9 @@ class Anchor:
 class AnchorManager:
     """Simple in-memory anchor manager."""
 
-    def __init__(self):
+    def __init__(self, anchor_file: Optional[str] = None, **kwargs):
         self._anchors: Dict[str, Anchor] = {}
+        self._anchor_file = anchor_file
 
     def get_valid_anchors(self) -> List[Anchor]:
         return list(self._anchors.values())

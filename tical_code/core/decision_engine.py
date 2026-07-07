@@ -1,4 +1,4 @@
-# EITElite -- AI Agent Platform
+# tical-code -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -445,6 +445,10 @@ class DecisionEngine:
         strategy: str = "sequential",
         llm_backend=None,
         max_consecutive_failures: int = 10,
+        max_iterations: int = 15,
+        constitution_enforcer=None,
+        agent_type: str = "default",
+        **kwargs,
     ):
         self._evaluator = ResultEvaluator(method=method, llm_backend=llm_backend)
         self._selector = TestSelector(strategy=strategy)
@@ -454,6 +458,9 @@ class DecisionEngine:
         self._state = EvalIterationState()
         self._max_consecutive_failures = max_consecutive_failures
         self._llm = llm_backend
+        self.max_iterations = max_iterations
+        self.constitution_enforcer = constitution_enforcer
+        self.agent_type = agent_type
 
     def init_eval(self, test_ids: List[str], phase: str = "full") -> None:
         """Initialize a new evaluation run.
