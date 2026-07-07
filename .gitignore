@@ -18,3 +18,10 @@ sessions.db
 *.db
 .pytest_cache/
 .mypy_cache/
+*.bak
+.venv/
+*.db-shm
+*.db-wal
+.tical-checkpoints/
+config/worker-configs/
+eite_agent.egg-info/
