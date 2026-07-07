@@ -150,6 +150,7 @@ class SharedContext:
     _last_patrol: float = 0.0  # Timestamp of last vigil patrol run
     sandbox: Any = None  # SandboxExecutor for isolated code execution
     reflection: Any = None  # ReflectionEngine for post-task self-analysis
+    cognitive_workspace: Any = None  # Workspace for cognitive state (Optional)
 
     _failover_mod: Any = None  # ProviderFailover for multi-model resilience
     _verify_broadcast: Any = None  # VerifyBroadcast for multi-model consensus
