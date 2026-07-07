@@ -49,6 +49,7 @@ def build_system_prompt(
     target_model: str = "",
     active_modules: Optional[Dict[str, Any]] = None,
     platform: str = "",
+    cognitive_workspace: Any = None,
 ) -> str:
     """Build system prompt.
 
@@ -60,12 +61,22 @@ def build_system_prompt(
         active_modules: Dict of enabled modules from registry.
         platform: Optional platform name for formatting hints
             ('telegram', 'wechat', 'cli', 'tical-chat', or '' for generic).
+        cognitive_workspace: Optional Workspace for cognitive state injection.
     """
     parts = [
         f"You are {name}, an autonomous agent on {hostname or 'this node'} ({target_model or 'unknown model'}). "
         "You help with questions, code, analysis, and system tasks. "
         "Reply clearly and directly. Be useful, not verbose."
     ]
+
+    # Inject cognitive workspace summary
+    if cognitive_workspace is not None:
+        try:
+            ws_summary = cognitive_workspace.get_summary()
+            if ws_summary:
+                parts.append(ws_summary)
+        except Exception:
+            pass
 
     # Operating rules
     parts.append(

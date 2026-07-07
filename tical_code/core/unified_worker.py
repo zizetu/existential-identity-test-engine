@@ -246,6 +246,7 @@ logging.basicConfig(
 
 # Handler modules (extracted from Worker for modularity)
 from tical_code.core.shared_context import SharedContext
+from tical_code.core.workspace import Workspace
 from tical_code.core.modules.task_handler import (
     run_task, load_pending as _load_pending_ctx, save_pending as _save_pending_ctx,
 )
@@ -648,6 +649,7 @@ class Worker:
             deploy_path=cfg.get("workspace", ""),
             target_model=cfg.get("ai_model", ""),
             active_modules=self._active_modules,  # prompt.py uses registry data
+            cognitive_workspace=getattr(self, 'cognitive_workspace', None),
         )
 
         # EITE identity layer - integrated into VerificationEngine
@@ -748,6 +750,7 @@ class Worker:
             _active_modules=self._active_modules,
             _heartbeat_file=self._heartbeat_file,
             _start_time=self._start_time,
+            cognitive_workspace=getattr(self, 'cognitive_workspace', None),
             usage=getattr(self, 'usage', None),
             _vigil=getattr(self, '_vigil', None),
             _memprof=getattr(self, '_memprof', None),
@@ -756,6 +759,26 @@ class Worker:
             cron=getattr(self, '_cron', None),
 
         )
+
+        # ─────────────────────────────────────────────────────
+        # SECTION: Cognitive Workspace (v0.9+)
+        # ─────────────────────────────────────────────────────
+        # Initialize cognitive workspace (if enabled via env vars)
+        try:
+            from tical_code.core.feature_flags import FeatureFlags
+            _flags = FeatureFlags()
+            if _flags.cognitive_enabled:
+                from pathlib import Path as _Path
+                _ws_persist = _Path(os.environ.get("WORKSPACE_DIR", "/tmp")) / ".cognitive"
+                self.cognitive_workspace = Workspace(
+                    node_id=os.environ.get("NODE_ID", cfg.get("name", "seoul-1")),
+                    persist_path=_ws_persist,
+                    enabled=True,
+                )
+            else:
+                self.cognitive_workspace = None
+        except Exception:
+            self.cognitive_workspace = None
 
         # ─────────────────────────────────────────────────────
         # SECTION: Signal Handlers
@@ -1512,6 +1535,7 @@ class AsyncWorker:
                 deploy_path=cfg.get("workspace", ""),
                 target_model=cfg.get("ai_model", ""),
                 active_modules=self._modules if isinstance(self._modules, dict) else None,
+                cognitive_workspace=getattr(self, 'cognitive_workspace', None),
             )
             self.logger.info("System prompt built: %d chars", len(self.system_prompt))
         except Exception as e:
@@ -1545,6 +1569,26 @@ class AsyncWorker:
             self.logger.info("Memory injected into system prompt")
         except Exception as e:
             self.logger.debug("Memory injection skipped: %s", e)
+
+        # ─────────────────────────────────────────────────────
+        # SECTION: Cognitive Workspace (v0.9+)
+        # ─────────────────────────────────────────────────────
+        # Initialize cognitive workspace (if enabled via env vars)
+        try:
+            from tical_code.core.feature_flags import FeatureFlags
+            _flags = FeatureFlags()
+            if _flags.cognitive_enabled:
+                from pathlib import Path as _Path
+                _ws_persist = _Path(os.environ.get("WORKSPACE_DIR", "/tmp")) / ".cognitive"
+                self.cognitive_workspace = Workspace(
+                    node_id=os.environ.get("NODE_ID", cfg.get("name", "seoul-1")),
+                    persist_path=_ws_persist,
+                    enabled=True,
+                )
+            else:
+                self.cognitive_workspace = None
+        except Exception:
+            self.cognitive_workspace = None
 
         # ─────────────────────────────────────────────────────
         # SECTION: LLM Backend (AsyncWorker)
