@@ -1,66 +1,20 @@
-*.pyc
-__pycache__/
-*.egg-info/
-dist/
+# Secrets
 .env
-*.log
-venv/
-.venv/
-node_modules/
-.DS_Store
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-state/
-sessions.db
-sessions.db-shm
-sessions.db-wal
-.trust_state.json
-tical_code/training_data/
-.guardian/
-*.bak
-guardian_trace.jsonl
-__pycache__/
-usage.db
-usage.db-shm
-usage.db-wal
-anchor.json
-.tical-checkpoints/
-*.env
-tical_code/vigil/__pycache__/
-credentials*
-secrets*
-*.pem
 *.key
-config.local.*
-cron.db
-memory.db
-memory.db-shm
-memory.db-wal
-*.db.bak*
+*_key
+*secret*
+*a2a_tokens*
+*a2a_registrations*
 
-# Worker-specific configs (not for public repo)
-config/worker-configs/*.json
-*.bak
-*.bak2
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.rej
 
-# Internal data files
+# Local dev files
+*.log
+sessions.db
 *.db
-*.db-*
-*.bak
-*.bak.*
-memory.json
-all_*_scenarios.json
-kael_*.json
-eite_*_scenarios.json
-eite_inference_results.json
-eite_zero_scenarios.json
-translate_v*.py
-anchor.json
-# VPS topology (contains real IPs - DO NOT COMMIT)
-vps_mesh_status.json
-
-# API config (may contain env references)
-config.json
+.pytest_cache/
+.mypy_cache/

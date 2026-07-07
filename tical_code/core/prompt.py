@@ -2,8 +2,7 @@
 # Copyright (C) 2026 zizetu
 # Original repository: https://github.com/zizetu/eite-agent
 #
-# Built on ticalasi.cloud — Seoul / Oracle / Test mesh. Independent system,
-# not a fork of any other agent framework. See https://ticalasi.cloud
+# Licensed under AGPLv3. See LICENSE for details.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by

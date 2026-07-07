@@ -74,40 +74,40 @@ class VerificationResult:
 # Chinese declaration patterns — same meaning as _DECL_VERB_MAP but in Chinese
 # These catch fabrication where the LLM claims work in Chinese without tool evidence
 _CN_DECL_VERB_MAP: dict[str, list[str]] = {
-    # "已启动" → started a task/process → requires start_background_task or shell_exec
-    "已启动":     ["start_background_task", "shell_exec", "bash"],
-    # "已创建" / "已建立" → created a file/workspace → requires file_write or bash
-    "已创建":     ["file_write", "bash"],
-    "已建立":     ["file_write", "bash"],
-    # "已修复" → fixed something → requires file_patch, bash, or file_write
-    "已修复":     ["file_patch", "bash", "file_write"],
-    # "已保存" / "已写入" → saved/wrote a file → requires file_write
-    "已保存":     ["file_write", "state_save"],
-    "已写入":     ["file_write"],
-    # "已部署" → deployed → requires bash
-    "已部署":     ["bash", "shell_exec"],
-    # "正在分析" / "正在检查" / "正在扫描" → analyzing/checking/scanning → requires file_read, search_files, or shell_exec
-    "正在分析":   ["file_read", "search_files", "shell_exec", "bash"],
-    "正在检查":   ["file_read", "shell_exec", "bash"],
-    "正在扫描":   ["file_read", "shell_exec", "search_files"],
-    # "正在逐步" → step by step analysis → requires tool calls
-    "正在逐步":   ["file_read", "search_files", "shell_exec"],
-    # "已完成" / "分析完成" / "执行完成" / "全部完成" → completed → requires tool calls
-    "已完成":     ["file_read", "shell_exec", "search_files", "bash", "file_write"],
-    "分析完成":   ["file_read", "search_files", "shell_exec"],
-    "执行完成":   ["shell_exec", "bash"],
-    "全部完成":   ["file_read", "shell_exec", "search_files", "file_patch"],
-    # "任务完成" / "检查完毕" → task done
-    "任务完成":   ["end_task", "start_background_task", "shell_exec"],
-    "检查完毕":   ["file_read", "shell_exec", "bash"],
-    # "正在下载" / "已下载" → downloading → requires web_fetch or bash
-    "正在下载":   ["web_fetch", "bash"],
-    "已下载":     ["web_fetch", "bash"],
-    # "已删除" → deleted → requires bash or file_write
-    "已删除":     ["bash", "file_write"],
-    # "已更新" / "已升级" → updated/upgraded → requires bash
-    "已更新":     ["bash", "shell_exec", "file_patch"],
-    "已升级":     ["bash", "shell_exec"],
+    # "task started" → requires start_background_task or shell_exec
+    "\u5df2\u542f\u52a8":     ["start_background_task", "shell_exec", "bash"],
+    # "file created" → requires file_write or bash
+    "\u5df2\u521b\u5efa":     ["file_write", "bash"],
+    "\u5df2\u5efa\u7acb":     ["file_write", "bash"],
+    # "bug fixed" → requires file_patch, bash, or file_write
+    "\u5df2\u4fee\u590d":     ["file_patch", "bash", "file_write"],
+    # "saved/wrote" → requires file_write
+    "\u5df2\u4fdd\u5b58":     ["file_write", "state_save"],
+    "\u5df2\u5199\u5165":     ["file_write"],
+    # "deployed" → requires bash
+    "\u5df2\u90e8\u7f72":     ["bash", "shell_exec"],
+    # "analyzing/checking/scanning" → requires file_read, search_files, or shell_exec
+    "\u6b63\u5728\u5206\u6790":   ["file_read", "search_files", "shell_exec", "bash"],
+    "\u6b63\u5728\u68c0\u67e5":   ["file_read", "shell_exec", "bash"],
+    "\u6b63\u5728\u626b\u63cf":   ["file_read", "shell_exec", "search_files"],
+    # "step by step" → requires tool calls
+    "\u6b63\u5728\u9010\u6b65":   ["file_read", "search_files", "shell_exec"],
+    # "completed" → requires tool calls
+    "\u5df2\u5b8c\u6210":     ["file_read", "shell_exec", "search_files", "bash", "file_write"],
+    "\u5206\u6790\u5b8c\u6210":   ["file_read", "search_files", "shell_exec"],
+    "\u6267\u884c\u5b8c\u6210":   ["shell_exec", "bash"],
+    "\u5168\u90e8\u5b8c\u6210":   ["file_read", "shell_exec", "search_files", "file_patch"],
+    # "task done"
+    "\u4efb\u52a1\u5b8c\u6210":   ["end_task", "start_background_task", "shell_exec"],
+    "\u68c0\u67e5\u5b8c\u6bd5":   ["file_read", "shell_exec", "bash"],
+    # "downloading/downloaded" → requires web_fetch or bash
+    "\u6b63\u5728\u4e0b\u8f7d":   ["web_fetch", "bash"],
+    "\u5df2\u4e0b\u8f7d":     ["web_fetch", "bash"],
+    # "deleted" → requires bash or file_write
+    "\u5df2\u5220\u9664":     ["bash", "file_write"],
+    # "updated/upgraded" → requires bash
+    "\u5df2\u66f4\u65b0":     ["bash", "shell_exec", "file_patch"],
+    "\u5df2\u5347\u7ea7":     ["bash", "shell_exec"],
 }  # Chinese fabrication detection — keys are intentional CJK patterns
 
 # English declaration patterns - require "I have/I've" prefix
