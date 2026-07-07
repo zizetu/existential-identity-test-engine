@@ -17,7 +17,7 @@
 # Original repository: https://github.com/zizetu/eite-agent
 #
 
-# provenance:ticalasi-zzt-2026​
+# provenance:ticalasi-zzt-2026
 """Tool Executor - secure command execution with post-execution verification.
 
 This module provides the secure tool execution pipeline for EITElite. Every tool

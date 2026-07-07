@@ -17,7 +17,7 @@
 # Original repository: https://github.com/zizetu/eite-agent
 #
 
-# provenance:ticalasi-zzt-2026​
+# provenance:ticalasi-zzt-2026
 """
 Guardian judge - the shared arbiter of the Vigil immune system.
 

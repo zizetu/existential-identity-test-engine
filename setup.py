@@ -81,7 +81,7 @@ setup(
     },
     include_package_data=True,
     
-    python_requires=">=3.8",
+    python_requires=">=3.10",
     
     # Entry points
     entry_points={
@@ -94,7 +94,7 @@ setup(
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
-        "License :: OSI Approved :: MIT License",
+        "License :: OSI Approved :: GNU Affero General Public License v3",
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.8",
@@ -126,7 +126,7 @@ setup(
     ],
     
     # License
-    license="MIT",
+    license="AGPL-3.0-only",
     
     # Zip safe
     zip_safe=False,

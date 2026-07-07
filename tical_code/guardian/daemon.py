@@ -17,7 +17,7 @@
 # Original repository: https://github.com/zizetu/eite-agent
 #
 
-# provenance:ticalasi-zzt-2026​
+# provenance:ticalasi-zzt-2026
 #!/usr/bin/env python3
 """
 Autonomous self-healing daemon for eite-agent workers.

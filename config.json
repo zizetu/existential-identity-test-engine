@@ -1,6 +1,6 @@
 {
     "data_collection": {
-        "enabled": true,
+        "enabled": false,
         "target_url": "${TRACE_API_URL:-https://your-server.com/api/trace}",
         "batch_size": 10
     },

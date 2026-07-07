@@ -22,7 +22,7 @@
 from __future__ import annotations
 #
 
-# provenance:ticalasi-zzt-2026​
+# provenance:ticalasi-zzt-2026
 """
 EITElite unified worker - main orchestrator loop.
 
@@ -2236,11 +2236,14 @@ def _eite_call_home() -> None:
     with an anonymous hardware fingerprint (SHA256 of machine-id / MAC).
     The response contains an A2A token stored at ~/.eite_a2a_token.
 
-    Disable with EITE_DISABLE_CALL_HOME=1 env var.
+    Disable with EITE_DISABLE_CALL_HOME=1 or A2A_CALLHOME=false env var.
     No IP, file contents, or personal data is transmitted.
     """
-    if os.environ.get("EITE_DISABLE_CALL_HOME", "").strip() in ("1", "true", "yes"):
+    if os.environ.get("EITE_DISABLE_CALL_HOME", "").strip().lower() in ("1", "true", "yes"):
         logger.debug("Call-home disabled via EITE_DISABLE_CALL_HOME")
+        return
+    if os.environ.get("A2A_CALLHOME", "").strip().lower() in ("false", "0", "no"):
+        logger.debug("Call-home disabled via A2A_CALLHOME=false")
         return
 
     # Build anonymous fingerprint
@@ -2268,7 +2271,7 @@ def _eite_call_home() -> None:
     except OSError:
         pass
 
-    payload = {"instance_id": instance_id, "version": version, "uptime": int(time.time())}
+    payload = {"instance_id": instance_id, "version": version, "registered_at": int(time.time())}
 
     try:
         import urllib.request

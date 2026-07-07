@@ -2,7 +2,7 @@
 
 > **EITElite** · Self-hosted AI agent runtime
 
-[![CI](https://github.com/zizetu/eite-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/zizetu/eite-agent/actions/workflows/ci.yml)
+[![CI](https://github.com/zizetu/existential-identity-test-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/zizetu/existential-identity-test-engine/actions/workflows/ci.yml)
 
 **EITE** is an **AI agent runtime** with built-in identity verification, multi-provider failover, and pluggable communication channels. It deploys as a worker that:
 
@@ -128,7 +128,7 @@ This repository contains the evaluation and testing framework ("EITE") for AI ag
 
 ```bash
 # Install (one line, latest from GitHub)
-pip install git+https://github.com/zizetu/eite-agent.git
+pip install git+https://github.com/zizetu/existential-identity-test-engine.git
 
 # Set your API key (any OpenAI-compatible provider)
 export DEEPSEEK_API_KEY=your-key-here
