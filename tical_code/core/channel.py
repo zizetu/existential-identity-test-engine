@@ -397,7 +397,7 @@ class TicalChatChannel(Channel):
                     self._since = m["timestamp"]
                 # Only process messages from real users (not other worker AI replies)
                 sender = m.get("sender", "unknown")
-                if sender != "user":
+                if sender not in ("user", "web-user"):
                     continue
                 # Only process messages targeted to this worker (or broadcast with empty target)
                 target = m.get("target", "")

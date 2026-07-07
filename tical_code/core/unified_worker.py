@@ -537,6 +537,26 @@ class Worker:
         self._active_modules = load_modules(self, cfg, profile=profile)
         logger.info("Modules loaded: %d active (profile=%s)", len(self._active_modules), profile)
 
+        # FIX: Re-wire MemoryBoot.persistent_memory now that memory_store exists
+        if self._memory_boot and getattr(self, 'memory_store', None):
+            try:
+                from tical_code.core.memory import PersistentMemory
+                _pm_db = str(self._memory_dir / "persistent.db") if hasattr(self, '_memory_dir') else None
+                if not _pm_db:
+                    import os as _os
+                    _pm_db = str(_os.path.join(_os.path.expanduser("~/.tical-code"), "memory.db"))
+                self._persistent_memory = PersistentMemory(db_path=_pm_db)
+                self._memory_boot.persistent_memory = self._persistent_memory
+                logger.info("MemoryBoot: persistent_memory re-wired to PersistentMemory (%s)", _pm_db)
+            except Exception as _pm_err:
+                class _FTSAdapter:
+                    def __init__(self, fts): self._fts = fts
+                    def store(self, key, value, category="", priority=5):
+                        return self._fts.save_entry(key, value)
+                self._memory_boot.persistent_memory = _FTSAdapter(self.memory_store)
+                logger.info("MemoryBoot: persistent_memory wired to MemoryFTSStore adapter (%s)", _pm_err)
+
+
         # Verify critical subsystems loaded correctly
         if not getattr(self, 'memory_evolver', None):
             logger.warning("MemoryEvolver not loaded -- autonomous memory evolution disabled")
@@ -653,6 +673,25 @@ class Worker:
         if hasattr(self, 'verification') and self.verification:
             self.system_prompt += self.verification.get_identity_marker()
         logger.info(f"EITE identity bound: {cfg['name']}")
+
+        # FIX: Inject SOUL.md identity from MemoryBoot
+        if self._memory_boot and self._memory_boot.is_loaded():
+            try:
+                _identity = self._memory_boot.get_identity_prompt()
+                if _identity:
+                    self.system_prompt = f"## Your Identity\n{_identity}\n\n" + self.system_prompt
+                    logger.info("MemoryBoot: identity prompt injected (%d chars)", len(_identity))
+                _user_ctx = self._memory_boot.get_memory("user")
+                if _user_ctx:
+                    self.system_prompt += "\n\n## User Context\n" + _user_ctx[:1500]
+                    logger.info("MemoryBoot: user context injected (%d chars)", len(_user_ctx))
+                _mem = self._memory_boot.get_memory("memory")
+                if _mem:
+                    self.system_prompt += "\n\n## Experience Memory\n" + _mem[:2000]
+                    logger.info("MemoryBoot: experience memory injected (%d chars)", len(_mem))
+            except Exception as _inject_err:
+                logger.warning("MemoryBoot identity injection failed: %s", _inject_err)
+
 
         # Skill injection - auto-extracted workflows from past tasks
         _skill_prompt = self.skill_loader.get_prompt_injection()
@@ -1084,6 +1123,23 @@ class Worker:
                 self._loop.run_until_complete(self._memory_boot.boot())
                 self._memory_boot_pending = False
                 logger.info("MemoryBoot: cold-start identity/memory loaded (deferred)")
+                # Inject identity + user context into system prompt AFTER boot
+                try:
+                    _identity = self._memory_boot.get_identity_prompt()
+                    if _identity:
+                        self.system_prompt = "## Your Identity\n" + _identity + "\n\n" + self.system_prompt
+                        logger.info("MemoryBoot: identity prompt injected (%d chars)", len(_identity))
+                    _user_ctx = self._memory_boot.get_memory("user")
+                    if _user_ctx:
+                        self.system_prompt += "\n\n## User Context\n" + _user_ctx[:1500]
+                        logger.info("MemoryBoot: user context injected (%d chars)", len(_user_ctx))
+                    _mem = self._memory_boot.get_memory("memory")
+                    if _mem:
+                        self.system_prompt += "\n\n## Experience Memory\n" + _mem[:2000]
+                        logger.info("MemoryBoot: experience memory injected (%d chars)", len(_mem))
+                except Exception as _inject_err:
+                    logger.warning("MemoryBoot post-boot injection failed: %s", _inject_err)
+
             except Exception as e:
                 logger.warning("MemoryBoot deferred boot failed: %s", e)
 
@@ -1534,12 +1590,12 @@ class AsyncWorker:
             from tical_code.core.memory_boot import ensure_memory_files
             ensure_memory_files(_mem_dir)
             # Read memory files and inject into prompt
-            for _fname in ["MEMORY.md", "USER.md"]:
+            for _fname in ["Base config/SOUL.md", "MEMORY.md", "USER.md"]:
                 _fpath = os.path.join(_mem_dir, _fname)
                 if os.path.exists(_fpath):
                     _content = open(_fpath).read().strip()
                     if _content:
-                        _label = "MEMORY" if "MEMORY" in _fname else "USER PROFILE"
+                        _label = "IDENTITY" if "SOUL" in _fname else ("MEMORY" if "MEMORY" in _fname else "USER PROFILE")
                         self.system_prompt += f"\n\n## {_label}\n{_content[:2000]}"
             self.logger.info("Memory injected into system prompt")
         except Exception as e:
