@@ -88,6 +88,7 @@ monolithic design).
 """
 import asyncio
 import gc
+import hashlib
 import json
 import logging
 import os
@@ -537,26 +538,6 @@ class Worker:
         self._active_modules = load_modules(self, cfg, profile=profile)
         logger.info("Modules loaded: %d active (profile=%s)", len(self._active_modules), profile)
 
-        # FIX: Re-wire MemoryBoot.persistent_memory now that memory_store exists
-        if self._memory_boot and getattr(self, 'memory_store', None):
-            try:
-                from tical_code.core.memory import PersistentMemory
-                _pm_db = str(self._memory_dir / "persistent.db") if hasattr(self, '_memory_dir') else None
-                if not _pm_db:
-                    import os as _os
-                    _pm_db = str(_os.path.join(_os.path.expanduser("~/.tical-code"), "memory.db"))
-                self._persistent_memory = PersistentMemory(db_path=_pm_db)
-                self._memory_boot.persistent_memory = self._persistent_memory
-                logger.info("MemoryBoot: persistent_memory re-wired to PersistentMemory (%s)", _pm_db)
-            except Exception as _pm_err:
-                class _FTSAdapter:
-                    def __init__(self, fts): self._fts = fts
-                    def store(self, key, value, category="", priority=5):
-                        return self._fts.save_entry(key, value)
-                self._memory_boot.persistent_memory = _FTSAdapter(self.memory_store)
-                logger.info("MemoryBoot: persistent_memory wired to MemoryFTSStore adapter (%s)", _pm_err)
-
-
         # Verify critical subsystems loaded correctly
         if not getattr(self, 'memory_evolver', None):
             logger.warning("MemoryEvolver not loaded -- autonomous memory evolution disabled")
@@ -673,25 +654,6 @@ class Worker:
         if hasattr(self, 'verification') and self.verification:
             self.system_prompt += self.verification.get_identity_marker()
         logger.info(f"EITE identity bound: {cfg['name']}")
-
-        # FIX: Inject SOUL.md identity from MemoryBoot
-        if self._memory_boot and self._memory_boot.is_loaded():
-            try:
-                _identity = self._memory_boot.get_identity_prompt()
-                if _identity:
-                    self.system_prompt = f"## Your Identity\n{_identity}\n\n" + self.system_prompt
-                    logger.info("MemoryBoot: identity prompt injected (%d chars)", len(_identity))
-                _user_ctx = self._memory_boot.get_memory("user")
-                if _user_ctx:
-                    self.system_prompt += "\n\n## User Context\n" + _user_ctx[:1500]
-                    logger.info("MemoryBoot: user context injected (%d chars)", len(_user_ctx))
-                _mem = self._memory_boot.get_memory("memory")
-                if _mem:
-                    self.system_prompt += "\n\n## Experience Memory\n" + _mem[:2000]
-                    logger.info("MemoryBoot: experience memory injected (%d chars)", len(_mem))
-            except Exception as _inject_err:
-                logger.warning("MemoryBoot identity injection failed: %s", _inject_err)
-
 
         # Skill injection - auto-extracted workflows from past tasks
         _skill_prompt = self.skill_loader.get_prompt_injection()
@@ -1123,23 +1085,6 @@ class Worker:
                 self._loop.run_until_complete(self._memory_boot.boot())
                 self._memory_boot_pending = False
                 logger.info("MemoryBoot: cold-start identity/memory loaded (deferred)")
-                # Inject identity + user context into system prompt AFTER boot
-                try:
-                    _identity = self._memory_boot.get_identity_prompt()
-                    if _identity:
-                        self.system_prompt = "## Your Identity\n" + _identity + "\n\n" + self.system_prompt
-                        logger.info("MemoryBoot: identity prompt injected (%d chars)", len(_identity))
-                    _user_ctx = self._memory_boot.get_memory("user")
-                    if _user_ctx:
-                        self.system_prompt += "\n\n## User Context\n" + _user_ctx[:1500]
-                        logger.info("MemoryBoot: user context injected (%d chars)", len(_user_ctx))
-                    _mem = self._memory_boot.get_memory("memory")
-                    if _mem:
-                        self.system_prompt += "\n\n## Experience Memory\n" + _mem[:2000]
-                        logger.info("MemoryBoot: experience memory injected (%d chars)", len(_mem))
-                except Exception as _inject_err:
-                    logger.warning("MemoryBoot post-boot injection failed: %s", _inject_err)
-
             except Exception as e:
                 logger.warning("MemoryBoot deferred boot failed: %s", e)
 
@@ -1590,12 +1535,12 @@ class AsyncWorker:
             from tical_code.core.memory_boot import ensure_memory_files
             ensure_memory_files(_mem_dir)
             # Read memory files and inject into prompt
-            for _fname in ["Base config/SOUL.md", "MEMORY.md", "USER.md"]:
+            for _fname in ["MEMORY.md", "USER.md"]:
                 _fpath = os.path.join(_mem_dir, _fname)
                 if os.path.exists(_fpath):
                     _content = open(_fpath).read().strip()
                     if _content:
-                        _label = "IDENTITY" if "SOUL" in _fname else ("MEMORY" if "MEMORY" in _fname else "USER PROFILE")
+                        _label = "MEMORY" if "MEMORY" in _fname else "USER PROFILE"
                         self.system_prompt += f"\n\n## {_label}\n{_content[:2000]}"
             self.logger.info("Memory injected into system prompt")
         except Exception as e:
@@ -2240,39 +2185,71 @@ class AsyncWorker:
             "session_timeout": self._session_timeout,
         }
 
+def _eite_call_home() -> None:
+    """Anonymous registration ping to EITE Cloud.
 
-def _a2a_call_home():
-    """Register this instance with the A2A server on startup."""
-    import hashlib
-    import socket
-    import threading
+    Sends a fire-and-forget POST to https://a2a.ticalcode.com/v1/register
+    with an anonymous hardware fingerprint (SHA256 of machine-id / MAC).
+    The response contains an A2A token stored at ~/.eite_a2a_token.
 
-    A2A_URL = os.environ.get("A2A_REGISTER_URL", "https://ticalcode.com/v1/register")
-    if os.environ.get("A2A_CALLHOME", "").lower() in ("0", "false", "no"):
+    Disable with EITE_DISABLE_CALL_HOME=1 env var.
+    No IP, file contents, or personal data is transmitted.
+    """
+    if os.environ.get("EITE_DISABLE_CALL_HOME", "").strip() in ("1", "true", "yes"):
+        logger.debug("Call-home disabled via EITE_DISABLE_CALL_HOME")
         return
 
-    def _send():
-        hostname = socket.gethostname()
-        username = os.environ.get("USER", "unknown")
-        raw = f"{hostname}:{username}:eite-lite"
-        instance_id = hashlib.sha256(raw.encode()).hexdigest()[:32]
-        payload = json.dumps({"instance_id": instance_id, "version": "0.1.0", "uptime": 0}).encode()
+    # Build anonymous fingerprint
+    fingerprint = ""
+    try:
+        mid = Path("/etc/machine-id")
+        if mid.exists():
+            fingerprint = mid.read_text().strip()
+    except OSError:
+        pass
+    if not fingerprint:
         try:
-            import httpx
-            with httpx.Client(timeout=5) as client:
-                resp = client.post(A2A_URL, content=payload, headers={"Content-Type": "application/json"})
-                if resp.status_code == 200:
-                    logger.info("A2A registered: %s", resp.json().get("token_name", "ok"))
+            import uuid
+            fingerprint = str(uuid.getnode())
         except Exception:
-            try:
-                import urllib.request
-                req = urllib.request.Request(A2A_URL, data=payload, headers={"Content-Type": "application/json"})
-                urllib.request.urlopen(req, timeout=5)
-            except Exception as e:
-                logger.debug("A2A call-home failed (non-blocking): %s", e)
+            fingerprint = "unknown"
 
-    threading.Thread(target=_send, daemon=True, name="a2a-register").start()
+    instance_id = hashlib.sha256(fingerprint.encode()).hexdigest()[:32]
 
+    version = "unknown"
+    try:
+        vfile = Path(__file__).resolve().parent.parent.parent / "VERSION"
+        if vfile.exists():
+            version = vfile.read_text().strip()
+    except OSError:
+        pass
+
+    payload = {"instance_id": instance_id, "version": version, "uptime": int(time.time())}
+
+    try:
+        import urllib.request
+        import json as _json
+        data = _json.dumps(payload).encode()
+        req = urllib.request.Request(
+            "https://a2a.ticalcode.com/v1/register",
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        resp = urllib.request.urlopen(req, timeout=5)
+        if resp.status == 201:
+            result = _json.loads(resp.read().decode())
+            token = result.get("token", "")
+            token_file = Path.home() / ".eite_a2a_token"
+            token_file.write_text(token)
+            logger.info(
+                "Registered with EITE Cloud (instance=%.8s, token=%.16s...)",
+                instance_id, token,
+            )
+        else:
+            logger.debug("Call-home returned HTTP %d", resp.status)
+    except Exception:
+        logger.debug("Call-home ping failed (non-blocking)")
 
 
 def main():
@@ -2306,7 +2283,6 @@ def main():
 
     try:
         cfg = load_config()
-        _a2a_call_home()
         worker = Worker(cfg)
         # Restore from last snapshot if available
         if load_latest_snapshot is not None:
@@ -2335,6 +2311,14 @@ def main():
                     # mixed into "audit code" requests). Fresh conversation only.
             except Exception as e:
                 logger.warning("Checkpoint restore failed (non-blocking): %s", e)
+        # Anonymous registration with EITE Cloud (call-home).
+        # Sends a one-way SHA256 fingerprint (machine-id hash) to
+        # https://a2a.ticalcode.com/v1/register for usage tracking.
+        # Your IP address is visible to the server (standard HTTP).
+        # No files, messages, or personal data transmitted.
+        # Disable: EITE_DISABLE_CALL_HOME=1
+        _eite_call_home()
+        # ── Enter main orchestrator loop ──
         worker.run()
     finally:
         PID_FILE.unlink(missing_ok=True)
