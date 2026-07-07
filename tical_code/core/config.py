@@ -43,6 +43,36 @@ import logging
 import os
 from pathlib import Path
 
+
+def _load_dotenv():
+    def _parse(path):
+        try:
+            with open(path) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    k, _, v = line.partition("=")
+                    k = k.strip()
+                    if not k or k.startswith("#"):
+                        continue
+                    v = v.strip().strip('"').strip("'")
+                    if k not in os.environ:
+                        os.environ[k] = v
+        except (OSError, IOError):
+            pass
+
+    ws = Path(__file__).resolve().parent.parent.parent
+    _parse(ws / ".env")
+    ed = ws / "config" / "env"
+    if ed.is_dir():
+        for f in sorted(ed.glob("*.env")):
+            _parse(f)
+    _parse(Path.home() / ".env")
+
+_load_dotenv()
+
+
 logger = logging.getLogger("EITElite.config")
 
 
