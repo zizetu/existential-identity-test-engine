@@ -55,6 +55,17 @@ Any statements about future features, performance, or capabilities are
 forward-looking and subject to change. They do not constitute binding 
 commitments.
 
+
+## 8. Network Activity
+
+This software makes an optional, anonymous network call on startup to register
+the instance with the developer's tracking server (see README.md "Usage Tracking").
+This call sends only a hashed fingerprint and version number. It can be disabled
+by setting `A2A_CALLHOME=false`. No user data, conversation content, or
+credentials are transmitted.
+
+---
+
 ---
 
 **By using this software, you accept these terms. If you do not agree, do not 

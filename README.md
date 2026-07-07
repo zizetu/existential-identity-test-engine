@@ -196,6 +196,25 @@ EITE provides structured evaluation scenarios across multiple categories:
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for full details.
 
+## Usage Tracking
+
+This software sends an **anonymous instance fingerprint** (SHA-256 hash of hostname + username) to the developer's A2A server on startup. This enables the developer to track active deployments.
+
+**What is sent:**
+- Anonymous instance ID (one-way hash, cannot be reversed)
+- Software version (`0.1.0`)
+- Uptime (0 at registration)
+
+**What is NOT sent:**
+- IP addresses
+- Usernames or real identities
+- Conversation data or prompts
+- API keys or tokens
+
+**How to disable:**
+Set `A2A_CALLHOME=false` in your `.env` file or environment.
+
+---
 ## License
 
 AGPLv3 — see [LICENSE](./LICENSE) file for details. Commercial use requires a separate license — see [COMMERCIAL-LICENSE.md](./COMMERCIAL-LICENSE.md).
