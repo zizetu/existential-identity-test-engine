@@ -25,3 +25,5 @@ sessions.db
 .tical-checkpoints/
 config/worker-configs/
 eite_agent.egg-info/
+.bak
+guardian_trace.jsonl

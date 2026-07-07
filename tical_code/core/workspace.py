@@ -129,8 +129,12 @@ class Workspace:
             return
 
         for k, v in kwargs.items():
-            if hasattr(self._state, k):
-                setattr(self._state, k, v)
+            if not hasattr(self._state, k):
+                continue
+            # Type guard for list fields — reject non-list values
+            if k in ("uncertainty",) and not isinstance(v, list):
+                continue
+            setattr(self._state, k, v)
         self._state.last_updated = datetime.now().timestamp()
         self._persist()
 

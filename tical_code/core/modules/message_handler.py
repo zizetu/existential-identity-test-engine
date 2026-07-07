@@ -17,7 +17,7 @@
 # Original repository: https://github.com/zizetu/eite-agent
 #
 
-# provenance:ticalasi-zzt-2026​
+# provenance:ticalasi-zzt-2026
 """Message handler module — LLM + tools per-message turn processing.
 
 Handles every inbound user message through the full processing pipeline:

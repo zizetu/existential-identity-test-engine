@@ -93,13 +93,14 @@ all = [
 tical = "tical_code.cli.commands:main"
 
 [project.urls]
-Homepage = "https://github.com/zizetu/eite-agent"
-Documentation = "https://github.com/zizetu/eite-agent"
-Repository = "https://github.com/zizetu/eite-agent"
-Changelog = "https://github.com/zizetu/eite-agent/releases"
+Homepage = "https://github.com/zizetu/existential-identity-test-engine"
+Documentation = "https://github.com/zizetu/existential-identity-test-engine"
+Repository = "https://github.com/zizetu/existential-identity-test-engine"
+Changelog = "https://github.com/zizetu/existential-identity-test-engine/releases"
 
 [tool.setuptools]
-packages = ["tical_code", "tical_code.core", "tical_code.cli", "tical_code.cli.commands"]
+[tool.setuptools.packages.find]
+include = ["tical_code*"]
 
 [tool.setuptools.package-data]
 tical_code = ["py.typed"]
