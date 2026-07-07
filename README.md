@@ -38,7 +38,31 @@ EITE (Existential Identity Test Engine)
   +-- Anchor (verification)       -- Cryptographic task-computation verification
         +-- Truth-state tracking  -- Accumulated trust scoring for verification
         +-- Shared Context        -- Cross-session context with session affinity
+        +-- Cognitive Workspace   -- Agent-level cognitive scaffold
+              +-- Goal tracking + Hypothesis engine + Belief graph
+              +-- Uncertainty tracking + Decision trace + Mood vector
+              +-- Vector clock CRDT sync (multi-node)
 ```
+
+## Cognitive Workspace
+
+The Cognitive Workspace provides **persistent, structured cognitive state** across LLM turns. Enable with `TICAL_COGNITIVE=1`.
+
+```python
+# Auto-initialized in unified_worker.py when TICAL_COGNITIVE=1
+ws = workspace  # injected via SharedContext
+
+# Track goals and hypotheses across multi-step tasks
+ws.add_hypothesis("JWT token expired", confidence=0.5)
+
+# Register beliefs with evidence
+ws.add_belief("Auth uses JWT", confidence=0.9, source="config review")
+
+# Generate prompt injection summary
+summary = ws.get_prompt_summary()
+```
+
+See `workspace.py` and `state.py` for the full API.
 
 ## Why "Existential"?
 
