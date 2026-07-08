@@ -101,14 +101,63 @@ def format_result(name: str, result: dict) -> str:
 
 
 def format_final_reply(content: str) -> str:
-    """Light cleanup for final user-facing replies.
+    """STRUCTURED_TABLE_REPLY 2026-07-09f: long answers become scannable tables.
 
-    format_result(name, result) is for tool outputs. Final LLM text
-    should not be passed there. This helper only normalizes whitespace.
+    Short replies: whitespace normalize only.
+    Long / multi-section replies: prepend a Category|Content table derived
+    from headings, bullets, or key:value lines. Does not invent facts.
     """
     if content is None:
         return ""
     text = str(content).replace("\r\n", "\n").replace("\r", "\n")
-    text = re.sub(r"\n{3,}", "\n\n", text)
-    return text.strip()
+    text = re.sub(r"\n{3,}", "\n\n", text).strip()
+    if not text:
+        return ""
+    if len(text) < 280 and text.count("\n") < 6:
+        return text
+    if re.search(r"^\|.*\|\s*$", text, re.M) and re.search(r"^\|\s*[-:]+", text, re.M):
+        return text
+
+    sections = []
+    parts = re.split(r"(?m)^(#{1,3}\s+.+)$", text)
+    if len(parts) > 1:
+        preamble = parts[0].strip()
+        i = 1
+        while i < len(parts) - 1:
+            title = re.sub(r"^#{1,3}\s+", "", parts[i]).strip()
+            body = parts[i + 1].strip()
+            if title:
+                sections.append((title, body[:200].replace("\n", " ")))
+            i += 2
+        if preamble and not sections:
+            sections.append(("Summary", preamble[:200].replace("\n", " ")))
+    else:
+        bullets = re.findall(r"(?m)^(?:[-*] |\d+[.)] )(.+)$", text)
+        kvs = re.findall(r"(?m)^([A-Za-z0-9_ ./\-]{2,40})\s*[:=]\s*(.+)$", text)
+        if len(kvs) >= 3:
+            for k, v in kvs[:12]:
+                sections.append((k.strip(), v.strip()[:160]))
+        elif len(bullets) >= 3:
+            for n, b in enumerate(bullets[:12], 1):
+                sections.append((f"Item {n}", b.strip()[:160]))
+        else:
+            first = text.split("\n\n", 1)[0].replace("\n", " ")[:200]
+            sections.append(("Summary", first))
+            if len(text) > 400:
+                sections.append(("Detail", f"{len(text)} chars — see body below"))
+
+    if not sections:
+        return text
+    rows = ["| Category | Content |", "|---|---|"]
+    for title, body in sections[:15]:
+        title_c = title.replace("|", "\\|")[:40]
+        body_c = body.replace("|", "\\|")[:160]
+        rows.append(f"| {title_c} | {body_c} |")
+    table = "\n".join(rows)
+    if text.startswith("| Category |"):
+        return text
+    return f"{table}\n\n{text}"
+
+
+
 

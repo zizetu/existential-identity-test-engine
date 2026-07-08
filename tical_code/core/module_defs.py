@@ -298,7 +298,7 @@ def _init_decision_engine(worker: Any, cfg: dict):
         "If the worker crashes or restarts, it resumes from the last checkpoint. "
         "Keeps 20 most recent snapshots (max 200MB). No manual action needed."
     ),
-    profile="full",
+    profile="light",
 )
 def _init_checkpoint(worker: Any, cfg: dict):
     try:
@@ -332,7 +332,7 @@ def _init_checkpoint(worker: Any, cfg: dict):
         "you do not control when it fires."
     ),
     dependencies=["checkpoint"],
-    profile="full",
+    profile="light",
 )
 def _init_self_repair(worker: Any, cfg: dict):
     try:

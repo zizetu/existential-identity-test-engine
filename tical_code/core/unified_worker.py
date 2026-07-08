@@ -1941,6 +1941,7 @@ class AsyncWorker:
         _raw = (msg.content or "").strip()
         _no_tool = (
             ("\u4e0d\u8981\u7528\u5de5\u5177" in _raw) or ("\u4e0d\u7528\u5de5\u5177" in _raw)
+            or (_raw in ("\u56de\u7b54", "\u56de\u590d", "answer", "Answer") or _raw.startswith("\u56de\u7b54"))
             or (("\u4e00\u53e5\u8bdd" in _raw or "\u4f60\u662f\u8c01" in _raw or "\u6211\u662f\u8c01" in _raw
                  or "\u8bb0\u5f97" in _raw or "\u5728\u5417" in _raw)
                 and len(_raw) <= 120
@@ -1967,6 +1968,18 @@ class AsyncWorker:
         force_text = False
         while response.get("tool_calls") and tool_iterations < MAX_TOOL_ITERATIONS:
             tool_iterations += 1
+            # LIVE WIRE QUEUE PREEMPT 2026-07-09f
+            try:
+                _q = self._session_queues.get(session_id)
+                if _q is not None and not _q.empty():
+                    self.logger.info("Preempting tool loop for session %s — newer message queued", session_id)
+                    try:
+                        force_text = True
+                    except Exception:
+                        pass
+                    break
+            except Exception:
+                pass
 
             # Progress visibility so long tasks do not look frozen.
             try:
