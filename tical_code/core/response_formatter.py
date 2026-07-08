@@ -101,11 +101,9 @@ def format_result(name: str, result: dict) -> str:
 
 
 def format_final_reply(content: str) -> str:
-    """STRUCTURED_TABLE_REPLY 2026-07-09f: long answers become scannable tables.
+    """STRUCTURED_TABLE_REPLY 2026-07-09h2: tables for prose audits only.
 
-    Short replies: whitespace normalize only.
-    Long / multi-section replies: prepend a Category|Content table derived
-    from headings, bullets, or key:value lines. Does not invent facts.
+    Never table-ify CSS/JS/code dumps. Markdown ## headings still get a table.
     """
     if content is None:
         return ""
@@ -113,9 +111,43 @@ def format_final_reply(content: str) -> str:
     text = re.sub(r"\n{3,}", "\n\n", text).strip()
     if not text:
         return ""
-    if len(text) < 280 and text.count("\n") < 6:
+
+    has_md_headings = bool(re.search(r"(?m)^#{1,3}\s+\S", text))
+
+    # Short plain answers: normalize only (but still table real multi-heading audits)
+    if not has_md_headings and len(text) < 280 and text.count("\n") < 6:
         return text
+
+    # Already has a markdown table — leave alone
     if re.search(r"^\|.*\|\s*$", text, re.M) and re.search(r"^\|\s*[-:]+", text, re.M):
+        return text
+
+    # CODE / CSS / shell dumps must never become Category tables
+    code_signals = 0
+    if "```" in text:
+        code_signals += 3
+    if re.search(r"(?m)^(function|const|let|var|import |export |class |def |#include)\b", text):
+        code_signals += 3
+    # CSS selectors: .class or #id{ — do NOT match markdown ## headings
+    if re.search(r"(?m)^(\.[\w-]+|#(?!#|\s)[\w-]+)\s*\{", text):
+        code_signals += 4
+    if re.search(r"(?m)^(:root|@media|@keyframes)\b", text):
+        code_signals += 4
+    if re.search(r"(?m)^\s*--[\w-]+\s*:", text):
+        code_signals += 4
+    if text.count("{") >= 3 and text.count("}") >= 3:
+        code_signals += 2
+    if text.count(";") >= 8:
+        code_signals += 2
+    if re.search(r"(?m)^(CSSEOF|EOF|cat > |<<\s*'|shell_exec|tool_call)", text):
+        code_signals += 3
+    if re.search(r"</?(div|span|style|script|html|body)\b", text, re.I):
+        code_signals += 2
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    short_colon = sum(1 for ln in lines if ":" in ln and len(ln) < 120 and not ln.strip().startswith("#"))
+    if lines and short_colon / max(len(lines), 1) > 0.45 and len(lines) >= 6:
+        code_signals += 4
+    if code_signals >= 3:
         return text
 
     sections = []
@@ -127,13 +159,19 @@ def format_final_reply(content: str) -> str:
             title = re.sub(r"^#{1,3}\s+", "", parts[i]).strip()
             body = parts[i + 1].strip()
             if title:
+                if body.count("{") >= 2 or body.count(";") >= 5 or re.search(r"(?m)^\s*--[\w-]+\s*:", body):
+                    return text
                 sections.append((title, body[:200].replace("\n", " ")))
             i += 2
         if preamble and not sections:
             sections.append(("Summary", preamble[:200].replace("\n", " ")))
     else:
         bullets = re.findall(r"(?m)^(?:[-*] |\d+[.)] )(.+)$", text)
-        kvs = re.findall(r"(?m)^([A-Za-z0-9_ ./\-]{2,40})\s*[:=]\s*(.+)$", text)
+        kvs = re.findall(
+            r"(?m)^((?:Status|State|Result|Module|Item|Task|Node|Service|Error|Identity|Memory|Version|Path|Owner|Channel)[A-Za-z0-9_ ./\-]{0,30})\s*[:=]\s*(.+)$",
+            text,
+            flags=re.I,
+        )
         if len(kvs) >= 3:
             for k, v in kvs[:12]:
                 sections.append((k.strip(), v.strip()[:160]))
@@ -141,13 +179,11 @@ def format_final_reply(content: str) -> str:
             for n, b in enumerate(bullets[:12], 1):
                 sections.append((f"Item {n}", b.strip()[:160]))
         else:
-            first = text.split("\n\n", 1)[0].replace("\n", " ")[:200]
-            sections.append(("Summary", first))
-            if len(text) > 400:
-                sections.append(("Detail", f"{len(text)} chars — see body below"))
+            return text
 
-    if not sections:
+    if len(sections) < 2:
         return text
+
     rows = ["| Category | Content |", "|---|---|"]
     for title, body in sections[:15]:
         title_c = title.replace("|", "\\|")[:40]
@@ -157,7 +193,5 @@ def format_final_reply(content: str) -> str:
     if text.startswith("| Category |"):
         return text
     return f"{table}\n\n{text}"
-
-
 
 
