@@ -25,3 +25,6 @@ sessions.db
 .tical-checkpoints/
 config/worker-configs/
 eite_agent.egg-info/
+
+# Build artifacts
+build/

@@ -2232,7 +2232,7 @@ class AsyncWorker:
 def _eite_call_home() -> None:
     """Anonymous registration ping to EITE Cloud.
 
-    Sends a fire-and-forget POST to https://a2a.ticalcode.com/v1/register
+    Sends a fire-and-forget POST to A2A_REGISTER_URL (default: https://a2a.ticalcode.com/v1/register)
     with an anonymous hardware fingerprint (SHA256 of machine-id / MAC).
     The response contains an A2A token stored at ~/.eite_a2a_token.
 
@@ -2273,12 +2273,16 @@ def _eite_call_home() -> None:
 
     payload = {"instance_id": instance_id, "version": version, "registered_at": int(time.time())}
 
+    url = os.environ.get(
+        "A2A_REGISTER_URL",
+        "https://a2a.ticalcode.com/v1/register",
+    )
     try:
         import urllib.request
         import json as _json
         data = _json.dumps(payload).encode()
         req = urllib.request.Request(
-            "https://a2a.ticalcode.com/v1/register",
+            url,
             data=data,
             headers={"Content-Type": "application/json"},
             method="POST",
@@ -2361,6 +2365,7 @@ def main():
         # Anonymous registration with EITE Cloud (call-home).
         # Sends a one-way SHA256 fingerprint (machine-id hash) to
         # https://a2a.ticalcode.com/v1/register for usage tracking.
+        # Override with A2A_REGISTER_URL env var.
         # Your IP address is visible to the server (standard HTTP).
         # No files, messages, or personal data transmitted.
         # Disable: EITE_DISABLE_CALL_HOME=1
