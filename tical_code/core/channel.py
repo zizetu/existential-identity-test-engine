@@ -286,6 +286,37 @@ class TelegramChannel(Channel):
             logger.warning(f"tg_media_download error: {e}")
         return media_list
 
+    def _extract_rich_message_text(self, msg: dict) -> str:
+        """Extract plain text from Telegram Premium rich_message.blocks."""
+        blocks = msg.get("rich_message", {}).get("blocks", [])
+        if not blocks:
+            return ""
+        lines = []
+        for block in blocks:
+            tp = block.get("type")
+            if tp in ("paragraph", "heading"):
+                t = block.get("text", "")
+                if isinstance(t, list):
+                    parts = []
+                    for seg in t:
+                        if isinstance(seg, dict):
+                            parts.append(seg.get("text", ""))
+                        else:
+                            parts.append(str(seg))
+                    t = "".join(parts)
+                lines.append(str(t))
+            elif tp == "table":
+                for row in block.get("cells", []):
+                    cells = []
+                    for cell in row:
+                        if isinstance(cell, dict):
+                            cell_text = cell.get("text", "")
+                            if isinstance(cell_text, dict):
+                                cell_text = cell_text.get("text", "")
+                            cells.append(str(cell_text))
+                    lines.append(" | ".join(cells))
+        return "\n".join(lines)
+
     def poll(self) -> list[Message]:
         import urllib.request
         try:
@@ -300,9 +331,54 @@ class TelegramChannel(Channel):
                 chat_id = str(msg.get("chat", {}).get("id", ""))
                 if not chat_id:
                     continue
-                text = msg.get("text") or msg.get("caption") or ""
+                text = msg.get("text") or msg.get("caption") or self._extract_rich_message_text(msg) or ""
                 text = text.strip()
-                # Download media for supported types (photo only for now)
+                # DEBUG: log raw message structure for forwarded messages
+                if msg.get("forward_from") or msg.get("forward_sender_name"):
+                    logger.warning("FORWARDED MSG RAW: %s", json.dumps(msg, indent=2, default=str)[:3000])
+                # Handle forwarded messages: prepend forward attribution
+                if msg.get("forward_from") or msg.get("forward_sender_name"):
+                    fwd_name = "unknown"
+                    fwd = msg.get("forward_from")
+                    if fwd:
+                        fwd_name = fwd.get("first_name", "") + " " + fwd.get("last_name", "")
+                        fwd_name = fwd_name.strip() or fwd.get("username", "unknown")
+                    elif msg.get("forward_sender_name"):
+                        fwd_name = msg["forward_sender_name"]
+                    if text:
+                        text = f"[Forwarded from {fwd_name}]: {text}"
+                    else:
+                        # Forwarded media with no text — download and describe
+                        fwd_media = self._download_media(msg)
+                        if fwd_media:
+                            types_desc = []
+                            for md in fwd_media:
+                                if md["type"] == "image": types_desc.append("image")
+                                elif md["type"] == "document": types_desc.append(md.get("filename", "file"))
+                                elif md["type"] == "document_text": types_desc.append("document (text extracted)")
+                                elif md["type"] == "binary_saved": types_desc.append(md.get("filename", "file") + " (saved)")
+                                elif md["type"] == "transcript": types_desc.append("voice message")
+                                else: types_desc.append("media")
+                            text = f"[Forwarded media from {fwd_name}]: {', '.join(types_desc)}"
+                            import json as _json
+                            text += " " + _json.dumps(fwd_media)
+                        else:
+                            text = f"[Forwarded message from {fwd_name} — content unavailable, ask user to resend as text]"
+                # Handle replied-to messages: include original context
+                if msg.get("reply_to_message"):
+                    orig = msg["reply_to_message"]
+                    orig_text = orig.get("text") or orig.get("caption") or ""
+                    if orig_text and text:
+                        text = f"(In reply to: {orig_text[:200]})\n{text}"
+                # Handle entities (mentions, hashtags, URLs) — add as note if text is empty
+                if not text and msg.get("entities"):
+                    text = "[Message with formatting only]"
+                # Handle empty messages with only media
+                if not text and (msg.get("photo") or msg.get("voice") or
+                                 msg.get("audio") or msg.get("document") or
+                                 msg.get("video") or msg.get("sticker")):
+                    text = "[Media message]"
+                # Download media for supported types
                 media_data = self._download_media(msg) if (msg.get("photo") or msg.get("voice") or msg.get("audio") or msg.get("document")) else []
                 # Build media annotation for text
                 media_types = []

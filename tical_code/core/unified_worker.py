@@ -2390,9 +2390,13 @@ def async_main():
 
     To use: ASYNC_WORKER=1 python -m tical_code.core.unified_worker
     """
-    logger.info("EITElite async-worker starting")
+    # SIGTERM handler - ensures finally block cleans up PID file on kill
+    def _sigterm_handler(signum, frame):
+        logger.warning("EITElite async-worker received SIGTERM - shutting down")
+        sys.exit(0)
+    signal.signal(signal.SIGTERM, _sigterm_handler)
 
-    # PID lock - prevent duplicate instances
+    # PID lock - prevent duplicate instances (BEFORE startup log)
     PID_FILE = Path("/tmp/unified-worker.pid")
     try:
         existing = int(PID_FILE.read_text().strip())
@@ -2404,6 +2408,7 @@ def async_main():
     except (FileNotFoundError, ValueError):
         pass
     PID_FILE.write_text(str(os.getpid()))
+    logger.info("EITElite async-worker starting (PID=%d)", os.getpid())
 
     try:
         cfg = load_config()
