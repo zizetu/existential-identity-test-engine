@@ -1520,8 +1520,28 @@ class AsyncWorker:
 
         # Module loading
         try:
-            self._modules = load_modules(self, self.cfg)
+            _profile = (self.cfg.get("profile") if isinstance(self.cfg, dict) else None) or "light"
+            self._modules = load_modules(self, self.cfg, profile=_profile)
+            self.logger.info("AsyncWorker profile=%s", _profile)
             self.logger.info("Modules loaded: %d active", len(self._modules))
+        # AsyncWorker light self_repair fallback 2026-07-09f
+        try:
+            if getattr(self, "self_repair", None) is None:
+                from tical_code.core.self_repair import SelfRepairEngine
+                from tical_code.core.tool_executor import set_self_repair_engine
+                self.self_repair = SelfRepairEngine(framework=self)
+                set_self_repair_engine(self.self_repair)
+                self.logger.info("SelfRepairEngine manual fallback active")
+            if getattr(self, "checkpoint", None) is None:
+                from tical_code.core.checkpoint import CheckpointManager, CheckpointConfig
+                from tical_code.core.tool_executor import set_checkpoint_manager
+                ws = self.cfg.get("workspace", ".") if isinstance(self.cfg, dict) else "."
+                self.checkpoint = CheckpointManager(config=CheckpointConfig(workspace=ws))
+                set_checkpoint_manager(self.checkpoint)
+                self.logger.info("CheckpointManager manual fallback active")
+        except Exception as _fb:
+            self.logger.warning("self_repair/checkpoint fallback failed: %s", _fb)
+
         except Exception as e:
             self.logger.warning("Module loading failed: %s", e)
             self._modules = []
