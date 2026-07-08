@@ -1,3 +1,4 @@
+# EITE same-class fixes 2026-07-09e: session load/dedup, fast-ack, progress, queue drain
 # EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
@@ -1486,7 +1487,7 @@ class AsyncWorker:
 
         # Hard timeout guards - prevent worker death when LLM API hangs
         self._llm_hard_timeout = 120   # max seconds for a single LLM call
-        self._process_hard_timeout = 180  # max seconds for processing one message
+        self._process_hard_timeout = 300  # EITE 2026-07-09e  # max seconds for processing one message
         self._session_stuck_threshold = 300  # kill session task if stuck this long
         self._session_queues: dict[str, asyncio.Queue] = {}
         self._session_tasks: dict[str, asyncio.Task] = {}
@@ -1827,6 +1828,12 @@ class AsyncWorker:
                 ch, msg = await asyncio.wait_for(
                     queue.get(), timeout=self._session_timeout,
                 )
+                # EITE DRAIN_QUEUE 2026-07-09e: keep only latest pending message
+                while True:
+                    try:
+                        ch, msg = queue.get_nowait()
+                    except Exception:
+                        break
                 try:
                     await asyncio.wait_for(
                         self._process_message(session_id, ch, msg),
@@ -1886,7 +1893,27 @@ class AsyncWorker:
         entry, _ = self.session_manager.get_or_create(session_id, factory=dict)
         session = entry["data"]
 
+        # EITE FAST_ACK 2026-07-09e: typing immediately on telegram
+        try:
+            if hasattr(channel, "send_action") and getattr(msg, "source", "") == "telegram" and getattr(msg, "chat_id", None):
+                channel.send_action("typing", msg.chat_id)
+        except Exception:
+            pass
+
         messages: list = session.get("messages", [])
+        # EITE LOAD_SESSION 2026-07-09e: reload SQLite history on cold in-memory session
+        if (not messages or (len(messages) == 1 and messages[0].get("role") == "system")) and getattr(self, "sessions", None):
+            try:
+                _sid = self.sessions.get_session_id(msg.source, str(msg.chat_id))
+                _loaded = self.sessions.load_session(_sid, max_messages=40) or []
+                _loaded = [m for m in _loaded if m.get("role") in ("user", "assistant", "tool")]
+                if _loaded:
+                    messages = [{"role": "system", "content": self.system_prompt}] + _loaded
+                    session["messages"] = messages
+                    self.logger.info("Loaded %d durable messages for session %s", len(_loaded), session_id)
+            except Exception as _le:
+                self.logger.warning("Session load failed: %s", _le)
+
         # Prepend system prompt — DeepSeek rejects requests lacking role
         # on message[0], and without it the AI has no persona context.
         if not messages or messages[0].get("role") != "system":
@@ -1910,7 +1937,21 @@ class AsyncWorker:
         else:
             messages.append({"role": "user", "content": msg.content})
 
+        # EITE FAST_ACK 2026-07-09e: short conversational turns without tools
+        _raw = (msg.content or "").strip()
+        _no_tool = (
+            ("\u4e0d\u8981\u7528\u5de5\u5177" in _raw) or ("\u4e0d\u7528\u5de5\u5177" in _raw)
+            or (("\u4e00\u53e5\u8bdd" in _raw or "\u4f60\u662f\u8c01" in _raw or "\u6211\u662f\u8c01" in _raw
+                 or "\u8bb0\u5f97" in _raw or "\u5728\u5417" in _raw)
+                and len(_raw) <= 120
+                and not any(x in _raw for x in ["\u5ba1\u8ba1", "audit", "\u4fee", "fix", "deploy"]))
+        )
         try:
+            if _no_tool:
+                response = await self._async_llm_call(messages, tools=[])
+            else:
+                response = await self._async_llm_call(messages)
+        except TypeError:
             response = await self._async_llm_call(messages)
         except Exception as e:
             self.logger.error("LLM call failed for session %s: %s", session_id, e)
@@ -1934,7 +1975,7 @@ class AsyncWorker:
             except Exception:
                 pass
             try:
-                if tool_iterations <= 3 or tool_iterations % 2 == 0:
+                if tool_iterations in (10, 18) or (tool_iterations > 20 and tool_iterations % 8 == 0):  # EITE PROGRESS 2026-07-09e
                     names = []
                     for _tc in response.get("tool_calls", []) or []:
                         _fn = _tc.get("function", {}) if isinstance(_tc, dict) else {}
@@ -2094,7 +2135,13 @@ class AsyncWorker:
             if getattr(self, 'sessions', None):
                 try:
                     _sid = self.sessions.get_session_id(msg.source, str(msg.chat_id))
-                    self.sessions.save_messages(_sid, messages)
+                    # EITE SAVE DEDUP 2026-07-09e
+                    _prev = int(session.get('last_saved_len') or 0)
+                    _to_save = messages[_prev:] if _prev < len(messages) else []
+                    _to_save = [m for m in _to_save if m.get('role') != 'system' or _prev == 0]
+                    if _to_save:
+                        self.sessions.save_messages(_sid, _to_save)
+                    session['last_saved_len'] = len(messages)
                 except Exception as _e:
                     self.logger.warning("Session save failed: %s", _e)
             return
@@ -2119,7 +2166,13 @@ class AsyncWorker:
         if getattr(self, 'sessions', None):
             try:
                 _sid = self.sessions.get_session_id(msg.source, str(msg.chat_id))
-                self.sessions.save_messages(_sid, messages)
+                # EITE SAVE DEDUP 2026-07-09e
+                _prev = int(session.get('last_saved_len') or 0)
+                _to_save = messages[_prev:] if _prev < len(messages) else []
+                _to_save = [m for m in _to_save if m.get('role') != 'system' or _prev == 0]
+                if _to_save:
+                    self.sessions.save_messages(_sid, _to_save)
+                session['last_saved_len'] = len(messages)
             except Exception as _e:
                 self.logger.warning("Session save failed: %s", _e)
 
