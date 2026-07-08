@@ -1524,6 +1524,10 @@ class AsyncWorker:
             self._modules = load_modules(self, self.cfg, profile=_profile)
             self.logger.info("AsyncWorker profile=%s", _profile)
             self.logger.info("Modules loaded: %d active", len(self._modules))
+        except Exception as e:
+            self.logger.warning("Module loading failed: %s", e)
+            self._modules = []
+
         # AsyncWorker light self_repair fallback 2026-07-09f
         try:
             if getattr(self, "self_repair", None) is None:
@@ -1541,10 +1545,6 @@ class AsyncWorker:
                 self.logger.info("CheckpointManager manual fallback active")
         except Exception as _fb:
             self.logger.warning("self_repair/checkpoint fallback failed: %s", _fb)
-
-        except Exception as e:
-            self.logger.warning("Module loading failed: %s", e)
-            self._modules = []
 
         # System prompt — built with full identity, modules, and memory injection
         try:
