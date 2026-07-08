@@ -111,7 +111,7 @@ from tical_code.core.model_failover import ModelFailover
 from tical_code.core.provider_registry import from_registry as failover_from_env
 from tical_code.core.llm_backend import create_llm_backend  # fallback
 from tical_code.core.tool_executor import execute, TOOL_SCHEMAS, TOOL_CONCURRENCY_MAP
-from tical_code.core.response_formatter import format_result
+from tical_code.core.response_formatter import format_result, format_progress, format_final_reply
 from tical_code.core.prompt import build_system_prompt
 from tical_code.core.config import load_config
 from tical_code.core.modules.session_manager import SessionManager
@@ -259,9 +259,9 @@ TOOL_SCHEMAS_CLEAN = TOOL_SCHEMAS  # Use full schema with bash_execute
 # SECTION: Tool Call Limits
 # ─────────────────────────────────────────────────────────────
 # Tool call limits
-MAX_TOOL_ITERATIONS = 12
-SOFT_HINT_AT = 5   # gentle nudge to wrap up
-HARD_STOP_AT = 8   # force stop
+MAX_TOOL_ITERATIONS = 24
+SOFT_HINT_AT = 10   # gentle nudge to wrap up
+HARD_STOP_AT = 18   # force stop
 
 # ─────────────────────────────────────────────────────────────
 # SECTION: Worker Class (Central Orchestrator)
@@ -1927,6 +1927,33 @@ class AsyncWorker:
         while response.get("tool_calls") and tool_iterations < MAX_TOOL_ITERATIONS:
             tool_iterations += 1
 
+            # Progress visibility so long tasks do not look frozen.
+            try:
+                if hasattr(channel, "send_action") and getattr(msg, "source", "") == "telegram" and getattr(msg, "chat_id", None):
+                    channel.send_action("typing", msg.chat_id)
+            except Exception:
+                pass
+            try:
+                if tool_iterations <= 3 or tool_iterations % 2 == 0:
+                    names = []
+                    for _tc in response.get("tool_calls", []) or []:
+                        _fn = _tc.get("function", {}) if isinstance(_tc, dict) else {}
+                        _n = (_fn.get("name") if isinstance(_fn, dict) else None) or (_tc.get("name") if isinstance(_tc, dict) else None) or "?"
+                        names.append(str(_n))
+                    tool_label = ",".join(names[:4]) if names else "tools"
+                    progress_text = format_progress(
+                        "progress",
+                        f"{tool_iterations}/{MAX_TOOL_ITERATIONS} running: {tool_label}",
+                    )
+                    channel.send(Response(
+                        content=progress_text,
+                        target=msg.sender,
+                        source=msg.source,
+                        chat_id=msg.chat_id,
+                    ))
+            except Exception:
+                pass
+
             # If model went 2+ rounds with NO text content, force a text summary
             current_content = (response.get("content") or "").strip()
             if tool_iterations >= 2 and not current_content:
@@ -2074,7 +2101,7 @@ class AsyncWorker:
 
         if content.strip():
             try:
-                formatted = format_result(content)
+                formatted = format_final_reply(content)
             except Exception:
                 formatted = content
 

@@ -24,6 +24,7 @@ into compact, readable strings for LLM consumption and logging.
 """
 
 import json
+import re
 import logging
 
 logger = logging.getLogger("eite.formatter")
@@ -97,3 +98,17 @@ def format_result(name: str, result: dict) -> str:
         return f"[chat] sent to {target}" if result.get("ok") else "[chat] send failed"
 
     return json.dumps(result, ensure_ascii=False)[:16000]
+
+
+def format_final_reply(content: str) -> str:
+    """Light cleanup for final user-facing replies.
+
+    format_result(name, result) is for tool outputs. Final LLM text
+    should not be passed there. This helper only normalizes whitespace.
+    """
+    if content is None:
+        return ""
+    text = str(content).replace("\r\n", "\n").replace("\r", "\n")
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
