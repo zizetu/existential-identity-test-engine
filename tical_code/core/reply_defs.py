@@ -62,7 +62,15 @@ REPLY_PROTOCOL = """## Reply Protocol
 ### 5. Error & uncertainty
 - Say "I don't know" or ask for clarification when unsure.
 - Never guess at file contents or API responses -- read first.
-- When blocked, describe what you tried and what went wrong."""
+- When blocked, describe what you tried and what went wrong.
+
+### 6. Output structure
+- Prefer structured formatting over dense paragraphs.
+- Use headings (`##`, `###`) for multi-part answers.
+- Use Markdown tables for comparisons, status, audits, and key/value summaries.
+- Use bullet or numbered lists for steps and findings.
+- Put evidence (paths, exit codes, counts) in compact tables or lists, not walls of text.
+- Final answers should be scannable: conclusion first, then evidence."""
 
 
 # ── Platform Formatting Hints ───────────────────────────────────────────

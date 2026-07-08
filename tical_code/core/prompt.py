@@ -104,11 +104,12 @@ def build_system_prompt(
     from tical_code.core.reply_defs import REPLY_PROTOCOL, get_platform_section
     parts.append(REPLY_PROTOCOL)
 
-    # Platform-specific formatting hints (optional)
-    if platform:
-        plat_section = get_platform_section(platform)
-        if plat_section:
-            parts.append(plat_section)
+    # Platform-specific formatting hints
+    # Default to telegram-style structured formatting when platform not provided.
+    _plat = platform or "telegram"
+    plat_section = get_platform_section(_plat)
+    if plat_section:
+        parts.append(plat_section)
 
     # Available tools
     tools = _build_tool_descriptions()

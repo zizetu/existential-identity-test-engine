@@ -171,7 +171,7 @@ _PROGRESS_RE = re.compile(
     r"i'm going to|i will start|starting with|first,?\s+(let|i|we)|"
     r"let me read|understanding the|examining the|investigating)\b|"
     # Chinese progress indicators
-    r"(正在分析|正在检查|正在扫描|正在逐步|正在查看|正在研究|需要进一步|准备开始|开始分析|开始检查|先看看)",
+    r"(analyzing|checking|scanning|step by step|looking into|researching|need further|preparing to start|start analyzing|start checking|let me first)",
     re.I,
 )
 _DIFF_RAW_RE = re.compile(
