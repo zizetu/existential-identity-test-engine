@@ -569,6 +569,7 @@ def run_task(ctx: SharedContext, task) -> None:
 
                     state.add_action({"action": "complete", "tool": name, "step": step})
                     state.status = "completed"
+                    _notify_task_complete(ctx, state, "completed")
                     save_state(state, workspace=ctx.workspace)
                     ctx.skill_extractor.end_task(True)
                     logger.info("Task %s: completed via %s at step %d", state.task_id, name, step)
@@ -740,6 +741,7 @@ def run_task(ctx: SharedContext, task) -> None:
             conv.append({"role": "assistant", "content": content})
             if "[TASK_COMPLETE]" in content:
                 state.status = "completed"
+                _notify_task_complete(ctx, state, "completed")
                 save_state(state, workspace=ctx.workspace)
                 if ctx.checkpoint:
                     try:
@@ -767,6 +769,7 @@ def run_task(ctx: SharedContext, task) -> None:
                     state.task_id, step, _content_len
                 )
                 state.status = "completed"
+                _notify_task_complete(ctx, state, "completed")
                 state.add_action({"action": "complete", "tool": "text_answer", "step": step})
                 save_state(state, workspace=ctx.workspace)
                 if ctx._vigil:
@@ -787,6 +790,7 @@ def run_task(ctx: SharedContext, task) -> None:
                 logger.warning("Task %s: force-completing at step %d (no progress)",
                                state.task_id, step)
                 state.status = "completed"
+                _notify_task_complete(ctx, state, "completed")
                 state.add_action({"action": "complete", "tool": "force_timeout", "step": step})
                 save_state(state, workspace=ctx.workspace)
                 if ctx._vigil:
@@ -856,3 +860,25 @@ def run_task(ctx: SharedContext, task) -> None:
     fail_task(state, f"Reached max_steps ({state.max_steps}) without completion",
               workspace=ctx.workspace)
     logger.warning("Task %s: failed (max steps %d)", state.task_id, state.max_steps)
+
+def _notify_task_complete(ctx, state, summary: str) -> None:
+    """Best-effort notify originating chat when a background task finishes."""
+    try:
+        channel = getattr(ctx, "channel", None) or getattr(ctx, "_channel", None)
+        if channel is None:
+            return
+        meta = getattr(state, "meta", None) or getattr(state, "metadata", None) or {}
+        if not isinstance(meta, dict):
+            meta = {}
+        chat_id = meta.get("origin_chat_id") or meta.get("chat_id") or getattr(state, "chat_id", None)
+        source = meta.get("origin_source") or meta.get("source") or getattr(state, "source", None) or "telegram"
+        target = meta.get("origin_target") or meta.get("target") or getattr(state, "target", None) or ""
+        if not chat_id and not target:
+            return
+        from tical_code.core.channel import Response  # type: ignore
+        text = f"[task complete] {getattr(state, 'task_id', '?')}: {summary}"
+        channel.send(Response(content=text[:3500], target=target or str(chat_id), source=source, chat_id=chat_id))
+    except Exception:
+        pass
+
+
