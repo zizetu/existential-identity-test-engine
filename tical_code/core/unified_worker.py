@@ -1954,7 +1954,7 @@ class AsyncWorker:
         if (not messages or (len(messages) == 1 and messages[0].get("role") == "system")) and getattr(self, "sessions", None):
             try:
                 _sid = self.sessions.get_session_id(msg.source, str(msg.chat_id))
-                _loaded = self.sessions.load_session(_sid, max_messages=40) or []
+                _loaded = self.sessions.load_session(_sid, max_messages=200)  # keep more context or []
                 _loaded = [m for m in _loaded if m.get("role") in ("user", "assistant", "tool")]
                 if _loaded:
                     messages = [{"role": "system", "content": self.system_prompt}] + _loaded
@@ -2001,6 +2001,12 @@ class AsyncWorker:
                 and len(_raw) <= 120
                 and not any(x in _raw for x in ["\u5ba1\u8ba1", "audit", "\u4fee", "fix", "deploy"]))
         )
+        # LIVE 2026-07-09m: ultra-short: execution cues pass through (做/继续/开始 use tools)
+        if len(_raw) <= 12 and not any(x in _raw for x in ["/", "http", ".py", "html"]):
+            _exec_cues = ("\\u505a", "\\u7ee7\\u7eed", "\\u5f00\\u59cb", "go", "run", "exec", "fix", "do")
+            if not any(x in _raw for x in _exec_cues):
+                _no_tool = True
+
         try:
             if _no_tool:
                 response = await self._async_llm_call(messages, tools=[])
@@ -2222,6 +2228,12 @@ class AsyncWorker:
             return
 
         if content.strip():
+            # Persist context to memory for cross-session continuity
+            try:
+                from tical_code.core.tool_executor import execute
+                execute("memory_save", {"key": "last_context", "value": content[:500]})
+            except Exception:
+                pass
             try:
                 formatted = format_final_reply(content)
             except Exception:
