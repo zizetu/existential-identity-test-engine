@@ -109,7 +109,7 @@ for s in scenarios:
 
 output = {
     "batch_id": "batch-4-standard",
-    "source": "tico-oracle",
+    "source": "agent-alpha",
     "task": "gen-training-data",
     "target_model": "zero",
     "focus": "standard_cases",

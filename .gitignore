@@ -30,3 +30,10 @@ eite_agent.egg-info/
 build/
 
 *.bak.*
+
+# Security patterns
+secrets*
+config.local.*
+
+credentials*
+*.pem
