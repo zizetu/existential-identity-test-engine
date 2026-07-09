@@ -50,8 +50,20 @@ logger = logging.getLogger("EITElite.channel")
 
 
 def _ssrf_guard(url_or_req):
-    """SSRF check before urlopen. Raises ValueError if blocked."""
+    """SSRF check before urlopen. Raises ValueError if blocked.
+
+    localhost / 127.0.0.1 / ::1 are always exempt (internal services).
+    """
     url = url_or_req if isinstance(url_or_req, str) else url_or_req.full_url
+    # LIVE 2026-07-09p: localhost exemption for internal services
+    try:
+        from urllib.parse import urlparse as _urlparse
+        _parsed = _urlparse(url)
+        _host = (_parsed.hostname or "").lower()
+        if _host in ("localhost", "127.0.0.1", "::1"):
+            return  # localhost always allowed
+    except Exception:
+        pass
     _check_ssrf(url)  # raises ValueError on failure, returns None on success
 
 class Message:

@@ -28,3 +28,10 @@ eite_agent.egg-info/
 .bak
 guardian_trace.jsonl
 *.bak.*
+
+# Security patterns
+secrets*
+config.local.*
+
+credentials*
+*.pem

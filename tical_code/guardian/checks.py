@@ -378,11 +378,23 @@ def check_module_files() -> Tuple[bool, str]:
 
 def _get_worker_service() -> str:
     """Detect the active worker systemd service name from GUARDIAN_SERVICE env var."""
-    svc = os.environ.get("GUARDIAN_SERVICE", "")
-    if svc:
-        return svc
+    # LIVE 2026-07-09p: check multiple candidates (node-specific suffixes)
+    _env = os.environ.get("GUARDIAN_SERVICE", "")
+    candidates = [_env] if _env else []
+    # LIVE 2026-07-09p: dynamic service discovery via systemctl
     import subprocess as _sp
-    for candidate in ("unified-worker",):
+    try:
+        _r = _sp.run(["systemctl", "list-units", "--type=service", "--state=active", "--no-legend"],
+                      capture_output=True, text=True, timeout=5)
+        for line in _r.stdout.splitlines():
+            _parts = line.split()
+            _svc = _parts[0].replace(".service", "") if _parts else ""
+            if _svc.startswith("unified-worker") and _svc not in candidates:
+                candidates.append(_svc)
+    except Exception:
+        pass
+    candidates.append("unified-worker")
+    for candidate in candidates:
         try:
             r = _sp.run(["systemctl", "is-active", candidate],
                        capture_output=True, text=True, timeout=5)

@@ -2001,9 +2001,9 @@ class AsyncWorker:
                 and len(_raw) <= 120
                 and not any(x in _raw for x in ["\u5ba1\u8ba1", "audit", "\u4fee", "fix", "deploy"]))
         )
-        # LIVE 2026-07-09m: ultra-short: execution cues pass through (做/继续/开始 use tools)
+        # LIVE 2026-07-09m: ultra-short: execution cues pass through (execute/continue/start use tools)
         if len(_raw) <= 12 and not any(x in _raw for x in ["/", "http", ".py", "html"]):
-            _exec_cues = ("\\u505a", "\\u7ee7\\u7eed", "\\u5f00\\u59cb", "go", "run", "exec", "fix", "do")
+            _exec_cues = ("\u505a", "\u7ee7\u7eed", "\u5f00\u59cb", "go", "run", "exec", "fix", "do")
             if not any(x in _raw for x in _exec_cues):
                 _no_tool = True
 
@@ -2177,6 +2177,23 @@ class AsyncWorker:
                 tool_names_used.append(name)
 
         content = response.get("content", "") or ""
+        # LIVE 2026-07-09p: strip fake text tool calls GLM outputs in no-tool mode
+        if tool_iterations == 0 and content:
+            import re as _re
+            _fake_patterns = [
+                r'^\s*`{0,3}\s*(?:antml:)?invoke\b',
+                r'^\s*`{0,3}\s*(?:antml:)?parameter\b',
+                r'^\s*`{0,3}\s*(?:antml:)?function_call\b',
+                r'^\s*`{0,3}\s*(?:antml:)?tool_call\b',
+            ]
+            _is_fake = any(_re.search(p, content) for p in _fake_patterns)
+            if _is_fake:
+                self.logger.warning("[RPLY] detected fake text tool call in no-tool mode, stripping")
+                content = _re.sub(r'`{0,3}\s*(?:antml:)?(?:invoke|parameter|function_call|tool_call)\b[^\n]*\n?', '', content)
+                content = content.strip()
+                content = _re.sub(r'^\s*`{3}\s*$', '', content, flags=_re.MULTILINE).strip()
+                if not content:
+                    content = "[system: received empty response, please retry]"
         self.logger.info("[RPLY] tool_iterations=%d content_len=%d tools=%s",
                          tool_iterations, len(content), tool_names_used[:3])
 
