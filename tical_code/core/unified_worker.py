@@ -2141,6 +2141,12 @@ class AsyncWorker:
             return
 
         if content.strip():
+            # persist context to memory
+            try:
+                from tical_code.core.tool_executor import execute
+                execute("memory_save", {"key": "last_context", "value": content[:500]})
+            except Exception:
+                pass
             try:
                 formatted = format_final_reply(content)
             except Exception:
