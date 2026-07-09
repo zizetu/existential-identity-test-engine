@@ -541,7 +541,7 @@ class ModelFailover:
     # ------------------------------------------------------------------
 
     async def _call_single(self, provider: Provider, messages: List[Dict],
-                     tools: Optional[List] = None, max_tokens: int = 2000,
+                     tools: Optional[List] = None, max_tokens: int = 6000,
                      temperature: float = 0.3) -> FailoverResult:
         """Make one API call to a single provider with provider-specific handling.
 
@@ -787,7 +787,8 @@ class ModelFailover:
                     clean.append(m)
                 elif role == "tool":
                     tc_id = m.get("tool_call_id", "")
-                    if tc_id and tc_id not in active_tc_ids:
+                    # Empty tool_call_id is always orphaned -- MiMo 400 if sent
+                    if not tc_id or tc_id not in active_tc_ids:
                         stripped += 1
                         continue
                     clean.append(m)
@@ -1109,7 +1110,7 @@ class ModelFailover:
     # ------------------------------------------------------------------
 
     async def call(self, messages: List[Dict], tools: Optional[List] = None,
-             max_tokens: int = 2000, temperature: float = 0.3,
+             max_tokens: int = 6000, temperature: float = 0.3,
              preferred_family: Optional[str] = None) -> FailoverResult:
         """Call LLM with session-affinity LRU selection and automatic failover.
 
@@ -1412,7 +1413,7 @@ class ModelFailover:
     # ------------------------------------------------------------------
 
     async def call_stream(self, messages: List[Dict], tools: Optional[List] = None,
-                          max_tokens: int = 2000, temperature: float = 0.3,
+                          max_tokens: int = 6000, temperature: float = 0.3,
                           preferred_family: Optional[str] = None):
         """Call LLM with streaming response and automatic failover.
 

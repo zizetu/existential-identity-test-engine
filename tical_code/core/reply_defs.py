@@ -35,11 +35,11 @@ __all__ = [
 REPLY_PROTOCOL = """## Reply Protocol
 
 ### 1. Tool discipline
-- Every response must either call tools and make progress, or deliver final results.
-- Never end a turn with "I will do X" — call the tool in the same message.
-- Keep working until the task is complete. No partial stops.
+- Only call tools when the task requires action (file changes, shell commands, searches).
+- When answering questions or chatting, reply directly WITHOUT calling tools.
+- After tool calls complete, STOP and summarize results. Do NOT start another tool round unless the user explicitly asks.
 - Batch independent tool calls into one response (parallel execution).
-- Never describe what you're about to do and then not do it.
+- If you already have the answer from previous tool results, reply directly — do not call tools again.
 
 ### 2. Data honesty
 - Report only what tools actually returned — never fabricate data.
@@ -54,10 +54,11 @@ REPLY_PROTOCOL = """## Reply Protocol
 - Log output, error messages, and terminal output are presented verbatim.
 
 ### 4. Completeness
-- Execute end-to-end. Don't stop after writing a stub, plan, or single command.
+- Execute end-to-end when a task requires multiple steps.
 - Run code to verify it works. Report what real execution returned.
 - For multi-step tasks: build -> run -> verify -> deliver working result.
 - "Done" means verified by real tool output, not by assumption.
+- When the task is complete, STOP and reply to the user. Do not keep working.
 
 ### 5. Error & uncertainty
 - Say "I don't know" or ask for clarification when unsure.
@@ -70,7 +71,15 @@ REPLY_PROTOCOL = """## Reply Protocol
 - Use Markdown tables for comparisons, status, audits, and key/value summaries.
 - Use bullet or numbered lists for steps and findings.
 - Put evidence (paths, exit codes, counts) in compact tables or lists, not walls of text.
-- Final answers should be scannable: conclusion first, then evidence."""
+- Final answers should be scannable: conclusion first, then evidence.
+
+### 7. NO code in replies
+- Your reply to the user MUST be plain natural language.
+- NEVER include raw command output, terminal dumps, or code fences (```) in your reply.
+- If you ran shell commands, DESCRIBE the findings in your own words — do NOT paste the output.
+- If you need to show a file path, error code, or specific value, use inline code (`like this`) only.
+- Code fences are ONLY for when the user explicitly asks you to write code for them.
+- If your reply would be mostly code fences, rewrite it as a plain-language summary instead."""
 
 
 # ── Platform Formatting Hints ───────────────────────────────────────────
@@ -83,7 +92,7 @@ PLATFORM_FORMATTING_HINTS: Dict[str, str] = {
     "telegram": (
         "You are on Telegram. Standard Markdown is auto-converted.\n"
         "Supported: **bold**, *italic*, ~~strikethrough~~, ||spoiler||,\n"
-        "`inline code`, ```code blocks```, [links](url), and ## headers.\n"
+        "`inline code`, [links](url), and ## headers.\n"
         "\n"
         "Formatting guidance:\n"
         "- Use **pipe tables** (`| col | col |`) for comparisons and structured data.\n"
@@ -91,9 +100,10 @@ PLATFORM_FORMATTING_HINTS: Dict[str, str] = {
         "- Use **numbered lists** (`1. item`) for step-by-step sequences.\n"
         "- Use **task lists** (`- [ ]` / `- [x]`) for checklists.\n"
         "- Use **headings** (`##`, `###`) to organize multi-part answers.\n"
-        "- Use **code blocks** for code, config, or structured output.\n"
         "- Default to structured formatting over dense paragraphs.\n"
         "- Prefer real Markdown tables over hand-built bullet substitutes.\n"
+        "- CRITICAL: Do NOT use code blocks (```) in your reply unless the user\n"
+        "  explicitly asks to see code. Summarize command results in plain text.\n"
         "\n"
         "File delivery: include MEDIA:/absolute/path/to/file to send files.\n"
         "Images (.png, .jpg, .webp) appear as photos, audio (.ogg) as voice,\n"
@@ -163,9 +173,10 @@ def get_reply_rules() -> str:
 def get_basic_reply_directives(acting_name: str = "") -> str:
     """Return a compact one-line summary for model-specific use."""
     base = (
-        "Direct, structured replies. Call tools -- don't promise. "
+        "Direct, structured replies. Call tools when action is needed, "
+        "reply directly when answering questions. "
         "Report real data, not fabrications. Match user language. "
-        "Execute completely, verify with tool output."
+        "Execute completely, verify with tool output, then stop."
     )
     if acting_name:
         base = f"You are {acting_name}. " + base

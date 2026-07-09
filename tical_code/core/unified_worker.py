@@ -1,4 +1,3 @@
-# EITE same-class fixes 2026-07-09e: session load/dedup, fast-ack, progress, queue drain
 # EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
@@ -260,7 +259,7 @@ TOOL_SCHEMAS_CLEAN = TOOL_SCHEMAS  # Use full schema with bash_execute
 # SECTION: Tool Call Limits
 # ─────────────────────────────────────────────────────────────
 # Tool call limits
-MAX_TOOL_ITERATIONS = 6  # LIVE 2026-07-09i: hard cap tool storms on chat
+MAX_TOOL_ITERATIONS = 24
 SOFT_HINT_AT = 10   # gentle nudge to wrap up
 HARD_STOP_AT = 18   # force stop
 
@@ -511,13 +510,6 @@ class Worker:
         if SustainedTaskManager is not None:
             self._sustained_task_mgr = SustainedTaskManager()
             self.logger.info("SustainedTaskManager initialized")
-            # LIVE WIRE INJECT 2026-07-09f
-            try:
-                from tical_code.core.tool_executor import set_sustained_task_manager
-                set_sustained_task_manager(self._sustained_task_mgr)
-            except Exception as _inj_s:
-                logger.warning("sustained inject failed: %s", _inj_s)
-
         else:
             self._sustained_task_mgr = None
             self.logger.warning("SustainedTaskManager unavailable")
@@ -528,12 +520,6 @@ class Worker:
                 db_path=self._data_dir + "/self_evolve.db"
             )
             self.logger.info("SelfEvolveEngine initialized")
-            # LIVE WIRE INJECT 2026-07-09f
-            try:
-                from tical_code.core.tool_executor import set_self_evolve_engine
-                set_self_evolve_engine(self._self_evolve)
-            except Exception as _inj_e:
-                logger.warning("self_evolve inject failed: %s", _inj_e)
         else:
             self._self_evolve = None
             self.logger.warning("SelfEvolveEngine unavailable")
@@ -1500,7 +1486,7 @@ class AsyncWorker:
 
         # Hard timeout guards - prevent worker death when LLM API hangs
         self._llm_hard_timeout = 120   # max seconds for a single LLM call
-        self._process_hard_timeout = 60  # LIVE 2026-07-09i: 60s max per turn, never freeze chat
+        self._process_hard_timeout = 180  # max seconds for processing one message
         self._session_stuck_threshold = 300  # kill session task if stuck this long
         self._session_queues: dict[str, asyncio.Queue] = {}
         self._session_tasks: dict[str, asyncio.Task] = {}
@@ -1533,31 +1519,11 @@ class AsyncWorker:
 
         # Module loading
         try:
-            _profile = (self.cfg.get("profile") if isinstance(self.cfg, dict) else None) or "light"
-            self._modules = load_modules(self, self.cfg, profile=_profile)
-            self.logger.info("AsyncWorker profile=%s", _profile)
+            self._modules = load_modules(self, self.cfg)
             self.logger.info("Modules loaded: %d active", len(self._modules))
         except Exception as e:
             self.logger.warning("Module loading failed: %s", e)
             self._modules = []
-
-        # AsyncWorker light self_repair fallback 2026-07-09f
-        try:
-            if getattr(self, "self_repair", None) is None:
-                from tical_code.core.self_repair import SelfRepairEngine
-                from tical_code.core.tool_executor import set_self_repair_engine
-                self.self_repair = SelfRepairEngine(framework=self)
-                set_self_repair_engine(self.self_repair)
-                self.logger.info("SelfRepairEngine manual fallback active")
-            if getattr(self, "checkpoint", None) is None:
-                from tical_code.core.checkpoint import CheckpointManager, CheckpointConfig
-                from tical_code.core.tool_executor import set_checkpoint_manager
-                ws = self.cfg.get("workspace", ".") if isinstance(self.cfg, dict) else "."
-                self.checkpoint = CheckpointManager(config=CheckpointConfig(workspace=ws))
-                set_checkpoint_manager(self.checkpoint)
-                self.logger.info("CheckpointManager manual fallback active")
-        except Exception as _fb:
-            self.logger.warning("self_repair/checkpoint fallback failed: %s", _fb)
 
         # System prompt — built with full identity, modules, and memory injection
         try:
@@ -1861,19 +1827,6 @@ class AsyncWorker:
                 ch, msg = await asyncio.wait_for(
                     queue.get(), timeout=self._session_timeout,
                 )
-                # LIVE 2026-07-09i: drain to latest BEFORE processing (never race-consume messages)
-                dropped = 0
-                while True:
-                    try:
-                        ch, msg = queue.get_nowait()
-                        dropped += 1
-                    except Exception:
-                        break
-                if dropped:
-                    self.logger.info(
-                        "Drained %d older queued messages for session %s - processing latest only",
-                        dropped, session_id,
-                    )
                 try:
                     await asyncio.wait_for(
                         self._process_message(session_id, ch, msg),
@@ -1882,18 +1835,9 @@ class AsyncWorker:
                 except asyncio.TimeoutError:
                     self.logger.error(
                         "Session %s message processing hard timeout (%ds) - "
-                        "recovering for next message",
+                        "dropping stuck message to recover",
                         session_id, self._process_hard_timeout,
                     )
-                    try:
-                        channel.send(Response(
-                            content="[async-worker] stopped a stuck long task (timeout). Send a shorter order (one step).",
-                            target=getattr(msg, "sender", "unknown"),
-                            source=getattr(msg, "source", "unknown"),
-                            chat_id=getattr(msg, "chat_id", None),
-                        ))
-                    except Exception:
-                        pass
                     try:
                         channel.send(Response(
                             content="[async-worker] processing timeout - request dropped, worker recovering",
@@ -1942,27 +1886,7 @@ class AsyncWorker:
         entry, _ = self.session_manager.get_or_create(session_id, factory=dict)
         session = entry["data"]
 
-        # EITE FAST_ACK 2026-07-09e: typing immediately on telegram
-        try:
-            if hasattr(channel, "send_action") and getattr(msg, "source", "") == "telegram" and getattr(msg, "chat_id", None):
-                channel.send_action("typing", msg.chat_id)
-        except Exception:
-            pass
-
         messages: list = session.get("messages", [])
-        # EITE LOAD_SESSION 2026-07-09e: reload SQLite history on cold in-memory session
-        if (not messages or (len(messages) == 1 and messages[0].get("role") == "system")) and getattr(self, "sessions", None):
-            try:
-                _sid = self.sessions.get_session_id(msg.source, str(msg.chat_id))
-                _loaded = self.sessions.load_session(_sid, max_messages=200)  # keep more context or []
-                _loaded = [m for m in _loaded if m.get("role") in ("user", "assistant", "tool")]
-                if _loaded:
-                    messages = [{"role": "system", "content": self.system_prompt}] + _loaded
-                    session["messages"] = messages
-                    self.logger.info("Loaded %d durable messages for session %s", len(_loaded), session_id)
-            except Exception as _le:
-                self.logger.warning("Session load failed: %s", _le)
-
         # Prepend system prompt — DeepSeek rejects requests lacking role
         # on message[0], and without it the AI has no persona context.
         if not messages or messages[0].get("role") != "system":
@@ -1986,33 +1910,7 @@ class AsyncWorker:
         else:
             messages.append({"role": "user", "content": msg.content})
 
-        # EITE FAST_ACK 2026-07-09e: short conversational turns without tools
-        _raw = (msg.content or "").strip()
-        _no_tool = (
-            ("\u4e0d\u8981\u7528\u5de5\u5177" in _raw) or ("\u4e0d\u7528\u5de5\u5177" in _raw)
-            or (_raw in ("\u56de\u7b54", "\u56de\u590d", "answer", "Answer", "ANSWER", "\u505c",
-                    "\u53d6\u6d88", "stop", "STOP", "cancel", "\u6c47\u62a5", "\u72b6\u6001",
-                    "status", "Status", "STATUS", "\u505a\u5b8c\u6ca1\u6709", "\u6b63\u5e38\u4e48",
-                    "\u6b63\u5e38\u5417")
-                or _raw.startswith("\u56de\u7b54") or _raw.startswith("\u505c")
-                or _raw.startswith("\u6c47\u62a5"))
-            or (("\u4e00\u53e5\u8bdd" in _raw or "\u4f60\u662f\u8c01" in _raw or "\u6211\u662f\u8c01" in _raw
-                 or "\u8bb0\u5f97" in _raw or "\u5728\u5417" in _raw)
-                and len(_raw) <= 120
-                and not any(x in _raw for x in ["\u5ba1\u8ba1", "audit", "\u4fee", "fix", "deploy"]))
-        )
-        # LIVE 2026-07-09m: ultra-short: execution cues pass through (execute/continue/start use tools)
-        if len(_raw) <= 12 and not any(x in _raw for x in ["/", "http", ".py", "html"]):
-            _exec_cues = ("\u505a", "\u7ee7\u7eed", "\u5f00\u59cb", "go", "run", "exec", "fix", "do")
-            if not any(x in _raw for x in _exec_cues):
-                _no_tool = True
-
         try:
-            if _no_tool:
-                response = await self._async_llm_call(messages, tools=[])
-            else:
-                response = await self._async_llm_call(messages)
-        except TypeError:
             response = await self._async_llm_call(messages)
         except Exception as e:
             self.logger.error("LLM call failed for session %s: %s", session_id, e)
@@ -2028,26 +1926,6 @@ class AsyncWorker:
         force_text = False
         while response.get("tool_calls") and tool_iterations < MAX_TOOL_ITERATIONS:
             tool_iterations += 1
-            # LIVE WIRE QUEUE PREEMPT 2026-07-09f
-            try:
-                _q = self._session_queues.get(session_id)
-                if _q is not None and not _q.empty():
-                    self.logger.info("Preempting tool loop for session %s — newer message queued", session_id)
-                    try:
-                        force_text = True
-                    except Exception:
-                        pass
-                    break
-            except Exception:
-                pass
-            # LIVE 2026-07-09g FORCE CAP: never burn full budget on one chat turn
-            if tool_iterations >= 5:
-                self.logger.info("Tool cap reached for session %s at %s", session_id, tool_iterations)
-                try:
-                    force_text = True
-                except Exception:
-                    pass
-                break
 
             # Progress visibility so long tasks do not look frozen.
             try:
@@ -2056,7 +1934,7 @@ class AsyncWorker:
             except Exception:
                 pass
             try:
-                if tool_iterations in (10, 18) or (tool_iterations > 20 and tool_iterations % 8 == 0):  # EITE PROGRESS 2026-07-09e
+                if tool_iterations <= 3 or tool_iterations % 2 == 0:
                     names = []
                     for _tc in response.get("tool_calls", []) or []:
                         _fn = _tc.get("function", {}) if isinstance(_tc, dict) else {}
@@ -2177,23 +2055,6 @@ class AsyncWorker:
                 tool_names_used.append(name)
 
         content = response.get("content", "") or ""
-        # LIVE 2026-07-09p: strip fake text tool calls GLM outputs in no-tool mode
-        if tool_iterations == 0 and content:
-            import re as _re
-            _fake_patterns = [
-                r'^\s*`{0,3}\s*(?:antml:)?invoke\b',
-                r'^\s*`{0,3}\s*(?:antml:)?parameter\b',
-                r'^\s*`{0,3}\s*(?:antml:)?function_call\b',
-                r'^\s*`{0,3}\s*(?:antml:)?tool_call\b',
-            ]
-            _is_fake = any(_re.search(p, content) for p in _fake_patterns)
-            if _is_fake:
-                self.logger.warning("[RPLY] detected fake text tool call in no-tool mode, stripping")
-                content = _re.sub(r'`{0,3}\s*(?:antml:)?(?:invoke|parameter|function_call|tool_call)\b[^\n]*\n?', '', content)
-                content = content.strip()
-                content = _re.sub(r'^\s*`{3}\s*$', '', content, flags=_re.MULTILINE).strip()
-                if not content:
-                    content = "[system: received empty response, please retry]"
         self.logger.info("[RPLY] tool_iterations=%d content_len=%d tools=%s",
                          tool_iterations, len(content), tool_names_used[:3])
 
@@ -2221,7 +2082,7 @@ class AsyncWorker:
                         r = (m.get("content") or "").strip()
                         if len(r) > len(best_proof):
                             best_proof = r
-                content = f"[shell]\n{best_proof[:3000]}" if best_proof else f"[ops: {', '.join(tool_names_used[:6])}]"
+                content = f"[ops completed: {', '.join(tool_names_used[:6])}]" if tool_names_used else "[no results]"
             channel.send(Response(
                 content=content,
                 target=msg.sender, source=msg.source, chat_id=msg.chat_id,
@@ -2233,24 +2094,12 @@ class AsyncWorker:
             if getattr(self, 'sessions', None):
                 try:
                     _sid = self.sessions.get_session_id(msg.source, str(msg.chat_id))
-                    # EITE SAVE DEDUP 2026-07-09e
-                    _prev = int(session.get('last_saved_len') or 0)
-                    _to_save = messages[_prev:] if _prev < len(messages) else []
-                    _to_save = [m for m in _to_save if m.get('role') != 'system' or _prev == 0]
-                    if _to_save:
-                        self.sessions.save_messages(_sid, _to_save)
-                    session['last_saved_len'] = len(messages)
+                    self.sessions.save_messages(_sid, messages)
                 except Exception as _e:
                     self.logger.warning("Session save failed: %s", _e)
             return
 
         if content.strip():
-            # Persist context to memory for cross-session continuity
-            try:
-                from tical_code.core.tool_executor import execute
-                execute("memory_save", {"key": "last_context", "value": content[:500]})
-            except Exception:
-                pass
             try:
                 formatted = format_final_reply(content)
             except Exception:
@@ -2270,13 +2119,7 @@ class AsyncWorker:
         if getattr(self, 'sessions', None):
             try:
                 _sid = self.sessions.get_session_id(msg.source, str(msg.chat_id))
-                # EITE SAVE DEDUP 2026-07-09e
-                _prev = int(session.get('last_saved_len') or 0)
-                _to_save = messages[_prev:] if _prev < len(messages) else []
-                _to_save = [m for m in _to_save if m.get('role') != 'system' or _prev == 0]
-                if _to_save:
-                    self.sessions.save_messages(_sid, _to_save)
-                session['last_saved_len'] = len(messages)
+                self.sessions.save_messages(_sid, messages)
             except Exception as _e:
                 self.logger.warning("Session save failed: %s", _e)
 
@@ -2307,7 +2150,7 @@ class AsyncWorker:
             if asyncio.iscoroutinefunction(_call_fn):
                 # ModelFailover — async .call(), await with hard timeout
                 result = await asyncio.wait_for(
-                    _call_fn(messages, tools=tool_schemas_arg),
+                    _call_fn(messages, tools=tool_schemas_arg, max_tokens=6000),
                     timeout=_timeout,
                 )
             else:
@@ -2315,7 +2158,7 @@ class AsyncWorker:
                 loop = asyncio.get_running_loop()
                 result = await asyncio.wait_for(
                     loop.run_in_executor(
-                        None, _call_fn, messages, tool_schemas_arg,
+                        None, _call_fn, messages, tool_schemas_arg, 6000,
                     ),
                     timeout=_timeout,
                 )

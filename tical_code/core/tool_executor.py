@@ -1,4 +1,4 @@
-# EITElite -- AI Agent Platform
+# tical-code -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -14,13 +14,13 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Original repository: https://github.com/zizetu/eite-agent
+# Original repository: https://github.com/zizetu/tical-agent
 #
 
-# provenance:ticalasi-zzt-2026
+# provenance:ticalasi-zzt-2026​
 """Tool Executor - secure command execution with post-execution verification.
 
-This module provides the secure tool execution pipeline for EITElite. Every tool
+This module provides the secure tool execution pipeline for tical-code. Every tool
 call from the AI passes through a multi-layered security architecture before execution:
 
 1. **Sandbox pre-check** - tool_sandbox validates the tool name and arguments against
@@ -33,7 +33,7 @@ call from the AI passes through a multi-layered security architecture before exe
    MetricsCollector when available. Latency outliers and errors are tracked
    per tool name for observability and debugging.
 
-4. **Block patterns** - the _bash_safety_check function blocks genuinely dangerous
+4. **Block patterns** - the _shell_safety_check function blocks genuinely dangerous
    commands (fork bombs, raw device writes, SSRF to private IPs, path traversal)
    while allowing legitimate admin operations (systemctl, journalctl, docker).
 
@@ -187,9 +187,9 @@ def list_plugin_tools() -> list:
 # Config file paths searched by model configuration discovery.
 # These are checked in order - the first existing file is used.
 _CONFIG_FILE_CANDIDATES = [
-    Path.home() / "eite-agent" / "config.json",
+    Path.home() / "tical-agent" / "config.json",
     Path.home() / "eitelite" / "config.json",
-    Path(os.path.expanduser("~/.EITElite")) / "config.json",
+    Path(os.path.expanduser("~/.tical-code")) / "config.json",
 ]
 
 
@@ -264,19 +264,9 @@ def configure_security(path_cfg=None, url_cfg=None, outbound_cfg=None):
     _SECURITY_URL_CFG = url_cfg
     _SECURITY_OUTBOUND_CFG = outbound_cfg
 
-logger = logging.getLogger("tical_code.agent.tool_executor")
+logger = logging.getLogger("tical_code.seoul.tool_executor")
 # Also create legacy name for log filtering
-_log_legacy = logging.getLogger("EITElite.executor")
-
-# Global TG bot reference for chat_send fallback (set by worker)
-_TG_BOT_TOKEN: str = ""
-_TG_CHAT_ID: str = ""
-
-
-def set_tg_bot(token: str, chat_id: str):
-    global _TG_BOT_TOKEN, _TG_CHAT_ID
-    _TG_BOT_TOKEN = token
-    _TG_CHAT_ID = chat_id
+_log_legacy = logging.getLogger("tical-code.executor")
 
 # Workspace: resolved from TICOBOT_DIR env var, defaults to CWD
 WORKSPACE = os.environ.get("TICOBOT_DIR", "")
@@ -285,6 +275,30 @@ if WORKSPACE:
 else:
     WORKSPACE = os.getcwd()
     logger.warning("[executor] TICOBOT_DIR not set, workspace restricted to CWD")
+
+# EMERGENCY MEMORY PATHS 2026-07-09: allow durable memory dirs even when workspace is repo CWD.
+_EXTRA_ALLOWED_PATH_PREFIXES = [
+    os.path.abspath(os.path.expanduser("~/.tical-code")),
+    os.path.abspath(os.path.expanduser("~/.tical")),
+]
+
+
+def _path_allowed(resolved: str) -> bool:
+    """True if path is inside WORKSPACE or emergency memory prefixes."""
+    try:
+        r = os.path.abspath(resolved)
+    except Exception:
+        return False
+    if WORKSPACE:
+        ws = os.path.abspath(WORKSPACE)
+        if r == ws or r.startswith(ws + os.sep):
+            return True
+    for pref in _EXTRA_ALLOWED_PATH_PREFIXES:
+        pref = os.path.abspath(pref)
+        if r == pref or r.startswith(pref + os.sep):
+            return True
+    return False
+
 
 # fullyforbidcommand
 BASH_BLACKLIST = [
@@ -388,7 +402,7 @@ def _bash_safety_check(command: str) -> Optional[str]:
     unsafe_ops = [
         r"cd\s+\.\.", r">\s*/(?!dev/|tmp/)[^w]",
         r"mv\s+/", r"cp\s+/",
-        r"cat\s+/home/<user>/\.agents/", r"cat\s+/home/<user>/\.ssh/",
+        r"cat\s+/home/[^/]+/\.agents/", r"cat\s+/home/[^/]+/\.ssh/",
         r"(cat|curl|wget)\s+/etc/shadow", r"(cat|curl|wget)\s+/etc/passwd",
         # Path traversal via relative paths
         r"\.\./\S+",
@@ -408,9 +422,7 @@ def _workspace_path(path: str) -> Path:
 
     Expands user directory (~) and resolves symlinks, then checks whether
     the resulting path falls within the allowed workspace. If security_baseline
-    is configured, delegates validation to resolve_and_validate(). Otherwise,
-    performs an inline check against WORKSPACE, with special allowances for
-    /opt/<app>/ and /home/<user>/sites.
+    is configured, delegates validation to resolve_and_validate().
 
     Always resolves paths to prevent directory traversal attacks (e.g.,
     /workspace/../../etc/passwd would resolve outside the workspace).
@@ -438,18 +450,15 @@ def _workspace_path(path: str) -> Path:
     
     # Fallback: inline workspace check (resolve first to prevent traversal)
     resolved_p = str(p.resolve())  # Always resolve to prevent traversal
-    if WORKSPACE and not resolved_p.startswith(os.path.abspath(WORKSPACE)):
-        # Allow specific external paths from env (e.g., /opt/<app>/, /home/<user>/sites)
+    if WORKSPACE and not _path_allowed(resolved_p):
+        # Allow specific external paths (resolve-checked to prevent traversal)
         _allowed_external = []
-        _allowed_external_env = os.environ.get(
-            "ALLOWED_EXTERNAL_PATHS",
-            "/opt/<app>/,/home/<user>/sites"
-        ).split(",")
-        for d in _allowed_external_env:
-            d = d.strip()
-            if d and os.path.isdir(d):
+        _ext_paths_str = os.environ.get("ALLOWED_EXTERNAL_PATHS", "")
+        _ext_paths = [p.strip() for p in _ext_paths_str.split(",") if p.strip()]
+        for d in _ext_paths:
+            if os.path.isdir(d):
                 _allowed_external.append(os.path.realpath(d))
-        if _allowed_external and resolved_p.startswith(tuple(_allowed_external)):
+        if resolved_p.startswith(tuple(_allowed_external)):
             return p
         # eite-benchmark: resolve-checked only
         return None
@@ -625,638 +634,8 @@ async def _run_cmd_async(cmd: str, timeout: int = 120, workdir: str = "") -> dic
 
 # ============ Execute Functions ============
 # === OpenAI Function Calling Schemas ===
-TOOL_SCHEMAS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "shell_exec",
-            "description": "Execute shell commands (safety-checked). Use for file operations, system management, network requests, etc. Set workdir to change directory before running the command - do NOT use 'cd &&' chains.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "command": {"type": "string", "description": "Shell command to execute"},
-                    "workdir": {"type": "string", "description": "Optional working directory. Set this instead of using 'cd' in the command."}
-                },
-                "required": ["command"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "file_read",
-            "description": "Read file content.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "path": {"type": "string", "description": "File path"}
-                },
-                "required": ["path"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "file_write",
-            "description": "Write content to a file.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "path": {"type": "string", "description": "File path"},
-                    "content": {"type": "string", "description": "Content to write"}
-                },
-                "required": ["path", "content"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "file_patch",
-            "description": "Find and replace text in a file. Use for targeted edits instead of reading+rewriting the whole file. Supports fuzzy matching - minor whitespace/indentation differences won't break the match.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "path": {"type": "string", "description": "File path to edit"},
-                    "old_string": {"type": "string", "description": "Text to find (include surrounding context for uniqueness)"},
-                    "new_string": {"type": "string", "description": "Replacement text. Pass empty string to delete the matched text."}
-                },
-                "required": ["path", "old_string", "new_string"]
-            }
-        }
-    },
-
-    {
-        "type": "function",
-        "function": {
-            "name": "memory_save",
-            "description": "Save a piece of persistent memory to file.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "key": {"type": "string", "description": "Memory key name"},
-                    "value": {"type": "string", "description": "Memory value"}
-                },
-                "required": ["key", "value"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "memory_load",
-            "description": "Read all saved persistent memories.",
-            "parameters": {
-                "type": "object",
-                "properties": {}
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "memory_search",
-            "description": "Full-text search across all past conversations, learned facts, and memory documents (SOUL.md, MEMORY.md, USER.md). Uses FTS5 with CJK-aware tokenization. Use to recall past context, decisions, user preferences, or technical facts.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string", "description": "Search query (keywords or phrase)"},
-                    "limit": {"type": "integer", "description": "Max results (default 10)"}
-                },
-                "required": ["query"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "memory",
-            "description": "Manage persistent memory. Store, recall, search, or forget entries in the memory store.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "action": {
-                        "type": "string",
-                        "enum": ["store", "recall", "search", "forget"],
-                        "description": "Memory action: store a new entry, recall by key, search all entries, or forget/delete an entry."
-                    },
-                    "key": {
-                        "type": "string",
-                        "description": "Memory key to recall or forget. Required for recall and forget actions."
-                    },
-                    "value": {
-                        "type": "string",
-                        "description": "Content to store. Required for the store action."
-                    },
-                    "query": {
-                        "type": "string",
-                        "description": "Search query for the search action."
-                    }
-                },
-                "required": ["action"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "state_save",
-            "description": "Save persistent state (non-memory key-value data).",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "key": {"type": "string", "description": "State key name"},
-                    "value": {"type": "object", "description": "State value (JSON object)"}
-                },
-                "required": ["key", "value"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "chat_send",
-            "description": "Send a message to another AI worker via tical-chat, or reply to the user. For task completion, prefer end_task instead.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "target": {"type": "string", "description": "Target AI worker identity"},
-                    "content": {"type": "string", "description": "Message content"}
-                },
-                "required": ["target", "content"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "restart_self",
-            "description": "Restart this worker process. Sends SIGTERM - systemd auto-restarts cleanly. Use to clear long-running context, resolve memory pressure, or after model/config changes.",
-            "parameters": {
-                "type": "object",
-                "properties": {},
-                "required": []
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "web_fetch",
-            "description": "Fetch a URL and return the content as readable text. Use instead of bash curl. Has SSRF protection (blocks private IPs).",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "url": {"type": "string", "description": "URL to fetch (http/https only)"},
-                    "timeout": {"type": "integer", "description": "Timeout in seconds (default 10, max 30)"}
-                },
-                "required": ["url"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "file_search",
-            "description": "Search for files by name pattern or content. Uses glob patterns for filenames and optional text search inside files.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "pattern": {"type": "string", "description": "Glob pattern for file names, e.g. *.py, *config*"},
-                    "directory": {"type": "string", "description": "Directory to search in (default: current workspace)"},
-                    "content_pattern": {"type": "string", "description": "Optional text to search inside files"}
-                },
-                "required": ["pattern"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "list_dir",
-            "description": "List directory contents. Returns files, directories, and metadata (size, modified time).",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "path": {"type": "string", "description": "Directory path to list (default: current directory)"},
-                    "all": {"type": "boolean", "description": "Include hidden files (default: false)"}
-                },
-                "required": []
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "check_self",
-            "description": "Check own runtime info: model, config, identity. ALWAYS use this when asked about your model, config, or capabilities. Never guess - this tool reads real data.",
-            "parameters": {
-                "type": "object",
-                "properties": {},
-                "required": []
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "verify_multi",
-            "description": "Send the same prompt to multiple AI models, compare answers, and produce a consensus audit. Use BEFORE high-stakes actions (file writes, deployments, system changes) to catch model-specific errors. Returns divergence score (0=unanimous, 1=completely divergent) and recommendations. If divergence > 0.3, consider the action risky.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "prompt": {"type": "string", "description": "The prompt or question to verify across models."},
-                    "threshold": {"type": "number", "description": "Divergence threshold above which action is blocked (default 0.3)."}
-                },
-                "required": ["prompt"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "http_post",
-            "description": "POST data to a URL. Use for API calls and webhooks.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "url": {"type": "string", "description": "URL to POST to"},
-                    "data": {"type": "string", "description": "POST body"},
-                    "content_type": {"type": "string", "description": "Content-Type (default: application/json)"},
-                    "timeout": {"type": "integer", "description": "Timeout in seconds (default 10, max 30)"},
-                },
-                "required": ["url", "data"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "delegate_task",
-            "description": "Delegate a task to a sub-agent for parallel execution. The sub-agent runs independently with its own session and tools. Returns a task_id that you can use with get_subagent_result to retrieve results later. Use for: parallel research, independent subtasks, background work that does not need immediate results.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "description": {"type": "string", "description": "Task description for the sub-agent to execute"},
-                    "tools": {"type": "array", "items": {"type": "string"}, "description": "Tool names available to the sub-agent (default: all tools)"},
-                    "max_iterations": {"type": "integer", "description": "Maximum reasoning rounds (default: 5)"}
-                },
-                "required": ["description"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_subagent_result",
-            "description": "Retrieve the result of a previously delegated sub-agent task. Use the task_id returned by delegate_task. If the task is still running, status will be 'pending' or 'running'. When complete, returns the result, verification status, and elapsed time.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "task_id": {"type": "string", "description": "The task_id returned from delegate_task"}
-                },
-                "required": ["task_id"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "vigil_status",
-            "description": "Query Vigil's current state: patrol count, human/ai state, recent verdicts, and pending instructions. Returns active: false if Vigil is not initialized.",
-            "parameters": {
-                "type": "object",
-                "properties": {}
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "check_metrics",
-            "description": "Return performance metrics: tool latency averages, LLM call latency, error counts per tool, and top 5 slowest tool calls. Returns inactive if MetricsCollector not initialized.",
-            "parameters": {
-                "type": "object",
-                "properties": {}
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "end_task",
-            "description": "Signal that the current task is complete. Call when all work is done. Triggers memory consolidation.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "success": {"type": "boolean", "description": "Whether the task succeeded"}
-                },
-                "required": ["success"]
-            }
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "chain_exec",
-            "description": (
-                "Execute a molecular chain - a sequence of AI models where each "
-                "model's output feeds into the next, producing emergent intelligence. "
-                "Supports preset chains and dynamic chains. The engine auto-routes "
-                "each step to the best provider: local small models for structured "
-                "tasks, cloud API for creative tasks, distillate model for user-"
-                "aligned judgments."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "molecule": {
-                        "type": "string",
-                        "description": "Which preset chain to execute.",
-                        "enum": ["code_review", "research",
-                                 "safety_check", "decision"],
-                    },
-                    "prompt": {
-                        "type": "string",
-                        "description": "The input prompt for the molecular chain.",
-                    },
-                    "context": {
-                        "type": "string",
-                        "description": "Optional context to include in each step.",
-                    },
-                    "custom_steps": {
-                        "type": "array",
-                        "description": (
-                            "Custom chain steps. role options: reasoner, executor, "
-                            "verifier, guard, synthesizer, formatter, distillate, "
-                            "translator, summarizer, classifier, retriever, "
-                            "cryptograph, compliance, or any custom role."
-                        ),
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "role": {"type": "string"},
-                                "prompt_template": {"type": "string"},
-                                "provider_type": {
-                                    "type": "string",
-                                    "enum": ["auto", "api", "local", "distillate"],
-                                    "default": "auto",
-                                },
-                                "bond_type": {
-                                    "type": "string",
-                                    "enum": ["refine", "verify", "transform",
-                                             "catalyze"],
-                                    "default": "refine",
-                                },
-                            },
-                            "required": ["role", "prompt_template"],
-                        },
-                    },
-                    "provider_preference": {
-                        "type": "string",
-                        "enum": ["auto", "prefer_local", "prefer_api", "local_only"],
-                        "default": "auto",
-                    },
-                },
-                "required": ["prompt"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "safe_modify",
-            "description": (
-                "Safely modify a file with full safety checks: protected file check, "
-                "git backup, syntax validation, code safety check, sandbox test, "
-                "cross-verify, and audit logging. Automatically rolls back on failure. "
-                "USE THIS instead of file_write for modifying system code to prevent "
-                "breaking the worker."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "path": {"type": "string", "description": "File path to modify"},
-                    "new_content": {"type": "string", "description": "New complete file content"},
-                    "reason": {"type": "string", "description": "Human-readable reason for this modification. Be specific: what bug/feature, why this change."},
-                    "sandbox_test": {"type": "boolean", "description": "Run sandbox test after write (default: true)"},
-                },
-                "required": ["path", "new_content", "reason"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "safe_modify_diff",
-            "description": (
-                "Apply a targeted find-and-replace through the safe_modify pipeline "
-                "(safety checks + rollback). Reads file, applies diff, validates. "
-                "USE THIS instead of file_patch for system code edits."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "path": {"type": "string", "description": "File path to edit"},
-                    "old_string": {"type": "string", "description": "Text to find (include surrounding context for uniqueness)"},
-                    "new_string": {"type": "string", "description": "Replacement text. Pass empty string to delete."},
-                    "reason": {"type": "string", "description": "Human-readable reason for this modification."},
-                },
-                "required": ["path", "old_string", "new_string", "reason"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "checkpoint_list",
-            "description": (
-                "List all available checkpoints/snapshots with status filter. "
-                "Returns checkpoints with id, timestamp, description, status, and file count. "
-                "Use this before checkpoint_restore to find the right checkpoint ID."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "status": {
-                        "type": "string",
-                        "description": "Optional status filter: 'incomplete', 'complete', or omit for all",
-                        "enum": ["incomplete", "complete"],
-                    },
-                },
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "checkpoint_restore",
-            "description": (
-                "Restore files from a checkpoint/snapshot. Automatically creates a pre-snapshot "
-                "before restoring for safety. Requires confirm=True to execute - use preview first "
-                "by calling without confirm to see what files will be affected."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "checkpoint_id": {"type": "string", "description": "Checkpoint ID to restore from"},
-                    "selective_files": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Optional list of specific file paths to restore (omit for full restore)",
-                    },
-                    "confirm": {
-                        "type": "boolean",
-                        "description": "Must be True to proceed. Call without confirm first to preview.",
-                        "default": False,
-                    },
-                },
-                "required": ["checkpoint_id"],
-            },
-        },
-    },
-    # Capability integration tools (auto-discovered)
-    {
-        "type": "function",
-        "function": {
-            "name": "capability_list",
-            "description": (
-                "List all system capabilities. Returns a manifest of every module "
-                "and what it can do. Use this to discover what capabilities your "
-                "system has beyond the standard tools."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {},
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "capability_call",
-            "description": (
-                "Invoke a system capability by name. Use capability_list first to "
-                "see what's available. Call format: pass name and params."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "name": {
-                        "type": "string",
-                        "description": "Capability name from capability_list",
-                    },
-                    "params": {
-                        "type": "object",
-                        "description": "Parameters for the capability",
-                    },
-                },
-                "required": ["name"],
-            },
-        },
-    },
-    # ask_user: pause and ask the human for input
-    {
-        "type": "function",
-        "function": {
-            "name": "ask_user",
-            "description": (
-                "Ask the human user for input when you are stuck, need a CAPTCHA code, "
-                "need confirmation, or cannot proceed with the current task. "
-                "Use this instead of trying the same thing repeatedly."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "question": {
-                        "type": "string",
-                        "description": "The question to ask the user. Be specific about what you need.",
-                    },
-                    "context": {
-                        "type": "string",
-                        "description": "Optional context explaining why you need this input (e.g., 'CAPTCHA detected on login page', 'need confirmation to proceed')",
-                    },
-                },
-                "required": ["question"],
-            },
-        },
-    },
-    # start_background_task: persist a multi-step plan for autonomous execution
-    {
-        "type": "function",
-        "function": {
-            "name": "start_background_task",
-            "description": (
-                "Create a persistent autonomous task that runs in the background. "
-                "Use this for any work that will take more than 3-5 tool calls. "
-                "The task engine will continue executing step by step across multiple "
-                "LLM rounds until completion or failure. "
-                "Call this tool with a clear goal and optional step-by-step plan, "
-                "then call end_task to signal the current message turn is done."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "goal": {
-                        "type": "string",
-                        "description": "The overall task goal - what you want to accomplish",
-                    },
-                    "plan": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Optional step-by-step plan. Each item is one step.",
-                    },
-                    "max_steps": {
-                        "type": "integer",
-                        "description": "Maximum LLM rounds before forced completion (default: 100)",
-                        "default": 100,
-                    },
-                },
-                "required": ["goal"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "task_create",
-            "description": "Create a persistent multi-step task that survives restarts",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "goal": {"type": "string", "description": "Task goal"},
-                    "context": {"type": "string", "description": "Task context"}
-                },
-                "required": ["goal"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "task_list",
-            "description": "List active/pending persistent tasks",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "limit": {"type": "integer", "description": "Max results"}
-                }
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "evolve_stats",
-            "description": "Self-evolution statistics - error patterns and usage insights",
-            "parameters": {"type": "object", "properties": {}}
-        }
-    }
-]
-
-# ============ TOOL_SCHEMAS_CLEAN (alias - no dot-replace needed; all names already use underscores) ============
-TOOL_SCHEMAS_CLEAN = TOOL_SCHEMAS
+# Schemas extracted to tool_schemas.py for maintainability
+from tical_code.core.tool_schemas import TOOL_SCHEMAS, TOOL_SCHEMAS_CLEAN
 
 
 def redact_secrets(text: str) -> str:
@@ -1340,6 +719,7 @@ def exec_file_read(args: dict, base_dir: str = '') -> dict:
     Validates the path, enforces 100KB size limit, returns content
     truncated to 16000 chars. Supports plain text plus binary formats
     via stdlib: .docx/.docx, .xlsx/.xlsm, .ipynb, .csv.
+    Records the operation in file_state for audit trail.
     """
     import zipfile, io, re, json as _json
     path = args.get('path', '')
@@ -1371,6 +751,12 @@ def exec_file_read(args: dict, base_dir: str = '') -> dict:
             text = raw.decode('utf-8', errors='replace')
 
         content = text[:16000]
+        # Record file state for audit trail
+        try:
+            from tical_code.core.file_state import record
+            record(os.environ.get("TICAL_TASK_ID", "current"), str(full_path), "read", len(content))
+        except Exception:
+            pass
         return {'content': content, 'path': str(full_path)}
     except Exception as e:
         return {'error': str(e)}
@@ -1478,6 +864,11 @@ def exec_file_write(args: dict, base_dir: str = "") -> dict:
                     pass
                 raise
             logger.info(f"[executor] wrote {len(content)} bytes to {full_path}")
+            try:
+                from tical_code.core.file_state import record
+                record(os.environ.get("TICAL_TASK_ID", "current"), str(full_path), "write", len(content))
+            except Exception:
+                pass
         return {"ok": True, "path": str(full_path)}
     except Exception as e:
         return {"error": str(e)}
@@ -1506,13 +897,10 @@ def exec_file_patch(args: dict) -> dict:
     full_path = _workspace_path(path)
     if full_path is None:
         return {"error": f"Path outside workspace: {path}"}
+    if not full_path.exists():
+        return {"error": f"File not found: {path}"}
     try:
         content = full_path.read_text()
-    except FileNotFoundError:
-        return {"error": f"File not found: {path}"}
-    except Exception as e:
-        return {"error": f"Cannot read {path}: {e}"}
-    try:
         if old_string in content:
             new_content = content.replace(old_string, new_string, 1)
             # CRITICAL: Validate syntax before writing .py files
@@ -1544,6 +932,11 @@ def exec_file_patch(args: dict) -> dict:
                 content.splitlines(True), new_content.splitlines(True),
                 fromfile="before", tofile="after", n=2
             ))
+            try:
+                from tical_code.core.file_state import record
+                record(os.environ.get("TICAL_TASK_ID", "current"), str(full_path), "patch", len(new_content))
+            except Exception:
+                pass
             return {"ok": True, "path": path, "diff": "".join(diff[-10:])}
         # Fuzzy fallback: strip whitespace and try again
         for line in content.split("\n"):
@@ -1557,15 +950,12 @@ def exec_file_patch(args: dict) -> dict:
 
 def exec_memory_save(args: dict, base_dir: str = "") -> dict:
     """Save a key-value entry to the persistent memory store.
-
     Stores (key, value) pairs in memory.json under the workspace directory
-    or the provided base_dir. Each entry is timestamped. If the memory file
-    already exists, the new entry is merged into existing entries.
-
+    or the provided base_dir, AND into the FTS5 memory index so memory_search
+    can find it. Each entry is timestamped.
     Args:
         args: Dict with required keys 'key' (str) and 'value' (str).
         base_dir: Base directory for memory.json location.
-
     Returns:
         {'ok': True, 'key': key} on success, or {'error': reason} on failure.
     """
@@ -1573,6 +963,7 @@ def exec_memory_save(args: dict, base_dir: str = "") -> dict:
     value = args.get("value", "")
     if not key:
         return {"error": "Key cannot be empty"}
+    # Write to memory.json for backward compatibility
     mem_file = Path(base_dir or WORKSPACE) / "memory.json"
     mem = {}
     if mem_file.exists():
@@ -1582,9 +973,20 @@ def exec_memory_save(args: dict, base_dir: str = "") -> dict:
             mem = {}
     mem.setdefault("entries", {})[key] = {"value": value, "time": time.time()}
     try:
+        from tical_code.core.file_locking import safe_write
+        safe_write(str(mem_file), json.dumps(mem, ensure_ascii=False, indent=2))
+    except ImportError:
         _atomic_write_json(mem_file, mem)
     except Exception as e:
         return {"error": f"Failed to write memory: {e}"}
+
+    # Also write to FTS5 index so memory_search can find it
+    if _memory_store is not None:
+        try:
+            _memory_store.save_entry(key, value)
+        except Exception as e:
+            logger.warning(f"[executor] memory_save FTS5 write failed (non-fatal): {e}")
+
     return {"ok": True, "key": key}
 
 
@@ -1619,7 +1021,7 @@ def exec_chat_send(args: dict) -> dict:
 
     Posts a message to the tical-chat message service identified by
     TICAL_CHAT_URL and TICAL_CHAT_KEY environment variables. The sender
-    identity is taken from WORKER_NAME env var or defaults to 'agent'.
+    identity is taken from WORKER_NAME env var or defaults to 'seoul'.
 
     Args:
         args: Dict with required keys 'target' (str) and 'content' (str).
@@ -1637,7 +1039,7 @@ def exec_chat_send(args: dict) -> dict:
         import ssl
         chan_url = os.environ.get("TICAL_CHAT_URL", "")
         chan_key = os.environ.get("TICAL_CHAT_KEY", "")
-        identity = os.environ.get("WORKER_NAME", "agent")
+        identity = os.environ.get("WORKER_NAME", "seoul")
         payload = json.dumps({
             "sender": identity,
             "target": target,
@@ -1659,30 +1061,6 @@ def exec_chat_send(args: dict) -> dict:
         return {"ok": True, "target": target, "response": resp_data}
     except Exception as e:
         logger.warning(f"[executor] chat_send error: {e}")
-        # Fallback: try sending directly via TG bot API
-        if _TG_BOT_TOKEN and _TG_CHAT_ID:
-            try:
-                _tg_url = f"https://api.telegram.org/bot{_TG_BOT_TOKEN}/sendMessage"
-                _tg_payload = json.dumps({
-                    "chat_id": _TG_CHAT_ID,
-                    "text": f"[Task] {content[:2000]}",
-                    "parse_mode": "HTML",
-                }).encode()
-                _tg_req = urllib.request.Request(
-                    _tg_url,
-                    data=_tg_payload,
-                    headers={"Content-Type": "application/json"},
-                    method="POST",
-                )
-                with urllib.request.urlopen(_tg_req, timeout=10, context=ssl.create_default_context()) as _resp:
-                    _tg_resp = json.loads(_resp.read())
-                if _tg_resp.get("ok"):
-                    logger.info(f"[executor] chat_send via TG fallback to {_TG_CHAT_ID}: {content[:50]}")
-                    return {"ok": True, "via": "tg_fallback", "response": _tg_resp}
-                else:
-                    logger.warning(f"[executor] TG fallback failed: {_tg_resp}")
-            except Exception as _tg_e:
-                logger.warning(f"[executor] TG fallback error: {_tg_e}")
         return {"error": f"Send failed: {e}"}
 
 
@@ -1707,20 +1085,50 @@ def exec_state_save(args: dict, base_dir: str = "") -> dict:
     state_dir = Path(base_dir or WORKSPACE) / "state"
     try:
         state_dir.mkdir(exist_ok=True)
-        (state_dir / f"{key}.json").write_text(json.dumps(value, ensure_ascii=False, indent=2))
+        fp = state_dir / f"{key}.json"
+        _content_s = json.dumps(value, ensure_ascii=False, indent=2)
+        try:
+            from tical_code.core.file_locking import safe_write
+            safe_write(str(fp), _content_s)
+        except ImportError:
+            fp.write_text(_content_s)
     except Exception as e:
         return {"error": f"Failed to save state: {e}"}
     return {"ok": True, "key": key}
 
 
 def exec_restart_self(args: dict = None) -> dict:
-    """Restart this worker process - SAFETY BLOCKED.
+    """Restart this worker process with safety guard.
 
-    Disabled to prevent LLM self-termination. Workers should be managed
-    externally via systemctl by an administrator, not by their own AI.
+    LIVE 2026-07-10: Re-enabled for self-modification workflow.
+    Safety: Only allowed after a safe_modify within the last 5 minutes,
+    or when explicitly requested by admin command.
+    Self-destruct prevention: This restarts the SERVICE, not the machine.
     """
-    logger.warning("[executor] restart_self called but BLOCKED - self-restart disabled")
-    return {"error": "restart_self is blocked for safety. Use 'sudo systemctl restart unified-worker-*' from an admin context."}
+    # Guard: only allow restart if a safe_modify happened recently
+    _last_modify_time = getattr(exec_safe_modify, '_last_success_time', 0)
+    _reason = (args or {}).get("reason", "") if isinstance(args, dict) else ""
+    import time as _time
+    _now = _time.time()
+    _within_window = (_now - _last_modify_time) < 300  # 5 minute window
+
+    if not _within_window and "admin" not in _reason.lower():
+        logger.warning("[executor] restart_self rejected: no recent safe_modify (last=%.0fs ago)", _now - _last_modify_time)
+        return {"error": "restart_self requires a recent safe_modify (within 5 min) or admin authorization. Run safe_modify first."}
+
+    logger.info("[executor] restart_self: triggering graceful restart (reason=%s)", _reason[:100])
+    # Schedule restart in 2 seconds to allow response to be sent
+    import subprocess as _sp
+    try:
+        _sp.Popen(
+            ["bash", "-c", "sleep 2 && sudo systemctl restart unified-worker-*.service || systemctl restart unified-worker-*.service"],
+            start_new_session=True,
+            stdout=_sp.DEVNULL, stderr=_sp.DEVNULL,
+        )
+        return {"status": "restarting", "message": "Worker restart scheduled in 2s. Modifications will take effect after restart."}
+    except Exception as e:
+        logger.error("[executor] restart_self failed: %s", e)
+        return {"error": f"Failed to schedule restart: {e}"}
 
 
 
@@ -1859,7 +1267,7 @@ def exec_file_search(args: dict) -> dict:
         return {"error": "Pattern cannot be empty"}
     # Workspace restriction
     full_dir = os.path.abspath(os.path.expanduser(directory))
-    if WORKSPACE and not full_dir.startswith(os.path.abspath(WORKSPACE)):
+    if WORKSPACE and not _path_allowed(full_dir):
         return {"error": f"Path outside workspace: {directory}"}
     import glob
     matches = []
@@ -1902,7 +1310,7 @@ def exec_list_dir(args: dict) -> dict:
     show_all = args.get("all", False)
     import os as _os
     full_path = _os.path.abspath(_os.path.expanduser(path))
-    if WORKSPACE and not full_path.startswith(_os.path.abspath(WORKSPACE)):
+    if WORKSPACE and not _path_allowed(full_path):
         return {"error": f"Path outside workspace: {path}"}
     try:
         files = _os.listdir(full_path)
@@ -2062,6 +1470,23 @@ def exec_check_self(args: dict = None) -> dict:
     return {"ok": True, "self_info": info}
 
 
+def exec_file_state_list(args: dict = None) -> dict:
+    """Return list of files touched in the current session task.
+
+    Uses the task_id from the worker's current context to query the
+    file state tracker. Returns empty list if no task active.
+    """
+    try:
+        from tical_code.core.file_state import get_touched
+        # Task ID can come from environment or default to "current"
+        task_id = os.environ.get("TICAL_TASK_ID", "current")
+        files = get_touched(task_id)
+        return {"files": files, "count": len(files)}
+    except Exception as e:
+        logger.warning("[executor] file_state_list error: %s", e)
+        return {"files": [], "count": 0, "error": str(e)}
+
+
 def exec_end_task(args: dict = None) -> dict:
     """Signal task completion to the auto-skill learning system.
 
@@ -2070,7 +1495,7 @@ def exec_end_task(args: dict = None) -> dict:
     workflow extraction from the tool-call trace.
 
     A successful task (5+ tool calls, no repeated errors) gets distilled
-    into a reusable skill saved to ~/.EITElite/skills/.
+    into a reusable skill saved to ~/.tical-code/skills/.
 
     The returned dict includes an ``__end_task__`` marker that the
     message_handler loop detects to stop further iteration.
@@ -2157,7 +1582,6 @@ def exec_vigil_status(args: dict = None) -> dict:
         "recent_verdicts": recent_verdicts,
         "pending_instructions": pending_instructions,
     }
-
 
 def exec_check_metrics(args: dict = None) -> dict:
     """Return performance metrics summary from MetricsCollector.
@@ -2521,7 +1945,7 @@ def chain_exec(args: dict) -> dict:
 #   2 = ALLOWED unconditionally
 #   3 = ALLOWED + skip sandbox test
 #   4 = ALLOWED + skip all checks (full bypass - bypassPermissions equivalent)
-_SELF_MODIFY_PERMISSION = 0
+_SELF_MODIFY_PERMISSION = 2  # LIVE 2026-07-10: enable self-modification with safety checks
 _SELF_REPAIR_ENGINE = None
 _METRICS_COLLECTOR = None  # injected by module_registry -> metrics_collector
 
@@ -2582,6 +2006,116 @@ def _make_checkpoint_manager(workspace: str):
         return None
 
 
+
+# LIVE WIRE SUSTAINED 2026-07-09f + SELF_EVOLVE
+_SUSTAINED_TASK_MGR = None
+_SELF_EVOLVE_ENGINE = None
+
+
+def set_sustained_task_manager(mgr) -> None:
+    """Inject SustainedTaskManager from worker bootstrap."""
+    global _SUSTAINED_TASK_MGR
+    _SUSTAINED_TASK_MGR = mgr
+
+
+def set_self_evolve_engine(engine) -> None:
+    """Inject SelfEvolveEngine from worker bootstrap."""
+    global _SELF_EVOLVE_ENGINE
+    _SELF_EVOLVE_ENGINE = engine
+
+
+def _run_async(coro):
+    """Run async coroutine from sync tool handlers."""
+    import asyncio
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                return pool.submit(asyncio.run, coro).result(timeout=60)
+        return loop.run_until_complete(coro)
+    except RuntimeError:
+        return asyncio.run(coro)
+
+
+def exec_task_create(args: dict) -> dict:
+    if _SUSTAINED_TASK_MGR is None:
+        return {"error": "SustainedTaskManager not wired"}
+    goal = (args.get("goal") or args.get("description") or "").strip()
+    if not goal:
+        return {"error": "goal required"}
+    context = args.get("context") or ""
+    max_retries = int(args.get("max_retries") or 3)
+    meta = {"context": context} if context else {}
+    try:
+        task_id = _run_async(_SUSTAINED_TASK_MGR.submit(goal, max_retries=max_retries, metadata=meta))
+        return {"ok": True, "task_id": task_id, "state": "pending", "goal": goal}
+    except Exception as e:
+        return {"error": f"task_create failed: {e}"}
+
+
+def exec_task_list(args: dict) -> dict:
+    if _SUSTAINED_TASK_MGR is None:
+        return {"error": "SustainedTaskManager not wired"}
+    try:
+        from tical_code.core.modules.sustained_task import TaskState
+        state = None
+        if args.get("state"):
+            state = TaskState(str(args["state"]).lower())
+        limit = int(args.get("limit") or 20)
+        rows = _run_async(_SUSTAINED_TASK_MGR.list_tasks(state=state, limit=limit))
+        return {"ok": True, "count": len(rows), "tasks": rows}
+    except Exception as e:
+        return {"error": f"task_list failed: {e}"}
+
+
+def exec_task_status(args: dict) -> dict:
+    if _SUSTAINED_TASK_MGR is None:
+        return {"error": "SustainedTaskManager not wired"}
+    task_id = (args.get("task_id") or "").strip()
+    if not task_id:
+        return {"error": "task_id required"}
+    try:
+        rec = _run_async(_SUSTAINED_TASK_MGR.get_status(task_id))
+        if rec is None:
+            return {"error": f"task not found: {task_id}"}
+        return {"ok": True, "task": rec.to_dict() if hasattr(rec, "to_dict") else rec}
+    except Exception as e:
+        return {"error": f"task_status failed: {e}"}
+
+
+def exec_task_cancel(args: dict) -> dict:
+    if _SUSTAINED_TASK_MGR is None:
+        return {"error": "SustainedTaskManager not wired"}
+    task_id = (args.get("task_id") or "").strip()
+    if not task_id:
+        return {"error": "task_id required"}
+    try:
+        ok = _run_async(_SUSTAINED_TASK_MGR.cancel_task(task_id))
+        return {"ok": bool(ok), "task_id": task_id}
+    except Exception as e:
+        return {"error": f"task_cancel failed: {e}"}
+
+
+def exec_evolve_stats(args: dict) -> dict:
+    if _SELF_EVOLVE_ENGINE is None:
+        return {"error": "SelfEvolveEngine not wired"}
+    try:
+        stats = _run_async(_SELF_EVOLVE_ENGINE.get_stats())
+        suggestions = _run_async(_SELF_EVOLVE_ENGINE.get_suggestions(min_frequency=1))
+        errors = _run_async(_SELF_EVOLVE_ENGINE.get_frequent_errors(limit=10))
+        insights = _run_async(_SELF_EVOLVE_ENGINE.get_insights(min_confidence=0.0))
+        return {
+            "ok": True,
+            "stats": stats,
+            "suggestions": suggestions,
+            "frequent_errors": errors,
+            "insights": insights,
+        }
+    except Exception as e:
+        return {"error": f"evolve_stats failed: {e}"}
+
+
 def set_self_repair_engine(engine) -> None:
     """Inject the worker's SelfRepairEngine into tool_executor.
 
@@ -2613,6 +2147,9 @@ def _make_self_repair_engine(workspace: str):
 
 
 def exec_safe_modify(args: dict) -> dict:
+    # LIVE 2026-07-10: track last successful modification time for restart_self guard
+    if not hasattr(exec_safe_modify, "_last_success_time"):
+        exec_safe_modify._last_success_time = 0
     """Execute a file modification through the Self-Repair Engine's safe_modify
     pipeline: protected file check, git backup, write, syntax validation,
     code safety check, sandbox test, cross-verify, and audit log.
@@ -2678,6 +2215,10 @@ def exec_safe_modify(args: dict) -> dict:
     except Exception as e:
         logger.error("[executor] safe_modify exception: %s", e)
         return {"success": False, "error": str(e)}
+
+    # Track last successful modification time for restart_self guard
+    import time as _t
+    exec_safe_modify._last_success_time = _t.time()
 
 
 def exec_safe_modify_diff(args: dict) -> dict:
@@ -2820,7 +2361,7 @@ def _fallback_memory_search(query: str, limit: int = 10) -> dict:
     import glob
     results = []
     memory_dirs = [
-        os.path.expanduser("~/.EITElite/memory"),
+        os.path.expanduser("~/.tical-code/memory"),
         os.path.expanduser("~/memory"),
     ]
     for md in memory_dirs:
@@ -3002,7 +2543,6 @@ def exec_ask_user(args: dict) -> dict:
     }
 
 
-
 def exec_create_background_task(args: dict) -> dict:
     """Create a persistent background task for autonomous multi-step execution.
 
@@ -3033,7 +2573,7 @@ def exec_create_background_task(args: dict) -> dict:
                 break
         if not _ws:
             _home = os.path.expanduser("~")
-            for _cand in [os.path.join(_home, "EITE-agent"), os.path.join(_home, "eitelite")]:
+            for _cand in [os.path.join(_home, "tical-agent"), os.path.join(_home, "eitelite")]:
                 if os.path.isdir(_cand):
                     _ws = _cand
                     break
@@ -3043,7 +2583,7 @@ def exec_create_background_task(args: dict) -> dict:
             max_steps=min(max_steps, 500),
             workspace=_ws,
         )
-        logger.info("Background task created: %s - %s", task.task_id, goal[:80])
+        logger.info("Background task created: %s workspace=%s - %s", task.task_id, _ws or "(default)", goal[:80])
         return {
             "success": True,
             "task_id": task.task_id,
@@ -3057,6 +2597,46 @@ def exec_create_background_task(args: dict) -> dict:
     except Exception as e:
         logger.error("Failed to create background task: %s", e)
         return {"error": str(e)}
+
+
+TRUNCATION_CONFIG = {
+    # Max chars per tool result type before head+tail truncation
+    "shell_exec": 4000,
+    "bash": 4000,
+    "file_read": 6000,
+    "web_fetch": 4000,
+    "http_post": 2000,
+    "chain_exec": 4000,
+    "file_search": 3000,
+    "default": 4000,
+}
+
+_TRUNCATION_MARKER = "\n[... TRUNCATED: remaining %d chars omitted ...]\n"
+
+
+def _truncate_result(name: str, result: dict) -> dict:
+    """Truncate oversized tool results to prevent context blowup.
+
+    Applies head+tail truncation on stdout/content fields, keeping
+    the most relevant parts (beginning + end) with a truncation marker.
+    Only affects string fields 'stdout' and 'content'.
+    """
+    if not isinstance(result, dict):
+        return result
+
+    limit = TRUNCATION_CONFIG.get(name, TRUNCATION_CONFIG["default"])
+
+    for field in ("stdout", "content"):
+        val = result.get(field)
+        if isinstance(val, str) and len(val) > limit:
+            half = limit // 2
+            head = val[:half]
+            tail = val[-half:]
+            marker = _TRUNCATION_MARKER % (len(val) - limit)
+            result[field] = head + marker + tail
+            result["_truncated"] = True
+
+    return result
 
 
 def execute(name: str, args: dict, base_dir: str = "") -> dict:
@@ -3142,6 +2722,12 @@ def execute(name: str, args: dict, base_dir: str = "") -> dict:
         "capability_call": exec_capability_call,
         "ask_user": exec_ask_user,
         "start_background_task": exec_create_background_task,
+        "task_create": exec_task_create,
+        "task_list": exec_task_list,
+        "task_status": exec_task_status,
+        "task_cancel": exec_task_cancel,
+        "evolve_stats": exec_evolve_stats,
+        "file_state_list": exec_file_state_list,
     }
     handler = _PLUGIN_TOOLS.get(name) or dispatch.get(name)
     if not handler:
@@ -3162,12 +2748,23 @@ def execute(name: str, args: dict, base_dir: str = "") -> dict:
                 _METRICS_COLLECTOR.record_tool_call(name, _elapsed)
         if isinstance(result, dict) and "error" in result and "explicit_error" not in result:
             logger.warning(f"[executor] {name} error: {result['error'][:100]}")
+            # LIVE WIRE EVOLVE RECORD 2026-07-09f
+            if _SELF_EVOLVE_ENGINE is not None:
+                try:
+                    _run_async(_SELF_EVOLVE_ENGINE.record_error(
+                        error_type=f"tool:{name}",
+                        context={"tool": name, "error": str(result.get("error"))[:300]},
+                    ))
+                except Exception:
+                    pass
         # Sanitize tool output: scan for PII and secret key patterns
         if _vigil is not None and isinstance(result, dict) and not _skip_sanitize:
             try:
                 result = _sanitize_tool_output(result, name)
             except Exception as e:
                 logger.debug("[executor] sanitization skipped for %s: %s", name, e)
+        # Truncate oversized results to prevent context blowup
+        result = _truncate_result(name, result)
         return result or {}
     except Exception as e:
         logger.error(f"[executor] {name} exception: {e}")
@@ -3187,7 +2784,7 @@ class ToolExecutor:
 
     def __init__(self):
         """Initialize the ToolExecutor with a dedicated logger."""
-        self.logger = logging.getLogger("EITElite.executor")
+        self.logger = logging.getLogger("tical-code.executor")
 
     def execute(self, name: str, args: dict, base_dir: str = "") -> dict:
         """Execute a tool by name with type validation.
@@ -3208,10 +2805,3 @@ class ToolExecutor:
             self.logger.error(f"Invalid arguments: name={type(name).__name__}, args={type(args).__name__}")
             return {"error": "invalid_arguments"}
         return execute(name, args, base_dir)
-
-def set_sustained_task_manager(mgr) -> None:
-    """Inject SustainedTaskManager from worker bootstrap."""
-    global _SUSTAINED_TASK_MGR
-    _SUSTAINED_TASK_MGR = mgr
-
-

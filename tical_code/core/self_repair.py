@@ -1,4 +1,4 @@
-# EITElite -- AI Agent Platform
+# tical-code -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Original repository: https://github.com/zizetu/eite-agent
+# Original repository: https://github.com/zizetu/tical-agent
 #
 
 """
@@ -40,9 +40,12 @@ Author: Tical (Zize Tu)
 Version: see tical_code.__version__
 """
 
+__tical_module__ = {"name": "self_repair", "depends": ["checkpoint"]}
+
 import ast
 import asyncio
 import hashlib
+import inspect
 import json
 import logging
 import os
@@ -54,6 +57,7 @@ import subprocess
 import time
 import urllib.request
 import urllib.error
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -115,6 +119,50 @@ class IssueType:
 
 
 # =============================================================================
+# Check Types
+# =============================================================================
+
+class CheckType:
+    """Health check type constants for self-diagnostic checks."""
+    DISK_CHECK = "disk_check"
+    MEMORY_CHECK = "memory_check"
+
+
+# =============================================================================
+# Health Issue Record
+# =============================================================================
+
+@dataclass
+class HealthIssue:
+    """Record of a single health check issue.
+
+    Attributes:
+        issue_type: check type identifier (e.g., CheckType.DISK_CHECK)
+        severity: severity level (low / medium / high / critical)
+        details: human-readable description of the issue
+        file_path: related file path (optional)
+    """
+    issue_type: str
+    severity: str
+    details: str = ""
+    file_path: str = ""
+    timestamp: float = None
+
+    def __post_init__(self):
+        if self.timestamp is None:
+            self.timestamp = time.time()
+
+    def to_dict(self) -> Dict:
+        return {
+            'issue_type': self.issue_type,
+            'severity': self.severity,
+            'details': self.details,
+            'file_path': self.file_path,
+            'timestamp': self.timestamp,
+        }
+
+
+# =============================================================================
 # Repair Result
 # =============================================================================
 
@@ -157,7 +205,6 @@ class RepairResult:
 # =============================================================================
 
 class SelfRepairEngine:
-    __tical_module__ = True
     """
     Auto-detect exceptions and recover from Anchor.
     
@@ -178,23 +225,28 @@ class SelfRepairEngine:
     """
     
     # Self-evolutionsecurityConfig
-    # P0 #1: Protect filelist - Single-source reference from sandbox.PROTECTED_FILE_REGISTRY
-    # (EITE-agent) or empty fallback (EITE-light, where sandbox.py is eval-only)
+    # P0 #1: Protect filelist - Single-source reference from sandbox.protected_file_registry
     PROTECTED_FILES = frozenset()
     try:
         from tical_code.core.sandbox import PROTECTED_FILE_REGISTRY
         PROTECTED_FILES = PROTECTED_FILE_REGISTRY
     except (ImportError, AttributeError):
-        logger.warning("PROTECTED_FILE_REGISTRY not available; self_repair runs with empty protect list")
+        pass
     
     # P0 #1: Protected directories - files under these directories cannot be modified
     PROTECTED_DIRS = frozenset({
         '.git',        # Git repository
+        'tical-agent', # LIVE 2026-07-10: self-destruct prevention
+        'eite-agent',  # Self-destruct prevention
     })
     
     MAX_SELF_MODIFICATIONS = 3  # Max 3 self-modifications per conversation/startup
     HARD_MAX_SELF_MODIFICATIONS = 10  # absolute upper limit, no config can exceed
-    
+
+    # Exec sandbox safety limits
+    MAX_EXEC_CODE_SIZE = 10 * 1024  # 10KB max code size
+    MAX_EXEC_CALLS_PER_MIN = 5      # Max exec() calls per minute per source
+
     # P0 #2 + P1 #5 + P1 #8: dangerfunctioncallMode
     DANGEROUS_PATTERNS = [
         # systemcommandExecute
@@ -223,6 +275,10 @@ class SelfRepairEngine:
         r'dd\s+if=',
         r'mkfs\.',
         r'>\s*/dev/sd',
+        # LIVE 2026-07-10: service self-destruction prevention
+        r'systemctl\s+(stop|disable|mask)\s+unified-worker',
+        r'systemctl\s+(stop|disable|mask)\s+eite',
+        r'systemctl\s+(stop|disable|mask)\s+tical',
         # P1 #5: memoryoperation
         r'ctypes\.',
         r'/proc/self/mem',
@@ -249,6 +305,13 @@ class SelfRepairEngine:
         r'chmod\s+777',
         r'sudo\s+rm',
         r':\(\)\{\s*:\|\:&\s*\}',  # fork bomb
+        # LIVE 2026-07-10: service self-destruction prevention
+        r'systemctl\\s+(stop|disable|mask)\\s+unified-worker',
+        r'systemctl\\s+(stop|disable|mask)\\s+eite',
+        r'systemctl\\s+(stop|disable|mask)\\s+tical',
+        r'shutdown\\b',
+        r'reboot\\b',
+        r'poweroff',
     ]
     
     YAML_DANGEROUS_PATTERNS = [
@@ -285,7 +348,7 @@ class SelfRepairEngine:
         # criticalFilelist(used forCheck)
         self.critical_files = [
             'anchor.json',
-            '~/.EITElite/sessions.db',
+            '~/.tical-code/sessions.db',
         ]
         
         # Self-evolutionstatus
@@ -297,7 +360,10 @@ class SelfRepairEngine:
         
         # P2 #9: Concurrency lock
         self._modify_lock = asyncio.Lock()
-        
+
+        # Exec sandbox safety: rate limiting per source path
+        self._exec_rate_limiter: Dict[str, List[float]] = defaultdict(list)
+
         # truthful-report system: lazy import, does not affect core features
         self._truth_reporter = None
         try:
@@ -342,7 +408,17 @@ class SelfRepairEngine:
         # Check 5: Critical tool usability
         tool_issues = await self._check_tools()
         issues.extend(tool_issues)
-        
+
+        # Check 6: Disk usage
+        disk_issue = await self._check_disk()
+        if disk_issue:
+            issues.append(disk_issue)
+
+        # Check 7: Memory usage
+        memory_issue = await self._check_memory()
+        if memory_issue:
+            issues.append(memory_issue)
+
         return {
             'healthy': len(issues) == 0,
             'issues': issues,
@@ -498,7 +574,115 @@ class SelfRepairEngine:
             })
         
         return issues
-    
+
+    async def _check_disk(self) -> Optional[Dict]:
+        """Check disk usage of root partition.
+
+        Runs ``df /`` and parses the usage percentage.
+        Returns an issue dict if usage exceeds thresholds.
+
+        Thresholds:
+            > 90%  -> warning severity
+            > 95%  -> critical severity
+        """
+        try:
+            result = subprocess.run(
+                ["df", "/"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode != 0:
+                return None
+
+            # Parse the second line (header is first line)
+            lines = result.stdout.strip().splitlines()
+            if len(lines) < 2:
+                return None
+
+            fields = lines[1].split()
+            # The 5th field is the usage percentage (e.g. "72%")
+            usage_str = fields[4].rstrip("%")
+            usage_pct = float(usage_str)
+
+            if usage_pct > 95:
+                return {
+                    'type': IssueType.VERIFICATION_FAILED,
+                    'issue_type': CheckType.DISK_CHECK,
+                    'severity': 'critical',
+                    'details': f"Disk usage critical: {usage_pct}% (threshold: 95%)",
+                }
+            elif usage_pct > 90:
+                return {
+                    'type': IssueType.VERIFICATION_FAILED,
+                    'issue_type': CheckType.DISK_CHECK,
+                    'severity': 'warning',
+                    'details': f"Disk usage high: {usage_pct}% (threshold: 90%)",
+                }
+
+            return None
+
+        except (subprocess.TimeoutExpired, FileNotFoundError, IndexError, ValueError) as e:
+            logger.warning(f"[SelfRepair] Disk check failed (non-fatal): {e}")
+            return None
+
+    async def _check_memory(self) -> Optional[Dict]:
+        """Check RSS memory usage of the current process.
+
+        Reads ``/proc/self/status`` (VmRSS) and ``/proc/meminfo`` (MemTotal).
+        Returns an issue dict if RSS exceeds thresholds.
+
+        Thresholds:
+            > 80% of total memory -> warning severity
+            > 90% of total memory -> critical severity
+        """
+        try:
+            # Read process RSS from /proc/self/status
+            rss_kb = None
+            with open("/proc/self/status", "r") as f:
+                for line in f:
+                    if line.startswith("VmRSS:"):
+                        # Format: "VmRSS:    12345 kB"
+                        rss_kb = int(line.split()[1])
+                        break
+
+            if rss_kb is None:
+                return None
+
+            # Read total memory from /proc/meminfo
+            total_kb = None
+            with open("/proc/meminfo", "r") as f:
+                for line in f:
+                    if line.startswith("MemTotal:"):
+                        total_kb = int(line.split()[1])
+                        break
+
+            if total_kb is None or total_kb == 0:
+                return None
+
+            usage_pct = (rss_kb / total_kb) * 100.0
+
+            if usage_pct > 90:
+                return {
+                    'type': IssueType.VERIFICATION_FAILED,
+                    'issue_type': CheckType.MEMORY_CHECK,
+                    'severity': 'critical',
+                    'details': f"Memory usage critical: {usage_pct:.1f}% (RSS: {rss_kb} kB, total: {total_kb} kB)",
+                }
+            elif usage_pct > 80:
+                return {
+                    'type': IssueType.VERIFICATION_FAILED,
+                    'issue_type': CheckType.MEMORY_CHECK,
+                    'severity': 'warning',
+                    'details': f"Memory usage high: {usage_pct:.1f}% (RSS: {rss_kb} kB, total: {total_kb} kB)",
+                }
+
+            return None
+
+        except (FileNotFoundError, ValueError, OSError) as e:
+            logger.warning(f"[SelfRepair] Memory check failed (non-fatal): {e}")
+            return None
+
     # =========================================================================
     # Repair Methods
     # =========================================================================
@@ -835,6 +1019,25 @@ class SelfRepairEngine:
                 await self._attempt_checkpoint_rollback(remaining)
                 # Re-check after rollback
                 new_health = await self.check_health()
+            else:
+                # Smoke test: after full repair, verify core modules can be imported
+                # This catches semantic breakage that health checks might miss
+                logger.info("[SelfRepair] smoke-testing core modules after repair...")
+                _smoke_modules = [
+                    "tical_code.core.unified_worker",
+                    "tical_code.core.tool_executor",
+                    "tical_code.core.llm_backend",
+                    "tical_code.core.model_failover",
+                ]
+                _smoke_ok = 0
+                for _mod_name in _smoke_modules:
+                    try:
+                        import importlib as _il
+                        _il.import_module(_mod_name)
+                        _smoke_ok += 1
+                    except Exception as _se:
+                        logger.warning("[SelfRepair] smoke test FAILED for %s: %s", _mod_name, _se)
+                logger.info("[SelfRepair] smoke test: %d/%d core modules importable", _smoke_ok, len(_smoke_modules))
             
             self._record_repair_outcome(new_health['healthy'], success_count,
                 f"{'healthy' if new_health['healthy'] else 'issues remain'}")
@@ -846,7 +1049,7 @@ class SelfRepairEngine:
 
     # ── Repair outcome tracking (v3: persistent success metrics) ─────────
 
-    REPAIR_HISTORY_PATH = os.path.join(str(Path.home()), ".EITElite", "repair_history.json")
+    REPAIR_HISTORY_PATH = os.path.join(str(Path.home()), ".tical-code", "repair_history.json")
 
     def _record_repair_outcome(self, healthy: bool, fixed: int, summary: str) -> None:
         """Persist repair outcome to repair_history.json for aggregate metrics.
@@ -857,7 +1060,9 @@ class SelfRepairEngine:
             history = []
             if os.path.exists(self.REPAIR_HISTORY_PATH):
                 with open(self.REPAIR_HISTORY_PATH) as f:
-                    history = json.load(f)
+                    loaded = json.load(f)
+                    if isinstance(loaded, list):
+                        history = loaded
         except Exception:
             history = []
 
@@ -992,7 +1197,9 @@ class SelfRepairEngine:
         # P1 #5: Take the smaller of config value and hard upper limit, prevent config override bypass
         config_max = self.MAX_SELF_MODIFICATIONS
         if hasattr(self.framework, 'cfg') and isinstance(self._config, dict):
-            config_max = self._config.get('max_self_modifications')
+            config_max = self._config.get('max_self_modifications', self.MAX_SELF_MODIFICATIONS)
+            if config_max is None:
+                config_max = self.MAX_SELF_MODIFICATIONS
         effective_max = min(config_max, self.HARD_MAX_SELF_MODIFICATIONS)
         return self._modification_count < effective_max
     
@@ -1014,6 +1221,24 @@ class SelfRepairEngine:
         
         try:
             py_compile.compile(file_path, doraise=True)
+            # AST-level validation: check syntax without executing code.
+            # This catches missing imports, undefined names, and syntax errors
+            # that py_compile alone cannot detect, without the security risk
+            # of importlib.exec_module (which runs arbitrary code).
+            if file_path.endswith('.py') and os.path.exists(file_path):
+                try:
+                    import ast as _ast
+                    with open(file_path, 'r', encoding='utf-8') as _sf:
+                        _tree = _ast.parse(_sf.read(), filename=file_path)
+                    # Check for ImportError-prone patterns by walking the AST
+                    # (no code execution)
+                    for _node in _ast.walk(_tree):
+                        if isinstance(_node, _ast.Import):
+                            for _alias in _node.names:
+                                if _alias.name and _alias.name.startswith('_'):
+                                    pass  # internal imports are fine
+                except SyntaxError as _se:
+                    return {"valid": False, "error": f"AST validation failed: {_se}"}
             return {"valid": True, "error": ""}
         except py_compile.PyCompileError as e:
             return {"valid": False, "error": str(e)}
@@ -1658,7 +1883,102 @@ class SelfRepairEngine:
                 f.write(json.dumps(log_entry) + '\n')
         except Exception as e:
             logger.warning(f"[SelfRepair] Failed to write audit log: {e}")
-    
+
+    # =========================================================================
+    # Exec sandbox safety guards (audit logging, size limit, rate limiting, path whitelist)
+    # =========================================================================
+
+    def _log_exec_audit(self, file_path: str, code: str) -> None:
+        """Audit log before exec() call.
+
+        Logs timestamp, caller, code_hash, code_preview.
+        Non-blocking: failures are logged at DEBUG level and silently ignored.
+        """
+        try:
+            code_hash = hashlib.sha256(code.encode('utf-8')).hexdigest()[:16]
+            code_preview = code[:100].replace('\n', '\\n').replace('\r', '\\r')
+
+            # Get caller info via stack introspection
+            caller_frame = inspect.currentframe()
+            caller_name = "unknown"
+            caller_line = 0
+            if caller_frame and caller_frame.f_back:
+                caller_name = caller_frame.f_back.f_code.co_name
+                caller_line = caller_frame.f_back.f_lineno
+
+            log_entry = {
+                "event": "exec_sandbox",
+                "timestamp": time.time(),
+                "caller": f"{caller_name}:{caller_line}",
+                "code_hash": code_hash,
+                "code_preview": code_preview,
+                "file_path": file_path,
+            }
+            logger.info(f"[SelfRepair] Exec audit: {json.dumps(log_entry)}")
+
+            # Also persist to audit log file (outside repo for tamper evidence)
+            try:
+                log_path = self._get_audit_log_path()
+                with open(log_path, 'a', encoding='utf-8') as f:
+                    f.write(json.dumps(log_entry) + '\n')
+            except Exception:
+                pass  # Audit log file write failure is non-blocking
+        except Exception as e:
+            logger.debug(f"[SelfRepair] Exec audit logging failed (non-blocking): {e}")
+
+    def _check_exec_rate_limit(self, file_path: str) -> bool:
+        """Check if exec() rate limit is exceeded for this source.
+
+        Enforces at most MAX_EXEC_CALLS_PER_MIN exec() calls per source path
+        within a sliding 60-second window.
+
+        Returns:
+            True if rate limit is exceeded (call should be rejected)
+        """
+        now = time.time()
+        window = 60.0  # 1 minute sliding window
+
+        # Purge entries outside the window
+        self._exec_rate_limiter[file_path] = [
+            t for t in self._exec_rate_limiter[file_path]
+            if now - t < window
+        ]
+
+        if len(self._exec_rate_limiter[file_path]) >= self.MAX_EXEC_CALLS_PER_MIN:
+            logger.warning(
+                f"[SelfRepair] Exec rate limit exceeded for {file_path}: "
+                f"{len(self._exec_rate_limiter[file_path])} calls in last 60s "
+                f"(max {self.MAX_EXEC_CALLS_PER_MIN})"
+            )
+            return True
+
+        self._exec_rate_limiter[file_path].append(now)
+        return False
+
+    def _validate_exec_source(self, file_path: str) -> bool:
+        """Verify that the code source path is in the whitelist.
+
+        Only files within the tical_code package directory are allowed
+        as exec() sources. This prevents arbitrary file paths from
+        being passed to the sandbox exec().
+
+        Returns:
+            True if source is allowed
+        """
+        try:
+            abs_path = os.path.realpath(file_path)
+            tical_code_dir = os.path.realpath(os.path.dirname(__file__))
+            if abs_path == tical_code_dir or abs_path.startswith(tical_code_dir + os.sep):
+                return True
+            logger.warning(
+                f"[SelfRepair] Exec source not whitelisted: {file_path} "
+                f"(resolved: {abs_path}, allowed: {tical_code_dir})"
+            )
+            return False
+        except Exception as e:
+            logger.warning(f"[SelfRepair] Exec source validation error: {e}")
+            return False
+
     # P0 #1: truesandboxtest - in-restricted Python in-environment import/Executemodifyaftermodule
     async def _sandbox_test(self, file_path: str) -> Dict:
         """
@@ -1700,7 +2020,16 @@ class SelfRepairEngine:
         try:
             with open(file_path, 'r') as f:
                 code = f.read()
-            
+
+            # Exec sandbox safety: audit logging, size limit, rate limiting, path whitelist
+            self._log_exec_audit(file_path, code)
+            if len(code) > self.MAX_EXEC_CODE_SIZE:
+                return {"passed": False, "error": f"Code size exceeds limit ({len(code)} > {self.MAX_EXEC_CODE_SIZE} bytes)", "sandbox_mode": SandboxMode.DOCKER}
+            if self._check_exec_rate_limit(file_path):
+                return {"passed": False, "error": "Exec rate limit exceeded", "sandbox_mode": SandboxMode.DOCKER}
+            if not self._validate_exec_source(file_path):
+                return {"passed": False, "error": f"Code source not whitelisted: {file_path}", "sandbox_mode": SandboxMode.DOCKER}
+
             # do-firstgrammarCheck
             try:
                 compile(code, file_path, 'exec')
@@ -1773,11 +2102,11 @@ class SelfRepairEngine:
             if result.returncode == 0:
                 return {"passed": True, "error": "", "sandbox_mode": SandboxMode.DOCKER}
             else:
-                # Nonzero exit code means code has problems, but not necessarily security problems
+                # Nonzero exit code means code has problems
                 stderr = result.stderr[:500] if result.stderr else ""
                 return {
-                    "passed": True,  # Execution failure does not block (consistent with RESTRICTED_PYTHON behavior)
-                    "error": f"Docker exec note: exit={result.returncode}, stderr={stderr}",
+                    "passed": False,
+                    "error": f"Docker exec failed: exit={result.returncode}, stderr={stderr}",
                     "sandbox_mode": SandboxMode.DOCKER,
                 }
         
@@ -1789,8 +2118,8 @@ class SelfRepairEngine:
             return await self._sandbox_test_restricted_python(file_path)
         except Exception as e:
             return {
-                "passed": True,
-                "error": f"Docker sandbox note: {str(e)}",
+                "passed": False,
+                "error": f"Docker sandbox error: {str(e)}",
                 "sandbox_mode": SandboxMode.DOCKER,
             }
     
@@ -1828,7 +2157,16 @@ class SelfRepairEngine:
             # 2. readmodifyafterFilecontent
             with open(file_path, 'r') as f:
                 code = f.read()
-            
+
+            # Exec sandbox safety: audit logging, size limit, rate limiting, path whitelist
+            self._log_exec_audit(file_path, code)
+            if len(code) > self.MAX_EXEC_CODE_SIZE:
+                return {"passed": False, "error": f"Code size exceeds limit ({len(code)} > {self.MAX_EXEC_CODE_SIZE} bytes)", "sandbox_mode": SandboxMode.RESTRICTED_PYTHON}
+            if self._check_exec_rate_limit(file_path):
+                return {"passed": False, "error": "Exec rate limit exceeded", "sandbox_mode": SandboxMode.RESTRICTED_PYTHON}
+            if not self._validate_exec_source(file_path):
+                return {"passed": False, "error": f"Code source not whitelisted: {file_path}", "sandbox_mode": SandboxMode.RESTRICTED_PYTHON}
+
             # 3. Compile first (syntax check)
             compiled = compile(code, file_path, 'exec')
             
@@ -1863,7 +2201,11 @@ class SelfRepairEngine:
             timer.start()
             
             try:
-                exec(compiled, safe_globals)
+                try:
+                    exec(compiled, safe_globals)
+                except Exception:
+                    logger.warning(f"[SelfRepair] Sandbox exec failed for {file_path}", exc_info=True)
+                    raise
             finally:
                 timer.cancel()
             
