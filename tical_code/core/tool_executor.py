@@ -3172,3 +3172,10 @@ class ToolExecutor:
             self.logger.error(f"Invalid arguments: name={type(name).__name__}, args={type(args).__name__}")
             return {"error": "invalid_arguments"}
         return execute(name, args, base_dir)
+
+def set_sustained_task_manager(mgr) -> None:
+    """Inject SustainedTaskManager from worker bootstrap."""
+    global _SUSTAINED_TASK_MGR
+    _SUSTAINED_TASK_MGR = mgr
+
+

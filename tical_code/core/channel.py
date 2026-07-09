@@ -428,6 +428,13 @@ class TelegramChannel(Channel):
             return False
 
     def send(self, response: Response) -> bool:
+        # LIVE 2026-07-09j: never ship fence-spam / garbage CSS dumps to Telegram
+        try:
+            from tical_code.core.response_formatter import sanitize_outbound_reply
+            if response is not None and getattr(response, "content", None):
+                response.content = sanitize_outbound_reply(response.content)
+        except Exception:
+            pass
         try:
             data = json.dumps({"chat_id": response.chat_id,
                                "text": response.content[:4000]}).encode()

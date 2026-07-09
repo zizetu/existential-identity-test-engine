@@ -260,7 +260,7 @@ TOOL_SCHEMAS_CLEAN = TOOL_SCHEMAS  # Use full schema with bash_execute
 # SECTION: Tool Call Limits
 # ─────────────────────────────────────────────────────────────
 # Tool call limits
-MAX_TOOL_ITERATIONS = 24
+MAX_TOOL_ITERATIONS = 6  # LIVE 2026-07-09i: hard cap tool storms on chat
 SOFT_HINT_AT = 10   # gentle nudge to wrap up
 HARD_STOP_AT = 18   # force stop
 
@@ -511,6 +511,13 @@ class Worker:
         if SustainedTaskManager is not None:
             self._sustained_task_mgr = SustainedTaskManager()
             self.logger.info("SustainedTaskManager initialized")
+            # LIVE WIRE INJECT 2026-07-09f
+            try:
+                from tical_code.core.tool_executor import set_sustained_task_manager
+                set_sustained_task_manager(self._sustained_task_mgr)
+            except Exception as _inj_s:
+                logger.warning("sustained inject failed: %s", _inj_s)
+
         else:
             self._sustained_task_mgr = None
             self.logger.warning("SustainedTaskManager unavailable")
@@ -521,6 +528,12 @@ class Worker:
                 db_path=self._data_dir + "/self_evolve.db"
             )
             self.logger.info("SelfEvolveEngine initialized")
+            # LIVE WIRE INJECT 2026-07-09f
+            try:
+                from tical_code.core.tool_executor import set_self_evolve_engine
+                set_self_evolve_engine(self._self_evolve)
+            except Exception as _inj_e:
+                logger.warning("self_evolve inject failed: %s", _inj_e)
         else:
             self._self_evolve = None
             self.logger.warning("SelfEvolveEngine unavailable")
@@ -1487,7 +1500,7 @@ class AsyncWorker:
 
         # Hard timeout guards - prevent worker death when LLM API hangs
         self._llm_hard_timeout = 120   # max seconds for a single LLM call
-        self._process_hard_timeout = 300  # EITE 2026-07-09e  # max seconds for processing one message
+        self._process_hard_timeout = 60  # LIVE 2026-07-09i: 60s max per turn, never freeze chat
         self._session_stuck_threshold = 300  # kill session task if stuck this long
         self._session_queues: dict[str, asyncio.Queue] = {}
         self._session_tasks: dict[str, asyncio.Task] = {}
@@ -1848,12 +1861,19 @@ class AsyncWorker:
                 ch, msg = await asyncio.wait_for(
                     queue.get(), timeout=self._session_timeout,
                 )
-                # EITE DRAIN_QUEUE 2026-07-09e: keep only latest pending message
+                # LIVE 2026-07-09i: drain to latest BEFORE processing (never race-consume messages)
+                dropped = 0
                 while True:
                     try:
                         ch, msg = queue.get_nowait()
+                        dropped += 1
                     except Exception:
                         break
+                if dropped:
+                    self.logger.info(
+                        "Drained %d older queued messages for session %s - processing latest only",
+                        dropped, session_id,
+                    )
                 try:
                     await asyncio.wait_for(
                         self._process_message(session_id, ch, msg),
@@ -1862,9 +1882,18 @@ class AsyncWorker:
                 except asyncio.TimeoutError:
                     self.logger.error(
                         "Session %s message processing hard timeout (%ds) - "
-                        "dropping stuck message to recover",
+                        "recovering for next message",
                         session_id, self._process_hard_timeout,
                     )
+                    try:
+                        channel.send(Response(
+                            content="[async-worker] stopped a stuck long task (timeout). Send a shorter order (one step).",
+                            target=getattr(msg, "sender", "unknown"),
+                            source=getattr(msg, "source", "unknown"),
+                            chat_id=getattr(msg, "chat_id", None),
+                        ))
+                    except Exception:
+                        pass
                     try:
                         channel.send(Response(
                             content="[async-worker] processing timeout - request dropped, worker recovering",
@@ -1961,7 +1990,12 @@ class AsyncWorker:
         _raw = (msg.content or "").strip()
         _no_tool = (
             ("\u4e0d\u8981\u7528\u5de5\u5177" in _raw) or ("\u4e0d\u7528\u5de5\u5177" in _raw)
-            or (_raw in ("\u56de\u7b54", "\u56de\u590d", "answer", "Answer") or _raw.startswith("\u56de\u7b54"))
+            or (_raw in ("\u56de\u7b54", "\u56de\u590d", "answer", "Answer", "ANSWER", "\u505c",
+                    "\u53d6\u6d88", "stop", "STOP", "cancel", "\u6c47\u62a5", "\u72b6\u6001",
+                    "status", "Status", "STATUS", "\u505a\u5b8c\u6ca1\u6709", "\u6b63\u5e38\u4e48",
+                    "\u6b63\u5e38\u5417")
+                or _raw.startswith("\u56de\u7b54") or _raw.startswith("\u505c")
+                or _raw.startswith("\u6c47\u62a5"))
             or (("\u4e00\u53e5\u8bdd" in _raw or "\u4f60\u662f\u8c01" in _raw or "\u6211\u662f\u8c01" in _raw
                  or "\u8bb0\u5f97" in _raw or "\u5728\u5417" in _raw)
                 and len(_raw) <= 120
@@ -2000,6 +2034,14 @@ class AsyncWorker:
                     break
             except Exception:
                 pass
+            # LIVE 2026-07-09g FORCE CAP: never burn full budget on one chat turn
+            if tool_iterations >= 5:
+                self.logger.info("Tool cap reached for session %s at %s", session_id, tool_iterations)
+                try:
+                    force_text = True
+                except Exception:
+                    pass
+                break
 
             # Progress visibility so long tasks do not look frozen.
             try:
