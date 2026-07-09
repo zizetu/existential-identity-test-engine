@@ -453,7 +453,10 @@ class SubAgentManager:
         # Get parent session ID
         parent_session_id = ""
         if self.framework is not None and hasattr(self.framework, '_get_session_id'):
-            parent_session_id = self.framework._get_session_id()
+            try:
+                parent_session_id = self.framework._get_session_id()
+            except TypeError:
+                parent_session_id = "subagent"
         
         # Create task
         task = SubAgentTask(

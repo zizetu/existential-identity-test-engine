@@ -1217,6 +1217,42 @@ TOOL_SCHEMAS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "task_create",
+            "description": "Create a persistent multi-step task that survives restarts",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "goal": {"type": "string", "description": "Task goal"},
+                    "context": {"type": "string", "description": "Task context"}
+                },
+                "required": ["goal"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "task_list",
+            "description": "List active/pending persistent tasks",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "description": "Max results"}
+                }
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "evolve_stats",
+            "description": "Self-evolution statistics - error patterns and usage insights",
+            "parameters": {"type": "object", "properties": {}}
+        }
+    }
 ]
 
 # ============ TOOL_SCHEMAS_CLEAN (alias - no dot-replace needed; all names already use underscores) ============
