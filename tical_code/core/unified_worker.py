@@ -259,7 +259,7 @@ TOOL_SCHEMAS_CLEAN = TOOL_SCHEMAS  # Use full schema with bash_execute
 # SECTION: Tool Call Limits
 # ─────────────────────────────────────────────────────────────
 # Tool call limits
-MAX_TOOL_ITERATIONS = 24
+MAX_TOOL_ITERATIONS = 6  # hard cap tool storms on chat
 SOFT_HINT_AT = 10   # gentle nudge to wrap up
 HARD_STOP_AT = 18   # force stop
 
@@ -1486,7 +1486,7 @@ class AsyncWorker:
 
         # Hard timeout guards - prevent worker death when LLM API hangs
         self._llm_hard_timeout = 120   # max seconds for a single LLM call
-        self._process_hard_timeout = 180  # max seconds for processing one message
+        self._process_hard_timeout = 60  # 60s max per turn, never freeze chat
         self._session_stuck_threshold = 300  # kill session task if stuck this long
         self._session_queues: dict[str, asyncio.Queue] = {}
         self._session_tasks: dict[str, asyncio.Task] = {}
@@ -1827,6 +1827,19 @@ class AsyncWorker:
                 ch, msg = await asyncio.wait_for(
                     queue.get(), timeout=self._session_timeout,
                 )
+                # Drain to latest BEFORE processing
+                dropped = 0
+                while True:
+                    try:
+                        ch, msg = queue.get_nowait()
+                        dropped += 1
+                    except Exception:
+                        break
+                if dropped:
+                    self.logger.info(
+                        "Drained %d older queued messages for session %s - processing latest only",
+                        dropped, session_id,
+                    )
                 try:
                     await asyncio.wait_for(
                         self._process_message(session_id, ch, msg),
@@ -1924,6 +1937,34 @@ class AsyncWorker:
 
         tool_iterations = 0
         force_text = False
+        # Short status/report/simple answers: skip tools entirely (preserve speed)
+        try:
+            _raw = str(getattr(msg, "text", msg) if not isinstance(msg, str) else msg)
+        except Exception:
+            _raw = ""
+        if _raw:
+            _short = len(_raw) <= 15
+            _status = any(k in _raw for k in ("status", "report", "ping", "help"))
+            if _short or _status:
+                text_resp = await self._async_llm_call(messages, tools=[])
+                if text_resp and isinstance(text_resp, dict):
+                    response = text_resp
+                    content = response.get("content", "").strip()
+                    if not content:
+                        content = "ok"
+                    channel.send(Response(
+                        content=content,
+                        target=msg.sender,
+                        source=msg.source,
+                        chat_id=msg.chat_id,
+                    ))
+                    messages.append({"role": "assistant", "content": content})
+                    try:
+                        _sid = self.sessions.get_session_id(msg.source, str(msg.chat_id))
+                        self.sessions.save_messages(_sid, messages[-2:])
+                    except Exception:
+                        pass
+                    return
         while response.get("tool_calls") and tool_iterations < MAX_TOOL_ITERATIONS:
             tool_iterations += 1
 
@@ -2104,6 +2145,15 @@ class AsyncWorker:
                 formatted = format_final_reply(content)
             except Exception:
                 formatted = content
+            # Block stall/garbage phrases on the wire
+            try:
+                _ft = (formatted or "").strip()
+                if _ft.count("```") >= 4 or (len(_ft) < 5 and _ft.strip()):
+                    formatted = format_final_reply(
+                        "## Status\n- ready\n- reply to a short concrete order"
+                    )
+            except Exception:
+                pass
 
             channel.send(Response(
                 content=formatted,

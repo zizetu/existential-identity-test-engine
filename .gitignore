@@ -28,3 +28,5 @@ eite_agent.egg-info/
 
 # Build artifacts
 build/
+
+*.bak.*
