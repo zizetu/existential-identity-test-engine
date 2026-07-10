@@ -1141,3 +1141,34 @@ def _init_metrics(worker: Any, cfg: dict):
         logger.warning("MetricsCollector not wired into tool_executor: %s", e)
     return collector
 
+
+# =============================================================================
+# EITE Constitutional Kernel (full profile)
+# =============================================================================
+
+@register(
+    name="eite_kernel",
+    attr_name="_eite",
+    config_key="eite_kernel",
+    default_enabled=False,
+    description=(
+        "EITE Constitutional Identity Kernel: 5 immutable axioms projection-guard. "
+        "Non-blocking: injects reflection on dissonance. profile=full only."
+    ),
+    profile="full",
+)
+def _init_eite_kernel(worker: Any, cfg: dict):
+    try:
+        from tical_code.core.eite_kernel import build_eite_kernel
+    except ImportError:
+        return None
+    w = cfg.get("workspace", ".")
+    dim = cfg.get("modules", {}).get("eite_dim", 64) if isinstance(cfg, dict) else 64
+    try:
+        kernel = build_eite_kernel(workspace=w, dim=dim)
+        if not kernel.initialize():
+            return None
+        return kernel
+    except Exception:
+        return None
+

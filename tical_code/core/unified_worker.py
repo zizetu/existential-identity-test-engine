@@ -852,6 +852,28 @@ class Worker:
         logger.info("Signal handlers registered (SIGTERM/SIGINT → save checkpoint + snapshot + death log + exit)")
 
     # ─────────────────────────────────────────────────────────────
+    # SECTION: EITE Vectorizer (lightweight text→vector, no deps)
+    # ─────────────────────────────────────────────────────────────
+    def _eite_text_to_vector(self, text: str):
+        import hashlib, struct, numpy as np
+        dim = 64
+        if hasattr(self, '_eite') and self._eite and hasattr(self._eite, 'dim'):
+            dim = self._eite.dim
+        if not text or not text.strip():
+            rng = np.random.RandomState(42)
+            v = rng.randn(dim).astype(np.float64); v /= np.linalg.norm(v); return v
+        tokens = []
+        for word in (text or "").lower().split():
+            clean = "".join(c for c in word if c.isalnum())[:12]
+            if clean and len(clean) > 1: tokens.append(clean)
+        if not tokens: tokens = ["__empty__"]
+        result = np.zeros(dim, dtype=np.float64)
+        for i, token in enumerate(set(tokens)):
+            seed = struct.unpack("q", hashlib.sha256(f"{token}_{i}".encode()).digest()[:8])[0] % (2**31)
+            rng = np.random.RandomState(seed); result += rng.randn(dim).astype(np.float64)
+        norm = np.linalg.norm(result); return result / norm if norm > 1e-12 else result
+
+    # ─────────────────────────────────────────────────────────────
     # SECTION: Doom Loop Recovery Callbacks (Fix 1)
     # ─────────────────────────────────────────────────────────────
     def _register_doom_loop_recovery_callbacks(self) -> None:
@@ -1832,6 +1854,16 @@ class AsyncWorker:
                         self._process_message(session_id, ch, msg),
                         timeout=self._process_hard_timeout,
                     )
+                    # ===== EITE Hook 2: post-reply recording =====
+                    if hasattr(self, '_eite') and self._eite and self._eite.is_initialized:
+                        try:
+                            impact_vec = self._eite_text_to_vector(msg.content)
+                            self._eite.record_decision(
+                                context=msg.content[:200], tool_name="reply",
+                                impact_vector=impact_vec, accepted=True,
+                                justification="session_reply")
+                        except Exception: pass
+                    # ==============================================
                 except asyncio.TimeoutError:
                     self.logger.error(
                         "Session %s message processing hard timeout (%ds) - "
@@ -1891,6 +1923,35 @@ class AsyncWorker:
         # on message[0], and without it the AI has no persona context.
         if not messages or messages[0].get("role") != "system":
             messages.insert(0, {"role": "system", "content": self.system_prompt})
+
+        # ===== Pre-LLM Module Enrichment (non-blocking, try/except all) =====
+        _enrichments = []
+
+        if hasattr(self, 'anchor_manager') and self.anchor_manager:
+            try:
+                _ctx = self.anchor_manager.get_context_prompt()
+                if _ctx: _enrichments.append(_ctx)
+            except Exception: pass
+
+        if hasattr(self, 'axioms') and self.axioms:
+            try:
+                _ann = self.axioms.annotate_decision(decision=msg.content[:500], context=session_id)
+                if _ann:
+                    _lens = "\n".join(str(a) for a in _ann[:3])
+                    if _lens: _enrichments.append(f"[AXIOM LENSES]\n{_lens}")
+            except Exception: pass
+
+        if hasattr(self, '_eite') and self._eite and self._eite.is_initialized:
+            try:
+                impact_vec = self._eite_text_to_vector(msg.content)
+                ok, reason = self._eite.validate_tool("llm_call", impact_vec)
+                if not ok: _enrichments.append(f"[EITE: {reason}]")
+            except Exception: pass
+
+        if _enrichments:
+            messages[0]["content"] = messages[0].get("content", "") + "\n\n" + "\n\n".join(_enrichments)
+        # =====================================================================
+
         # Build user message — include media (images, file content, transcripts)
         if hasattr(msg, 'media_data') and msg.media_data:
             content_parts = [{"type": "text", "text": msg.content}]
