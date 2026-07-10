@@ -1924,6 +1924,13 @@ class AsyncWorker:
 
         tool_iterations = 0
         force_text = False
+        # Parse Hermes XML tool calls from content (e.g. <tool_call>check_self</tool_call>)
+        # and inject them as structured tool_calls so the loop below executes them.
+        _hermes_tc = self._parse_hermes_tool_calls(response.get("content", ""))
+        if _hermes_tc:
+            self.logger.info("[RPLY] parsed %d Hermes XML tool call(s) from content", len(_hermes_tc))
+            existing = response.get("tool_calls") or []
+            response["tool_calls"] = existing + _hermes_tc
         while response.get("tool_calls") and tool_iterations < MAX_TOOL_ITERATIONS:
             tool_iterations += 1
 
@@ -2179,6 +2186,49 @@ class AsyncWorker:
                 "reasoning_content": getattr(result, "reasoning_content", ""),
             }
         return result
+
+    def _parse_hermes_tool_calls(self, content: str) -> list:
+        """Parse Hermes XML tool calls from LLM content text.
+
+        Hermes models sometimes output tool calls as inline XML instead of
+        structured JSON tool_calls.  The format is:
+
+            <tool_call>tool_name
+            <arg_key>param_name</arg_key>
+            <arg_value>param_value</arg_value>
+            </tool_call>
+
+        Returns a list of OpenAI-format tool-call dicts suitable for the
+        existing tool-execution loop, or [] if nothing to parse.
+        """
+        import re as _re, json, uuid
+        if not content or "<tool_call" not in content:
+            return []
+        _parsed = []
+        for _block in _re.finditer(r'<tool_call>(.*?)</tool_call>', content, _re.DOTALL):
+            _inner = _block.group(1).strip()
+            if not _inner:
+                continue
+            _lines = _inner.split('\n')
+            _name = _lines[0].strip().split()[0] if _lines else ""
+            if not _name:
+                continue
+            _args = {}
+            for _kv in _re.finditer(r'<arg_key>(.*?)</arg_key>\s*<arg_value>(.*?)</arg_value>', _inner, _re.DOTALL):
+                _k = _kv.group(1).strip()
+                _v = _kv.group(2).strip()
+                if _k:
+                    _args[_k] = _v
+            _arguments_json = json.dumps(_args)
+            _parsed.append({
+                "id": f"call_hermes_{uuid.uuid4().hex[:12]}",
+                "type": "function",
+                "function": {
+                    "name": _name,
+                    "arguments": _arguments_json,
+                },
+            })
+        return _parsed
 
     async def _kill_stuck_sessions(self):
         """Detect and kill session tasks that have been stuck too long.
