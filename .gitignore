@@ -35,3 +35,6 @@ config.local.*
 
 credentials*
 *.pem
+
+.tical_mod_count.json
+_test_safe_modify*

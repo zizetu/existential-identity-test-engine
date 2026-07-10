@@ -430,7 +430,7 @@ class SelfRepairEngine:
         try:
             # Get identity from framework - may be .identity attr or cfg['name']
             identity = getattr(self.framework, 'identity', None)
-            name = self._config.get('name', '') if isinstance(self._config, dict) else ''
+            name = self._config.get('name', '') if isinstance(self._config, dict) else getattr(self._config, 'name', '')
             
             if not identity and not name:
                 return {
@@ -1646,11 +1646,22 @@ class SelfRepairEngine:
         """
         # 1. convert-toabsolute-path
         abs_path = os.path.realpath(file_path)
-        # 2. Get repository root directory
+        # 2. Check extra-allowed paths first (ticalcode, .tical-code, etc.)
+        # LIVE 2026-07-10: sync with tool_executor._EXTRA_ALLOWED_PATH_PREFIXES
+        _extra_allowed = [
+            os.path.abspath(os.path.expanduser("~/.tical-code")),
+            os.path.abspath(os.path.expanduser("~/ticalcode")),
+            "/tmp",
+        ]
+        _extra_allowed_paths = [os.path.abspath(p) for p in _extra_allowed]
+        for _pref in _extra_allowed_paths:
+            if abs_path == _pref or abs_path.startswith(_pref + os.sep):
+                return abs_path
+        # 3. Get repository root directory
         repo_root = self._get_repo_root()
-        # 3. Ensure path is within repository
+        # 4. Ensure path is within repository
         if not abs_path.startswith(os.path.realpath(repo_root)):
-            raise ValueError(f"Path traversal detected: {file_path} is outside repo root")
+            raise ValueError(f"Path traversal detected: {file_path} is outside repo root ({repo_root})")
         # 4. ensureno .. Component
         if '..' in os.path.normpath(file_path).split(os.sep):
             raise ValueError(f"Path traversal detected: {file_path} contains '..'")
@@ -2383,7 +2394,17 @@ class SelfRepairEngine:
         require_human_approval: bool,
     ) -> Dict:
         """Inner implementation of safe_modify, called under the concurrency lock."""
-        file_path = self._validate_file_path(file_path)  # P0-3: Path traversal protection
+        try:
+            file_path = self._validate_file_path(file_path)  # P0-3: Path traversal protection
+        except ValueError as _ve:
+            return {
+                "success": False,
+                "commit_hash": "",
+                "error": str(_ve),
+                "rolled_back": False,
+                "warnings": [],
+                "sandbox_mode": self.sandbox_mode,
+            }
         warnings = []
         
         # 1. CheckProtect file
