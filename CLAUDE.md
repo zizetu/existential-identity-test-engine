@@ -21,11 +21,8 @@ Version: 0.1.1 — AI Agent Evaluation Framework
 - `axioms.py` — Physics axioms as cognition lenses.
 - `llm_backend.py` — LLM client abstraction (OpenAI-compatible, Gemini, MiMo).
 - `model_failover.py` — Session-affinity LRU failover with circuit-breaker health states.
-- `mimo_free.py` — MiMo Free channel provider; per-worker fingerprint + JWT auth.
-- `mimo_free_tool_adapter.py` — Maps MiMo model tool_call names/params to standard names.
 - `context_compactor.py` — LLM self-summarization compaction at 80% token budget threshold.
 - `tool_executor.py` — Tool execution with parallel batch processing.
-- `tool_executor_clean.py` — Clean-room implementation of tool executor for evaluation contexts.
 - `permission_checker.py` — 5-tier permission system.
 - `provider_registry.py` — Git-managed provider configuration from config/providers.json.
 - `message_handler.py` — Message dispatch: CMD detection -> LLM -> tool execution -> response.
@@ -33,7 +30,6 @@ Version: 0.1.1 — AI Agent Evaluation Framework
 - `identity.py` — Worker identity registry.
 - `self_repair.py` — Health checks, fix execution, and audit logging.
 - `doom_loop.py` — Loop detection with configurable severity levels and recovery actions.
-- `enhanced_router.py` — Enhanced model router with quality feedback loop.
 - `hive.py` — Privacy filtering, capability extraction, and multi-agent coordination.
 - `constitution.py` — Trading constitution with risk-control immutability rules.
 - `ortools.py` — Optimization tools and cost tracking.

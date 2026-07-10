@@ -495,7 +495,8 @@ def _run_cmd(cmd: str, timeout: int = 120, workdir: str = "") -> dict:
         if not allowed:
             return {"stdout": "", "stderr": f"[SANDBOX] {reason}", "exit_code": -1}
     except Exception as e:
-        logger.warning(f"Sandbox unavailable: {e}. Command will run without sandbox.")
+        logger.warning(f"Sandbox unavailable: {e}. Blocking command execution.")
+        return {"stdout": "", "stderr": f"[SANDBOX] Sandbox unavailable — command blocked for safety: {e}", "exit_code": -1}
     import shlex
     try:
         # v0.8.6: Detect shell operators (|, >, <, &&, ||, ;, $(), ``).
