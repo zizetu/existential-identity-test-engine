@@ -1971,8 +1971,16 @@ class AsyncWorker:
         _gateway_tc, _stripped_content = self._parse_gateway_tool_calls(response.get("content", ""))
         if _gateway_tc:
             self.logger.info("[RPLY] parsed %d Gateway XML tool call(s) from content", len(_gateway_tc))
-            # Strip the parsed XML from content so it doesn't leak to user/LLM
-            response["content"] = _stripped_content
+            # LIVE 2026-07-10: fill content with text description so the assistant
+            # message in history explains what tools it called.
+            if _stripped_content:
+                response["content"] = _stripped_content
+            else:
+                _names = []
+                for _tc in _gateway_tc:
+                    _fn = _tc.get("function", {})
+                    _names.append(_fn.get("name", "") or _tc.get("name", "?"))
+                response["content"] = "[calling: " + ", ".join(_names) + "]"
             existing = response.get("tool_calls") or []
             response["tool_calls"] = existing + _gateway_tc
 
