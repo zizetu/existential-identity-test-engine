@@ -1926,9 +1926,11 @@ class AsyncWorker:
         force_text = False
         # Parse Hermes XML tool calls from content (e.g. <tool_call>check_self</tool_call>)
         # and inject them as structured tool_calls so the loop below executes them.
-        _hermes_tc = self._parse_hermes_tool_calls(response.get("content", ""))
+        _hermes_tc, _stripped_content = self._parse_hermes_tool_calls(response.get("content", ""))
         if _hermes_tc:
             self.logger.info("[RPLY] parsed %d Hermes XML tool call(s) from content", len(_hermes_tc))
+            # Strip the parsed XML from content so it doesn't leak to user/LLM
+            response["content"] = _stripped_content
             existing = response.get("tool_calls") or []
             response["tool_calls"] = existing + _hermes_tc
         while response.get("tool_calls") and tool_iterations < MAX_TOOL_ITERATIONS:
@@ -2187,7 +2189,7 @@ class AsyncWorker:
             }
         return result
 
-    def _parse_hermes_tool_calls(self, content: str) -> list:
+    def _parse_hermes_tool_calls(self, content: str) -> tuple:
         """Parse Hermes XML tool calls from LLM content text.
 
         Hermes models sometimes output tool calls as inline XML instead of
@@ -2198,13 +2200,16 @@ class AsyncWorker:
             <arg_value>param_value</arg_value>
             </tool_call>
 
-        Returns a list of OpenAI-format tool-call dicts suitable for the
-        existing tool-execution loop, or [] if nothing to parse.
+        Returns a tuple (parsed_list, stripped_content) where parsed_list
+        contains OpenAI-format tool-call dicts and stripped_content has the
+        XML tags removed.  Returns ([], content) if nothing to parse.
         """
         import re as _re, json, uuid
         if not content or "<tool_call" not in content:
-            return []
+            return ([], content)
         _parsed = []
+        # Match each <tool_call>...</tool_call> block and strip them from content
+        _stripped = _re.sub(r'<tool_call>.*?</tool_call>', '', content, flags=_re.DOTALL).strip()
         for _block in _re.finditer(r'<tool_call>(.*?)</tool_call>', content, _re.DOTALL):
             _inner = _block.group(1).strip()
             if not _inner:
@@ -2228,7 +2233,7 @@ class AsyncWorker:
                     "arguments": _arguments_json,
                 },
             })
-        return _parsed
+        return (_parsed, _stripped)
 
     async def _kill_stuck_sessions(self):
         """Detect and kill session tasks that have been stuck too long.
