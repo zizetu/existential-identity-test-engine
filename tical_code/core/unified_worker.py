@@ -1941,7 +1941,7 @@ class AsyncWorker:
             except Exception:
                 pass
             try:
-                if tool_iterations <= 3 or tool_iterations % 2 == 0:
+                if tool_iterations >= 5 and tool_iterations % 5 == 0:
                     names = []
                     for _tc in response.get("tool_calls", []) or []:
                         _fn = _tc.get("function", {}) if isinstance(_tc, dict) else {}
