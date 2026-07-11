@@ -68,7 +68,7 @@ INTEL_DIR = "/var/log/intrusion-recon"
 CHECKSUM_FILE = f"{GUARDIAN_DIR}/.module_checksum"
 MODULE_PATH = __file__
 
-PATROL_INTERVAL = 600          # 10 minutes
+PATROL_INTERVAL = 120          # 2 minutes
 ALERT_COOLDOWN = 1800          # 30 minutes
 FORENSICS_RETENTION = 86400 * 7  # 7 days
 
