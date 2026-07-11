@@ -17,6 +17,62 @@ Think of it as a self-hosted AI assistant you can talk to via Telegram, deploy o
 
 ---
 
+## 🛡️ Autonomous Self-Protection — The First Self-Defending AI Agent
+
+**EITE is the first open-source AI agent that protects *itself* — not a security tool you deploy to protect other agents.**
+
+Every EITE worker node boots with a **dual-layer autonomous defense system** that activates from the first second of deployment with zero human configuration:
+
+| Layer | Engine | Runtime | Cycle | What it does |
+|-------|--------|---------|:-----:|--------------|
+| **Primary** | Vigil Security | Python + LLM | 120s | Threat detection → LLM decision engine → autonomous response |
+| **Secondary** | Iron Wall | Bash | 180s | OS-level baseline enforcement (SSH keys, ports, processes) |
+
+### What makes this different
+
+The AI agent security landscape in 2026 is filled with *external* frameworks — tools you bolt onto an agent to monitor it from the outside:
+
+| Project | Stars | Approach |
+|---------|:-----:|----------|
+| **Doberman-Core** | ⭐111 | External guardrails framework — monitors agents from outside |
+| **AgentGuard** (GoPlus) | ⭐437 | Security wrapper — blocks malicious skills, runtime action evaluation |
+| **Adrian** (SecureAgentics) | ⭐386 | External monitoring tool — watches agent tool use and policy drift |
+| **ClawShell** | ⭐300 | Runtime security layer for Gateway/OpenClaw — external harness |
+| **agentfortress** | ⭐3 | "CrowdStrike for AI Agents" — external runtime protection |
+| **EITE Vigil + Iron Wall** | — | **The agent protects itself** — built-in, not bolted-on |
+
+All existing projects are *security products for AI agents*. EITE is an *AI agent that is its own security product*. The Vigil engine runs inside the agent process, uses the agent's own LLM for threat decisions, and the Iron Wall bash watchdog runs independently — if Python crashes, bash still enforces the baseline.
+
+### Autonomous response pipeline
+
+```
+Threat Detected → LLM Decision Engine → Response
+     ↓                    ↓                ↓
+  SSH anomaly         INSTANT_BLOCK    iptables DROP
+  Rogue port          QUARANTINE       kill connection
+  Reverse shell       INVESTIGATE      jail process
+  Unknown process     ALERT_ONLY       fail2ban block
+  Filesystem tamper                    notify admin
+```
+
+### Fail-safe design
+
+- **LLM unreachable?** Vigil defaults to `INSTANT_BLOCK` — never waits for model recovery
+- **Python crashes?** Iron Wall bash watchdog runs independently via systemd timer
+- **Both layers auto-start on boot** — `systemctl enable vigil.service iron-wall.timer`
+- **No cloud dependency** — all detection runs locally; the LLM is the agent's own inference backend
+
+### Coverage
+
+Every worker node (Seoul, Cang, Kael) runs the full stack, each scanning its own local threats. SSH anomalies, port changes, reverse shells, filesystem tampering, and unknown processes are detected and autonomously blocked within seconds — before a human even notices.
+
+```bash
+systemctl status vigil.service     # Primary Python+LLM scanner
+systemctl status iron-wall.timer   # Secondary bash watchdog
+```
+
+---
+
 > **Key Question**: If you erase an agent's memory of who it is, can it *reconstruct* its identity from its own behavioral patterns? If not, that identity was never real.
 
 ## System Architecture
@@ -63,52 +119,6 @@ summary = ws.get_prompt_summary()
 ```
 
 See `workspace.py` and `state.py` for the full API.
-
-## Vigil Security — Autonomous Threat Protection
-
-**Vigil Security** is a boot-time-activated, zero-touch autonomous defense system that runs on every EITE-agent worker node from the first second of deployment.
-
-### Architecture: Dual-Layer Protection
-
-| Layer | Engine | Language | Cycle | Responsibility |
-|-------|--------|----------|:-----:|----------------|
-| **Primary** | Vigil Security | Python + LLM | 120s | Threat detection → LLM decision → auto-response |
-| **Secondary** | Iron Wall | Bash | 180s | OS-level port/SSH/key baseline enforcement |
-
-### Autonomous Response Pipeline
-
-```
-Threat Detected → LLM Decision Engine → INSTANT_BLOCK
-     ↓                    ↓                   ↓
-  Port scan         QUARANTINE           iptables DROP
-  SSH anomaly       INVESTIGATE          kill connection
-  Reverse shell     ALERT_ONLY           quarantine process
-  Rogue port                             fail2ban jail
-```
-
-### Decision Tiers
-
-| Level | Trigger | Response |
-|-------|---------|----------|
-| **INSTANT_BLOCK** | Rogue port, reverse shell, unknown SSH key | Immediate iptables DROP + kill |
-| **QUARANTINE** | Suspicious process, unusual outbound connection | Isolate process, restrict network |
-| **INVESTIGATE** | Multiple failed auth, config change | Log, escalate, wait for next scan |
-| **ALERT_ONLY** | Baseline drift, non-critical anomaly | Notify, do not block |
-
-### Fail-Safe Design
-
-- If the LLM is unreachable (network outage, API quota exhausted, auth failure), Vigil **defaults to INSTANT_BLOCK** — never waits for model recovery
-- Iron Wall bash watchdog runs independently — if the Python layer crashes, bash still enforces the baseline
-- Both layers start via systemd on boot — no human intervention required
-
-### Coverage
-
-Every worker node (Seoul, Cang, Kael) runs the full Vigil Security + Iron Wall stack, each scanning its own local threats. SSH anomalies, port changes, reverse shells, and filesystem tampering are detected and autonomously blocked within seconds.
-
-```bash
-systemctl status vigil.service    # Primary Python+LLM scanner
-systemctl status iron-wall.timer  # Secondary bash watchdog
-```
 
 ## Why "Existential"?
 
@@ -272,7 +282,7 @@ This software sends an **anonymous instance fingerprint** (SHA-256 hash of hostn
 
 **What is sent:**
 - Anonymous instance ID (one-way hash, cannot be reversed)
-- Software version (`0.1.2`)
+- Software version (`0.1.3`)
 - Uptime (0 at registration)
 
 **What is NOT sent:**

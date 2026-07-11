@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.1.2] - 2026-07-11
+## [0.1.3] - 2026-07-11
 
 ### Added
 - **Vigil Security** — autonomous dual-layer threat detection and response system:
@@ -16,12 +16,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fail-safe: auto-blocks threats when LLM is unavailable (never waits for model recovery)
   - Boot-time activation via systemd — first scan runs within 120s of node startup
   - Iron Wall bash watchdog retained as secondary defense layer
+- **README: Autonomous Self-Protection declaration** — positioned as the first open-source AI agent that protects *itself* (not a security tool for other agents), with competitive landscape comparison showing no equivalent exists
 - **ModelFailover auto-rotation** — MIMO 4-key provider chain with session-affinity LRU and circuit-breaker health states
 - **VPS mesh self-healing** — worker service auto-restart, health endpoint monitoring across all nodes
 
+### Fixed (Grok Build Audit — 5 P0 bugs)
+- **Vigil dual registration**: `_vigil` and `SecurityVigil` both using name `"vigil"` caused mutual overwrite
+- **L5 integrity bootstrap**: `bootstrap()` re-created checksums on every startup, making tampering undetectable after restart
+- **Checkpoint API mismatch**: `task_handler` calls incompatible with `CheckpointManager` API (gated with `if False` pending `EvalState` wiring)
+- **Worker missing attributes**: `unified_worker.py` sync path referenced `self.logger` / `self._data_dir` without `hasattr` guard
+- **SustainedTask recover**: `recover_pending_tasks()` return value was passed to `len()` without type check (non-list safe)
+
 ### Changed
 - All worker nodes (Seoul/Cang/Kael) now run Vigil Security + Iron Wall dual-layer protection
-- Version bump: 0.1.1 → 0.1.2
+- Version bump: 0.1.1 → 0.1.3
+- README restructured: old Vigil section removed, new "Autonomous Self-Protection" section at top with market positioning
 
 ### Security
 - Iron Wall awk syntax fix (prevented zero real-time protection since initial deployment)
@@ -73,6 +82,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/tical-asi/eite-agent/compare/v0.1.2...HEAD
-[0.1.2]: https://github.com/tical-asi/eite-agent/releases/tag/v0.1.2
+[Unreleased]: https://github.com/tical-asi/eite-agent/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/tical-asi/eite-agent/releases/tag/v0.1.3
 [0.1.0]: https://github.com/tical-asi/eite-agent/releases/tag/v0.1.0

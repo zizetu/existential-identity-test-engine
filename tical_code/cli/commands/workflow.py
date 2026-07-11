@@ -18,7 +18,7 @@
 #
 
 """
-Workflow CLI Commands (eite-agent v0.1.2)
+Workflow CLI Commands (eite-agent v0.1.3)
 =======================================
 
 Workflow management commands:
@@ -166,7 +166,7 @@ def workflow_list(format: str):
                     data = json.load(f)
                     workflows.append({
                         'name': data.get('name', wf_file.stem),
-                        'version': data.get('version', '0.1.2'),
+                        'version': data.get('version', '0.1.3'),
                         'path': str(wf_file),
                         'node_count': len(data.get('nodes', {})),
                     })

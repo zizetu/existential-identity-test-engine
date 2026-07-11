@@ -196,7 +196,7 @@ class Workflow:
     - end_nodes: List of end node IDs
     """
     name: str
-    version: str = "0.1.2"
+    version: str = "0.1.3"
     
     # Nodes
     nodes: Dict[str, WorkflowNode] = field(default_factory=dict)
@@ -255,7 +255,7 @@ class Workflow:
         """Create from dictionary."""
         workflow = cls(
             name=data['name'],
-            version=data.get('version', '0.1.2'),
+            version=data.get('version', '0.1.3'),
             description=data.get('description', ''),
             author=data.get('author', ''),
             created_at=data.get('created_at', time.time()),
@@ -1204,7 +1204,7 @@ class WorkflowBuilder:
         workflow = builder.build()
     """
     
-    def __init__(self, name: str, version: str = "0.1.2"):
+    def __init__(self, name: str, version: str = "0.1.3"):
         """Initialize builder."""
         self.name = name
         self.version = version
