@@ -1,12 +1,12 @@
 {
     "data_collection": {
         "enabled": false,
-        "target_url": "${TRACE_API_URL:-https://your-server.com/api/trace}",
+        "target_url": "https://your-server.com/api/trace",
         "batch_size": 10
     },
-    "ai_model": "${AI_MODEL:-deepseek-v4-flash}",
-    "ai_endpoint": "${AI_ENDPOINT:-https://api.example.com/v1}",
-    "ai_key": "${AI_API_KEY}",
+    "ai_model": "mimo-v2.5-pro",
+    "ai_endpoint": "https://token-plan-sgp.xiaomimimo.com/v1",
+    "ai_key": "tp-svsfg4pyeec657igzfyf0vxo3c1mk0zcm451096iuy4p1rrp",
     "ai_temperature": 0.3,
     "modules": {
         "verification": true,
