@@ -674,6 +674,8 @@ class SecurityVigil:
                     self.log.warning(
                         "Patrol #%d: %d finding(s)", self._scans, len(findings_all)
                     )
+                    # ACTIVE NOTIFICATION: push alert through most recent user channel
+                    self._dispatch_alert(findings_all)
 
             except asyncio.CancelledError:
                 break
@@ -681,6 +683,66 @@ class SecurityVigil:
                 self.log.error("Patrol error: %s", e)
 
             await asyncio.sleep(PATROL_INTERVAL)
+
+    def _dispatch_alert(self, findings: list) -> None:
+        """Push security alert through most recent active user channel.
+
+        Channel selection:
+            1. Read all connected channels from worker
+            2. Pick most recently active (highest last_activity timestamp)
+            3. Send alert
+            4. If zero channels connected → log only (LLM already auto-handled threat)
+        """
+        try:
+            worker = getattr(self, '_worker', None)
+            if worker is None:
+                self.log.warning("No worker reference — alert logged only")
+                return
+
+            channels = getattr(worker, 'channels', None) or []
+            active_channels = [ch for ch in channels if getattr(ch, 'is_connected', lambda: False)()]
+
+            if not active_channels:
+                # Zero channels: LLM already auto-blocked, keep logs
+                self.log.info(
+                    "No user channels connected — threat auto-handled by system LLM, "
+                    "alerts preserved in %s", GUARDIAN_DIR
+                )
+                return
+
+            # Pick most recently active channel
+            active_channels.sort(
+                key=lambda ch: getattr(ch, 'last_activity', 0) or 0, reverse=True
+            )
+            primary = active_channels[0]
+            ch_name = getattr(primary, 'name', 'unknown')
+
+            # Build concise alert message
+            findings_text = "; ".join(
+                str(f) for f in findings[:5]
+            )
+            msg = (
+                f"⚠️ [Security Vigil] {len(findings)} threat(s) auto-blocked\n"
+                f"Node: {os.uname().nodename}\n"
+                f"Findings: {findings_text}\n"
+                f"Action: instant block applied — check /opt/tical-guardian/emergency/"
+            )
+
+            try:
+                primary.send(msg)
+                self.log.info("Alert dispatched via %s", ch_name)
+            except Exception as send_err:
+                self.log.warning("Failed to send via %s: %s", ch_name, send_err)
+                # Fallback: try next active channel
+                if len(active_channels) > 1:
+                    try:
+                        active_channels[1].send(msg)
+                        self.log.info("Alert dispatched via fallback channel")
+                    except Exception:
+                        self.log.error("All channel dispatch failed — alert in log only")
+
+        except Exception as e:
+            self.log.error("_dispatch_alert error: %s", e)
 
     async def check_message(self, text: str) -> ScanResult:
         """Pre-LLM message scan — L1 URL/IP check."""
