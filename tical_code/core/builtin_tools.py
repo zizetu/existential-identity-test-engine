@@ -878,7 +878,7 @@ def http_get_handler(url: str, timeout: int = 10) -> Dict[str, Any]:
         # Make request
         req = urllib.request.Request(
             url,
-            headers={'User-Agent': 'eite-agent/0.1.0'}
+            headers={'User-Agent': 'eite-agent/0.1.2'}
         )
 
         with urllib.request.urlopen(req, timeout=timeout) as response:
@@ -960,7 +960,7 @@ def http_post_handler(
             return {'success': False, 'error': f'Domain not in whitelist: {host}'}
 
         # Make request
-        req_headers = {'User-Agent': 'eite-agent/0.1.0'}
+        req_headers = {'User-Agent': 'eite-agent/0.1.2'}
         if headers:
             req_headers.update(headers)
         

@@ -44,7 +44,7 @@ from typing import Optional
 
 from tical_code.core.security_baseline import _check_ssrf
 
-_UA = "eite-agent/0.1.0 (Cloudflare bypass)"
+_UA = "eite-agent/0.1.2 (Cloudflare bypass)"
 logger = logging.getLogger("EITElite.channel")
 
 
