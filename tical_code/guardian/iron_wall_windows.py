@@ -506,7 +506,7 @@ if __name__ == "__main__":
 
     log(f"=== Scan Complete: {len(threats)} threats found ===")
 
-    # Print JSON for external consumption (Gateway agent / Telegram)
+    # Print JSON for external consumption (agent / Telegram)
     if threats:
         report = {
             "timestamp": datetime.now().isoformat(),

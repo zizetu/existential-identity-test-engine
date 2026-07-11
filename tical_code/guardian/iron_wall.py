@@ -43,7 +43,7 @@ WHITELIST_PORTS: Set[int] = {
 
 WHITELIST_PROCESS_NAMES: Set[str] = {
     "sshd", "nginx", "sslh", "python", "python3",
-    "uvicorn", "gateway", "cloudflared", "systemd",
+    "uvicorn", "cloudflared", "systemd",
     "systemd-resolve", "systemd-network", "systemd-journal",
     "AliYunDun", "AliYunDunMonitor", "AliYunDunUpdate",
     "aliyun-service", "aliyun_assistant",
@@ -202,7 +202,7 @@ def check_new_ports() -> Tuple[bool, str, List[ThreatFinding]]:
 def check_tmp_malware() -> Tuple[bool, str, List[ThreatFinding]]:
     """Detect suspicious files in /tmp and /var/tmp."""
     findings: List[ThreatFinding] = []
-    exclude = {'gateway-results', 'wg-'}
+    exclude = {'temp-output', 'wg-'}
 
     for tmp_dir in ['/tmp', '/var/tmp']:
         if not os.path.isdir(tmp_dir):

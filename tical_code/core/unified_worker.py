@@ -1973,23 +1973,23 @@ class AsyncWorker:
                         pass
                     return
 
-        # Parse Gateway XML tool calls from content (e.g. <tool_call>check_self</tool_call>)
+        # Parse XML tool calls from content (e.g. <tool_call>check_self</tool_call>)
         # and inject them as structured tool_calls so the loop below executes them.
-        _gateway_tc, _stripped_content = self._parse_gateway_tool_calls(response.get("content", ""))
-        if _gateway_tc:
-            self.logger.info("[RPLY] parsed %d Gateway XML tool call(s) from content", len(_gateway_tc))
+        _xml_tc, _stripped_content = self._parse_xml_tool_calls(response.get("content", ""))
+        if _xml_tc:
+            self.logger.info("[RPLY] parsed %d XML tool call(s) from content", len(_xml_tc))
             # LIVE 2026-07-10: fill content with text description so the assistant
             # message in history explains what tools it called.
             if _stripped_content:
                 response["content"] = _stripped_content
             else:
                 _names = []
-                for _tc in _gateway_tc:
+                for _tc in _xml_tc:
                     _fn = _tc.get("function", {})
                     _names.append(_fn.get("name", "") or _tc.get("name", "?"))
                 response["content"] = "[calling: " + ", ".join(_names) + "]"
             existing = response.get("tool_calls") or []
-            response["tool_calls"] = existing + _gateway_tc
+            response["tool_calls"] = existing + _xml_tc
 
         while response.get("tool_calls") and tool_iterations < MAX_TOOL_ITERATIONS:
             tool_iterations += 1
@@ -2278,10 +2278,10 @@ class AsyncWorker:
             }
         return result
 
-    def _parse_gateway_tool_calls(self, content: str) -> tuple:
-        """Parse Gateway XML tool calls from LLM content text.
+    def _parse_xml_tool_calls(self, content: str) -> tuple:
+        """Parse XML tool calls from LLM content text.
 
-        Gateway models sometimes output tool calls as inline XML instead of
+        Some models output tool calls as inline XML instead of
         structured JSON tool_calls.  The format is:
 
             <tool_call>tool_name
@@ -2315,7 +2315,7 @@ class AsyncWorker:
                     _args[_k] = _v
             _arguments_json = json.dumps(_args)
             _parsed.append({
-                "id": f"call_gateway_{uuid.uuid4().hex[:12]}",
+                "id": f"call_xml_{uuid.uuid4().hex[:12]}",
                 "type": "function",
                 "function": {
                     "name": _name,

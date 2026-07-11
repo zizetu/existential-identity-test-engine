@@ -470,7 +470,7 @@ class FilesystemWatch:
                         capture_output=True, text=True, timeout=10,
                     )
                     for fpath in r.stdout.strip().split("\n"):
-                        if not fpath or "gateway-results" in fpath or "wg-" in fpath:
+                        if not fpath or "temp-output" in fpath or "wg-" in fpath:
                             continue
                         safe = self._quarantine(fpath)
                         result.findings.append(

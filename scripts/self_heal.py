@@ -18,7 +18,7 @@
 
 """Self-heal executor for EITElite system.
 
-Gateway-compatible script that runs security_self_check.py and auto-fixes
+Standalone script that runs security_self_check.py and auto-fixes
 FAIL items where safe automated remediation is possible.
 """
 
