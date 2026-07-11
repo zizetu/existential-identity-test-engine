@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.6] - 2026-07-12
+
+### Added
+- **Iron Wall cross-platform** — Linux `iron_wall.py` + Windows `iron_wall_windows.py` in guardian module
+- **8-layer Windows security detection** — SSH intrusion, reverse shell, malicious ports, TEMP files, authorized_keys, scheduled tasks, rogue services, Defender status
+
+### Fixed
+- **UnboundLocalError** — duplicate `from tool_executor import execute` inside `_process_message` shadowed module-level import
+- **config.json secret leak** — MIMO API key and internal endpoint accidentally published to public repo
+- **iron_wall_windows.py IP leak** — hardcoded VPS IP replaced with `127.0.0.1` default
+
+### Changed
+- **Public config.json** — reverted to env-var syntax (`${AI_ENDPOINT}`) for open-source safety
+
 ## [0.1.3] - 2026-07-11
 
 ### Added
@@ -82,6 +96,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/tical-asi/eite-agent/compare/v0.1.3...HEAD
-[0.1.3]: https://github.com/tical-asi/eite-agent/releases/tag/v0.1.3
-[0.1.0]: https://github.com/tical-asi/eite-agent/releases/tag/v0.1.0
+[Unreleased]: https://github.com/zizetu/existential-identity-test-engine/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/zizetu/existential-identity-test-engine/releases/tag/v0.1.6
+[0.1.3]: https://github.com/zizetu/existential-identity-test-engine/releases/tag/v0.1.3
+[0.1.0]: https://github.com/zizetu/existential-identity-test-engine/releases/tag/v0.1.0

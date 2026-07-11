@@ -5,8 +5,8 @@
         "batch_size": 10
     },
     "ai_model": "mimo-v2.5-pro",
-    "ai_endpoint": "https://token-plan-sgp.xiaomimimo.com/v1",
-    "ai_key": "tp-svsfg4pyeec657igzfyf0vxo3c1mk0zcm451096iuy4p1rrp",
+    "ai_endpoint": "${AI_ENDPOINT:-https://api.example.com/v1}",
+    "ai_key": "${AI_API_KEY:-your_api_key_here}",
     "ai_temperature": 0.3,
     "modules": {
         "verification": true,
