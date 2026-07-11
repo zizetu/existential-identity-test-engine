@@ -73,7 +73,7 @@ ALERT_COOLDOWN = 1800          # 30 minutes
 FORENSICS_RETENTION = 86400 * 7  # 7 days
 
 # Permissions: state files owned by root, read-only
-STATE_PERMS = 0o400
+STATE_PERMS = 0o600
 DIR_PERMS = 0o700
 
 # ---------------------------------------------------------------------------
@@ -620,7 +620,12 @@ class SecurityVigil:
         self.log.info("SecurityVigil: 5-layer guard activated")
 
     def start(self) -> None:
-        """Start background patrol loop."""
+        """Start background patrol loop.
+
+        When the asyncio event loop is available, spawns as an async task.
+        Otherwise falls back to a daemon thread — this ensures patrol runs
+        even when Vigil initializes before the worker's event loop starts.
+        """
         if self._running:
             return
         self._running = True
@@ -629,8 +634,31 @@ class SecurityVigil:
             if loop.is_running():
                 self._task = asyncio.create_task(self._patrol_loop())
                 self.log.info("Vigil patrol started (interval=%ds)", PATROL_INTERVAL)
+                return
         except RuntimeError:
-            self.log.warning("No event loop available, patrol deferred")
+            pass
+
+        # Event loop not ready — run in dedicated daemon thread
+        import threading
+        self._thread = threading.Thread(
+            target=self._threaded_patrol, daemon=True,
+            name="vigil-patrol"
+        )
+        self._thread.start()
+        self.log.info("Vigil patrol started in daemon thread (interval=%ds)", PATROL_INTERVAL)
+
+    def _threaded_patrol(self) -> None:
+        """Run patrol loop in a dedicated asyncio event loop (daemon thread)."""
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(self._patrol_loop())
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            self.log.error("Threaded patrol crashed: %s", e)
+        finally:
+            loop.close()
 
     def stop(self) -> None:
         """Stop patrol loop cleanly."""
@@ -725,8 +753,7 @@ class SecurityVigil:
                     import urllib.request, json as _json
                     url = f"https://api.telegram.org/bot{tg_token}/sendMessage"
                     data = _json.dumps({
-                        "chat_id": tg_chat, "text": alert_msg[:4000],
-                        "parse_mode": "Markdown"
+                        "chat_id": tg_chat, "text": alert_msg[:4000]
                     }).encode()
                     req = urllib.request.Request(url, data=data,
                         headers={"Content-Type": "application/json"})
