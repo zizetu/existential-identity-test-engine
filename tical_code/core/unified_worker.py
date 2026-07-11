@@ -506,6 +506,13 @@ class Worker:
         self._pending_task_file = Path(cfg.get("workspace", ".")) / ".pending_task.json"
         self._pending_task = self._load_pending()
 
+        # P0-4 fix: ensure logger and data_dir exist for sync Worker path
+        if not hasattr(self, 'logger'):
+            self.logger = logging.getLogger(f"EITElite.worker")
+        if not hasattr(self, '_data_dir'):
+            self._data_dir = str(Path(cfg.get("workspace", ".")) / "data")
+            os.makedirs(self._data_dir, exist_ok=True)
+
         # SustainedTaskManager - persistent task queue with auto-recovery
         if SustainedTaskManager is not None:
             self._sustained_task_mgr = SustainedTaskManager()
@@ -1740,10 +1747,10 @@ class AsyncWorker:
         if getattr(self, '_sustained_task_mgr', None) is not None:
             try:
                 recovered = await self._sustained_task_mgr.recover_pending_tasks()
-                if recovered:
+                n = len(recovered) if isinstance(recovered, list) else (1 if recovered else 0)
+                if n > 0:
                     self.logger.info(
-                        "Recovered %d pending tasks from previous run",
-                        recovered,
+                        "Recovered %d pending sustained tasks from previous run", n,
                     )
             except Exception as exc:
                 self.logger.warning(

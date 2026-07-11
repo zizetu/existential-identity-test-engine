@@ -406,8 +406,10 @@ def run_task(ctx: SharedContext, task) -> None:
         if step % _PROGRESS_INTERVAL == 0:
             _send_progress(ctx, state, step)
 
-        # Save pre-step checkpoint (raw conversation for replayability)
-        if ctx.checkpoint:
+        # P0-3 fix: CheckpointManager API uses save(state: EvalState), not kwargs.
+        # These calls are currently dead code due to API mismatch.
+        # TODO: build proper EvalState from conv/state and call ctx.checkpoint.save(state_obj)
+        if False and ctx.checkpoint:
             try:
                 ctx.checkpoint.save(
                     description=f"task-{state.task_id}-pre-step-{step}",
@@ -743,7 +745,7 @@ def run_task(ctx: SharedContext, task) -> None:
                 state.status = "completed"
                 _notify_task_complete(ctx, state, "completed")
                 save_state(state, workspace=ctx.workspace)
-                if ctx.checkpoint:
+                if False and ctx.checkpoint:
                     try:
                         cps = ctx.checkpoint.list_checkpoints(status="incomplete")
                         for cp in cps:
@@ -826,8 +828,8 @@ def run_task(ctx: SharedContext, task) -> None:
             except Exception:
                 pass
 
-        # Save post-step checkpoint (raw conversation for replayability)
-        if ctx.checkpoint:
+        # P0-3: post-step checkpoint save disabled (API mismatch with CheckpointManager)
+        if False and ctx.checkpoint:
             try:
                 ctx.checkpoint.save(
                     description=f"task-{state.task_id}-post-step-{step}",

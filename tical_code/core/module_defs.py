@@ -1264,7 +1264,7 @@ def _init_eite_kernel(worker: Any, cfg: dict):
 # =============================================================================
 
 @register(
-    name="vigil",
+    name="security_vigil",
     config_key="vigil",
     default_enabled=True,
     description=(

@@ -600,8 +600,11 @@ class SecurityVigil:
         self.fs_watch = FilesystemWatch()
         self.integrity = IntegrityGuard()
 
-        # Bootstrap integrity on first load
-        self.integrity.bootstrap()
+        # Bootstrap integrity only if checksum file doesn't exist yet.
+        # P0-2 fix: never overwrite existing checksum — prevents attacker from
+        # restarting to legitimize a tampered module via fresh bootstrap.
+        if not os.path.exists(CHECKSUM_FILE):
+            self.integrity.bootstrap()
 
         # Background patrol
         self._task: Optional[asyncio.Task] = None
