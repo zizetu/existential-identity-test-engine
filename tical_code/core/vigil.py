@@ -687,59 +687,94 @@ class SecurityVigil:
     def _dispatch_alert(self, findings: list) -> None:
         """Push security alert through most recent active user channel.
 
-        Channel selection:
-            1. Read all connected channels from worker
-            2. Pick most recently active (highest last_activity timestamp)
-            3. Send alert
-            4. If zero channels connected → log only (LLM already auto-handled threat)
+        Strategy:
+            1. Try Telegram (most common) — uses cached chat_id from worker
+            2. Fallback: tical-chat if URL/key configured
+            3. Zero channels → log only (system LLM already auto-handled threat)
+
+        chat_id is auto-discovered by worker during normal message processing
+        and cached at ~/.guardian_chat_id (see unified_worker.py line 1312).
         """
         try:
-            worker = getattr(self, '_worker', None)
-            if worker is None:
-                self.log.warning("No worker reference — alert logged only")
-                return
-
-            channels = getattr(worker, 'channels', None) or []
-            active_channels = [ch for ch in channels if getattr(ch, 'is_connected', lambda: False)()]
-
-            if not active_channels:
-                # Zero channels: LLM already auto-blocked, keep logs
-                self.log.info(
-                    "No user channels connected — threat auto-handled by system LLM, "
-                    "alerts preserved in %s", GUARDIAN_DIR
-                )
-                return
-
-            # Pick most recently active channel
-            active_channels.sort(
-                key=lambda ch: getattr(ch, 'last_activity', 0) or 0, reverse=True
-            )
-            primary = active_channels[0]
-            ch_name = getattr(primary, 'name', 'unknown')
-
-            # Build concise alert message
-            findings_text = "; ".join(
-                str(f) for f in findings[:5]
-            )
-            msg = (
-                f"⚠️ [Security Vigil] {len(findings)} threat(s) auto-blocked\n"
-                f"Node: {os.uname().nodename}\n"
+            node = os.uname().nodename
+            findings_text = "; ".join(str(f) for f in findings[:5])
+            alert_msg = (
+                f"⚠️ [Vigil Security] {len(findings)} threat(s) auto-blocked\n"
+                f"Node: {node}\n"
                 f"Findings: {findings_text}\n"
-                f"Action: instant block applied — check /opt/tical-guardian/emergency/"
+                f"Action: instant block applied → /opt/tical-guardian/emergency/"
             )
 
+            sent = False
+
+            # ── Channel 1: Telegram ──
+            tg_token = os.environ.get("TG_BOT_TOKEN") or os.environ.get("GUARDIAN_TG_TOKEN", "")
+            chat_id_file = os.path.expanduser("~/.guardian_chat_id")
+            tg_chat = ""
             try:
-                primary.send(msg)
-                self.log.info("Alert dispatched via %s", ch_name)
-            except Exception as send_err:
-                self.log.warning("Failed to send via %s: %s", ch_name, send_err)
-                # Fallback: try next active channel
-                if len(active_channels) > 1:
+                if os.path.exists(chat_id_file):
+                    with open(chat_id_file) as f:
+                        tg_chat = f.read().strip()
+            except Exception:
+                pass
+            if not tg_chat:
+                tg_chat = os.environ.get("TG_CHAT_ID") or os.environ.get("GUARDIAN_TG_CHAT", "")
+
+            if tg_token and tg_chat:
+                try:
+                    import urllib.request, json as _json
+                    url = f"https://api.telegram.org/bot{tg_token}/sendMessage"
+                    data = _json.dumps({
+                        "chat_id": tg_chat, "text": alert_msg[:4000],
+                        "parse_mode": "Markdown"
+                    }).encode()
+                    req = urllib.request.Request(url, data=data,
+                        headers={"Content-Type": "application/json"})
+                    with urllib.request.urlopen(req, timeout=8) as resp:
+                        body = _json.loads(resp.read().decode())
+                    if body.get("ok"):
+                        self.log.info("Alert dispatched via Telegram (chat_id=%s)", tg_chat[:6] + "...")
+                        sent = True
+                    else:
+                        self.log.warning("Telegram alert failed: %s", body.get("description", "?"))
+                except Exception as e:
+                    self.log.warning("Telegram dispatch error: %s", e)
+
+            # ── Channel 2: tical-chat ──
+            if not sent:
+                chat_url = os.environ.get("TICAL_CHAT_URL", "")
+                chat_key = os.environ.get("TICAL_CHAT_KEY", "")
+                chat_identity = os.environ.get("WORKER_IDENTITY", node)
+                if chat_url and chat_key:
                     try:
-                        active_channels[1].send(msg)
-                        self.log.info("Alert dispatched via fallback channel")
-                    except Exception:
-                        self.log.error("All channel dispatch failed — alert in log only")
+                        import urllib.request, json as _json
+                        payload = _json.dumps({
+                            "sender": chat_identity,
+                            "target": "user",
+                            "content": alert_msg,
+                        }).encode()
+                        req = urllib.request.Request(
+                            f"{chat_url.rstrip('/')}/v1/messages",
+                            data=payload,
+                            headers={
+                                "Content-Type": "application/json",
+                                "X-AI-Identity": chat_identity,
+                                "X-AI-Key": chat_key,
+                            },
+                        )
+                        with urllib.request.urlopen(req, timeout=8):
+                            pass
+                        self.log.info("Alert dispatched via tical-chat")
+                        sent = True
+                    except Exception as e:
+                        self.log.warning("tical-chat dispatch error: %s", e)
+
+            # ── Zero channels ──
+            if not sent:
+                self.log.info(
+                    "No user channels available — threat auto-handled by system LLM, "
+                    "alerts preserved in %s", os.path.join(GUARDIAN_DIR, "emergency")
+                )
 
         except Exception as e:
             self.log.error("_dispatch_alert error: %s", e)
