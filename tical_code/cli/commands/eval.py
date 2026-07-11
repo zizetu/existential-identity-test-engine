@@ -18,7 +18,7 @@
 #
 
 """
-Evaluation CLI Commands (eite-agent v0.1.0)
+Evaluation CLI Commands (eite-agent v0.1.5)
 ========================================
 
 Honesty evaluation commands:

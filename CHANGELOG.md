@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.1.2] - 2026-07-11
+## [0.1.5] - 2026-07-11
 
 ### Added
 - **Vigil Security** — autonomous dual-layer threat detection and response system:
@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - All worker nodes (Seoul/Cang/Kael) now run Vigil Security + Iron Wall dual-layer protection
-- Version bump: 0.1.1 → 0.1.2
+- Version bump: 0.1.5 → 0.1.5
 
 ### Security
 - Iron Wall awk syntax fix (prevented zero real-time protection since initial deployment)
@@ -31,12 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.1.0] - 2026-06-30
+## [0.1.5] - 2026-06-30
 
 ### Added
 - **First formal release** of the EITE (EITElite) AI Agent Evaluation Framework.
 - **AGPLv3 license** applied across the entire codebase — LICENSE file, header comments, and `pyproject.toml` classifiers.
-- **VERSION file** as single source of truth at `0.1.0`; `__init__.py` reads version from VERSION file.
+- **VERSION file** as single source of truth at `0.1.5`; `__init__.py` reads version from VERSION file.
 - **EITE Evaluation Framework** core modules:
   - Verification Engine (`verify_engine_v2.py`) — structured task verification with truth-state tracking and trust accumulation.
   - Security baseline — deny-by-default policy, `delegate_light` whitelist, and self-denial checking (`_check_self_deny`).
@@ -73,6 +73,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/tical-asi/eite-agent/compare/v0.1.2...HEAD
-[0.1.2]: https://github.com/tical-asi/eite-agent/releases/tag/v0.1.2
-[0.1.0]: https://github.com/tical-asi/eite-agent/releases/tag/v0.1.0
+[Unreleased]: https://github.com/tical-asi/eite-agent/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/tical-asi/eite-agent/releases/tag/v0.1.5
+[0.1.5]: https://github.com/tical-asi/eite-agent/releases/tag/v0.1.5

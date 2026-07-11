@@ -34,7 +34,7 @@ from typing import Optional, List
 # =============================================================================
 
 @click.group()
-@click.version_option(version="0.1.0", prog_name="tical")
+@click.version_option(version="0.1.5", prog_name="tical")
 def cli():
     """
     eite-agent: Existential Identity Test Engine
@@ -378,7 +378,7 @@ def status():
     edition = config.get('edition', 'unknown')
     
     click.echo("=" * 50)
-    click.echo("eite-agent v0.1.0 Status")
+    click.echo("eite-agent v0.1.5 Status")
     click.echo("=" * 50)
     click.echo(f"Edition: {edition}")
     click.echo(f"Config: {config.config_file}")

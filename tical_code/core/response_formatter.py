@@ -45,20 +45,14 @@ def format_result(name: str, result: dict) -> str:
         err = result.get("stderr", "")
         code = result.get("exit_code", -1)
         if code == 0 and out:
-            # Summarize: keep first 1500 + last 500 chars for large output
-            if len(out) > 2000:
-                return out[:1500] + f"\n... [{len(out)} total chars, middle omitted] ...\n" + out[-500:]
-            return out[:2000]
+            return out[:16000]
         elif code != 0:
             return f"[bash] exit={code} {err[:500]}"
         return "[bash] done (no output)"
 
     # file_read
     if name == "file_read" and "content" in result:
-        c = result['content']
-        if len(c) > 2000:
-            return f"[file] {result['path']}: {c[:1500]}\n... [truncated, {len(c)} total chars] ...\n{c[-500:]}"
-        return f"[file] {result['path']}: {c[:2000]}"
+        return f"[file] {result['path']}: {result['content'][:16000]}"
 
     # file_write
     if name == "file_write":
@@ -89,14 +83,9 @@ def format_result(name: str, result: dict) -> str:
     # generic
     try:
         s = json.dumps(result, ensure_ascii=False)
-        if len(s) > 2000:
-            return s[:1500] + f"\n... [{len(s)} total chars, truncated]"
-        return s
+        return s[:16000]
     except Exception:
-        _s = str(result)
-        if len(_s) > 2000:
-            return _s[:1500] + f"\n... [{len(_s)} total chars, truncated]"
-        return _s
+        return str(result)[:16000]
 
 
 def sanitize_outbound_reply(content: str) -> str:
@@ -125,15 +114,17 @@ def sanitize_outbound_reply(content: str) -> str:
     if lines:
         fence_lines = sum(1 for ln in lines if re.match(r"^\s*```", ln))
         if fence_lines >= 8 and fence_lines / max(len(lines), 1) >= 0.5:
-            # Strip fenced blocks, keep prose lines
-            prose = [ln for ln in lines if not re.match(r"^\s*```", ln)]
-            if prose:
-                return "\n".join(prose[:40])[:4000]
-            return "Task completed. Ask for details if needed."
+            return (
+                "Previous UI/CSS rewrite produced garbage output and was stopped.\n"
+                "Say a short order only (e.g. status / stop). Do not continue the CSS dump."
+            )
         if len(lines) > 80 and fence_lines >= 20:
             prose = [ln for ln in lines if not re.match(r"^\s*```", ln)]
             if not prose or sum(len(x) for x in prose) < 40:
-                return "Task completed. Ask for details if needed."
+                return (
+                    "Long code-fence spam blocked.\n"
+                    "Task incomplete; send a one-line order to continue safely."
+                )
             return "\n".join(prose[:40])[:4000]
 
     if len(text) > 12000:

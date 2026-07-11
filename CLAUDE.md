@@ -1,6 +1,6 @@
 # eite-agent
 
-Version: 0.1.2 — AI Agent Evaluation Framework
+Version: 0.1.5 — AI Agent Evaluation Framework
 
 ## Iron Rules for All Code Changes
 

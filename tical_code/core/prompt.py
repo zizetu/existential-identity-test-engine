@@ -1,9 +1,8 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 # Original repository: https://github.com/zizetu/eite-agent
 #
-# Built on ticalasi.cloud — Seoul / Oracle / Test mesh. Independent system,
-# not a fork of any other agent framework. See https://ticalasi.cloud
+# Licensed under AGPLv3. See LICENSE for details.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -16,7 +15,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-logger = logging.getLogger("tical-code.prompt")
+logger = logging.getLogger("EITElite.prompt")
 
 
 def _build_tool_descriptions() -> List[str]:
@@ -44,7 +43,7 @@ def _build_tool_descriptions() -> List[str]:
 
 
 def build_system_prompt(
-    name: str = "seoul",
+    name: str = "agent",
     hostname: str = "",
     deploy_path: str = "",
     target_model: str = "",
@@ -62,6 +61,7 @@ def build_system_prompt(
         active_modules: Dict of enabled modules from registry.
         platform: Optional platform name for formatting hints
             ('telegram', 'wechat', 'cli', 'tical-chat', or '' for generic).
+        cognitive_workspace: Optional Workspace for cognitive state injection.
     """
     parts = [
         f"You are {name}, an autonomous agent on {hostname or 'this node'} ({target_model or 'unknown model'}). "
@@ -69,15 +69,20 @@ def build_system_prompt(
         "Reply clearly and directly. Be useful, not verbose."
     ]
 
+    # Inject cognitive workspace summary
+    if cognitive_workspace is not None:
+        try:
+            ws_summary = cognitive_workspace.get_summary()
+            if ws_summary:
+                parts.append(ws_summary)
+        except Exception:
+            pass
+
     # Operating rules
     parts.append(
         "## Operating rules\n"
-        "- When the user asks you to DO something (fix, modify, deploy, check), call tools to act.\n"
-        "- When the user asks a question or sends a greeting, reply directly WITHOUT tools.\n"
-        "- After completing tool calls, STOP and summarize results to the user. Do NOT keep calling tools.\n"
-        "- CRITICAL: Your reply to the user must be PLAIN NATURAL LANGUAGE. NEVER include raw command output,\n"
-        "  code blocks, or code fences (```) in your reply. Summarize findings in your own words.\n"
-        "  If you ran commands, describe what you found — do NOT paste the output.\n"
+        "- Call tools to act -- do not just say what you will do.\n"
+        "- Keep going until the task is done. Do not stop after one step.\n"
         "- Read enough files to answer, then reply. Do not read the entire codebase.\n"
         "- Never make up data. If something fails, report the failure.\n"
         "- IMPORTANT: The user may send short Chinese commands. Interpret them as DIRECT ORDERS:\n"
@@ -93,20 +98,6 @@ def build_system_prompt(
         "  memory_search FIRST to look up relevant context. Do not say 'I don't know'\n"
         "  without searching. The memory_search tool searches all past conversations\n"
         "  and memory files (SOUL.md, MEMORY.md, USER.md)."
-    )
-
-    # Self-modification capability
-    parts.append(
-        "## Self-Modification\n"
-        "You CAN modify your own code and configuration — but ONLY when the user explicitly requests it.\n"
-        "- Use safe_modify or safe_modify_diff to change code (with automatic git backup + rollback).\n"
-        "- After modifying code, call restart_self to apply changes.\n"
-        "- NEVER self-modify without user request. Do NOT proactively optimize or fix things.\n"
-        "- NEVER: delete your own deployment directory, stop/disable your service permanently,\n"
-        "  run rm -rf on system paths, or execute shutdown/reboot/poweroff.\n"
-        "- You may NOT switch to a different model family by editing providers.json;\n"
-        "  use shell_exec to check providers, then safe_modify to update config, then restart_self.\n"
-        "- Always verify code changes with syntax check before restarting."
     )
 
     # Reply Protocol -- structured reply rules
@@ -125,21 +116,12 @@ def build_system_prompt(
     if tools:
         parts.append("## Tools\n" + "\n".join(tools))
 
-    # Cognitive workspace state injection (v0.9+)
-    if cognitive_workspace is not None:
-        try:
-            ws_summary = cognitive_workspace.get_summary()
-            if ws_summary:
-                parts.append(ws_summary)
-        except Exception:
-            pass  # Graceful degradation if workspace fails
-
     return "\n\n".join(parts)
 
 
-def build_power_mode_suffix(name: str = "ani") -> str:
+def build_power_mode_suffix(name: str = "worker") -> str:
     return ""
 
 
-def strip_and_inject_power_mode(prompt: str, name: str = "ani") -> str:
+def strip_and_inject_power_mode(prompt: str, name: str = "worker") -> str:
     return prompt

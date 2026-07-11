@@ -195,7 +195,7 @@ class Workspace:
 
         Args:
             claim: The hypothesis statement.
-            confidence: Confidence level 0.0–1.0.
+            confidence: Confidence level 0.0-1.0.
             evidence: Optional supporting evidence items.
 
         Returns:
@@ -216,7 +216,7 @@ class Workspace:
 
         Args:
             claim: The belief statement.
-            confidence: Confidence level 0.0–1.0 (mapped to BeliefStrength).
+            confidence: Confidence level 0.0-1.0 (mapped to BeliefStrength).
             source: Optional provenance string.
 
         Returns:

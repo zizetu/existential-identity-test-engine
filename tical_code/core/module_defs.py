@@ -1,4 +1,4 @@
-# EITElite -- AI Agent Platform
+# tical-code -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Original repository: https://github.com/zizetu/eite-agent
+# Original repository: https://github.com/zizetu/tical-agent
 #
 
 """
@@ -68,7 +68,7 @@ from typing import Any
 
 from tical_code.core.module_registry import register
 
-logger = logging.getLogger("EITElite.modules")
+logger = logging.getLogger("tical-code.modules")
 
 
 # =============================================================================
@@ -1264,7 +1264,7 @@ def _init_eite_kernel(worker: Any, cfg: dict):
 # =============================================================================
 
 @register(
-    name="vigil",
+    name="security_vigil",
     config_key="vigil",
     default_enabled=True,
     description=(

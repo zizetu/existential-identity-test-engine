@@ -93,18 +93,6 @@ _KNOWN_PROVIDERS: List[Dict] = [
         "cost": "free",
     },
     {
-        "name": "xai",
-        "family": "xai",
-        "env_key": "XAI_API_KEY",
-        "env_base_url": "XAI_ENDPOINT",
-        "default_base_url": "https://api.x.ai/v1/chat/completions",
-        "auth_style": "bearer",
-        "default_model": "grok-4.5",
-        "protocol": "openai",
-        "priority": 6,
-        "cost": "paid",
-    },
-    {
         "name": "custom-llm",
         "family": "openai",
         "env_key": "CUSTOM_LLM_API_KEY",

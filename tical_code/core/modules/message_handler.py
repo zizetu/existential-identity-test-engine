@@ -520,7 +520,7 @@ def _cmd_get_level(ctx: SharedContext, sender: str, msg: Message) -> int:
        ``MASTER_IDS`` (case-insensitive), they receive CMD_LEVEL_MASTER.
 
     3. **Worker IDs** — senders in ``WORKER_IDS`` map to ADMIN
-       (primary worker) or WORKER (all others).
+       (``agent``) or WORKER (all others).
 
     4. **Telegram / Weixin sources** — default to WORKER as a fallback.
 
@@ -602,7 +602,7 @@ def _exec_cmd(ctx: SharedContext, cmd_name: str, cmd_args: list[str],
     * **switch_model** — changes the active AI model via
       ``ModelFailover`` or direct ``set_model()``; supports ``list``
       sub-command.
-    * **escalate** — sends an escalation notice to the primary worker
+    * **escalate** — sends an escalation notice to the supervisor
       via ``chat_send``.
     * **exec** — runs an arbitrary bash command through the ``bash``
       tool (requires MASTER level, enforced by ``_handle_cmd``).

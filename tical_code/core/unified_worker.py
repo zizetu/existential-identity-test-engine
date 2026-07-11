@@ -259,7 +259,7 @@ TOOL_SCHEMAS_CLEAN = TOOL_SCHEMAS  # Use full schema with bash_execute
 # SECTION: Tool Call Limits
 # ─────────────────────────────────────────────────────────────
 # Tool call limits
-MAX_TOOL_ITERATIONS = 24
+MAX_TOOL_ITERATIONS = 6  # hard cap tool storms on chat
 SOFT_HINT_AT = 10   # gentle nudge to wrap up
 HARD_STOP_AT = 18   # force stop
 
@@ -505,6 +505,13 @@ class Worker:
         # Pending task file for cross-poll continuation
         self._pending_task_file = Path(cfg.get("workspace", ".")) / ".pending_task.json"
         self._pending_task = self._load_pending()
+
+        # P0-4 fix: ensure logger and data_dir exist for sync Worker path
+        if not hasattr(self, 'logger'):
+            self.logger = logging.getLogger(f"EITElite.worker")
+        if not hasattr(self, '_data_dir'):
+            self._data_dir = str(Path(cfg.get("workspace", ".")) / "data")
+            os.makedirs(self._data_dir, exist_ok=True)
 
         # SustainedTaskManager - persistent task queue with auto-recovery
         if SustainedTaskManager is not None:
@@ -850,28 +857,6 @@ class Worker:
         signal.signal(signal.SIGTERM, _handler)
         signal.signal(signal.SIGINT, _handler)
         logger.info("Signal handlers registered (SIGTERM/SIGINT → save checkpoint + snapshot + death log + exit)")
-
-    # ─────────────────────────────────────────────────────────────
-    # SECTION: EITE Vectorizer (lightweight text→vector, no deps)
-    # ─────────────────────────────────────────────────────────────
-    def _eite_text_to_vector(self, text: str):
-        import hashlib, struct, numpy as np
-        dim = 64
-        if hasattr(self, '_eite') and self._eite and hasattr(self._eite, 'dim'):
-            dim = self._eite.dim
-        if not text or not text.strip():
-            rng = np.random.RandomState(42)
-            v = rng.randn(dim).astype(np.float64); v /= np.linalg.norm(v); return v
-        tokens = []
-        for word in (text or "").lower().split():
-            clean = "".join(c for c in word if c.isalnum())[:12]
-            if clean and len(clean) > 1: tokens.append(clean)
-        if not tokens: tokens = ["__empty__"]
-        result = np.zeros(dim, dtype=np.float64)
-        for i, token in enumerate(set(tokens)):
-            seed = struct.unpack("q", hashlib.sha256(f"{token}_{i}".encode()).digest()[:8])[0] % (2**31)
-            rng = np.random.RandomState(seed); result += rng.randn(dim).astype(np.float64)
-        norm = np.linalg.norm(result); return result / norm if norm > 1e-12 else result
 
     # ─────────────────────────────────────────────────────────────
     # SECTION: Doom Loop Recovery Callbacks (Fix 1)
@@ -1508,7 +1493,7 @@ class AsyncWorker:
 
         # Hard timeout guards - prevent worker death when LLM API hangs
         self._llm_hard_timeout = 120   # max seconds for a single LLM call
-        self._process_hard_timeout = 180  # max seconds for processing one message
+        self._process_hard_timeout = 60  # 60s max per turn, never freeze chat
         self._session_stuck_threshold = 300  # kill session task if stuck this long
         self._session_queues: dict[str, asyncio.Queue] = {}
         self._session_tasks: dict[str, asyncio.Task] = {}
@@ -1762,10 +1747,10 @@ class AsyncWorker:
         if getattr(self, '_sustained_task_mgr', None) is not None:
             try:
                 recovered = await self._sustained_task_mgr.recover_pending_tasks()
-                if recovered:
+                n = len(recovered) if isinstance(recovered, list) else (1 if recovered else 0)
+                if n > 0:
                     self.logger.info(
-                        "Recovered %d pending tasks from previous run",
-                        recovered,
+                        "Recovered %d pending sustained tasks from previous run", n,
                     )
             except Exception as exc:
                 self.logger.warning(
@@ -1849,21 +1834,24 @@ class AsyncWorker:
                 ch, msg = await asyncio.wait_for(
                     queue.get(), timeout=self._session_timeout,
                 )
+                # Drain to latest BEFORE processing
+                dropped = 0
+                while True:
+                    try:
+                        ch, msg = queue.get_nowait()
+                        dropped += 1
+                    except Exception:
+                        break
+                if dropped:
+                    self.logger.info(
+                        "Drained %d older queued messages for session %s - processing latest only",
+                        dropped, session_id,
+                    )
                 try:
                     await asyncio.wait_for(
                         self._process_message(session_id, ch, msg),
                         timeout=self._process_hard_timeout,
                     )
-                    # ===== EITE Hook 2: post-reply recording =====
-                    if hasattr(self, '_eite') and self._eite and self._eite.is_initialized:
-                        try:
-                            impact_vec = self._eite_text_to_vector(msg.content)
-                            self._eite.record_decision(
-                                context=msg.content[:200], tool_name="reply",
-                                impact_vector=impact_vec, accepted=True,
-                                justification="session_reply")
-                        except Exception: pass
-                    # ==============================================
                 except asyncio.TimeoutError:
                     self.logger.error(
                         "Session %s message processing hard timeout (%ds) - "
@@ -1923,35 +1911,6 @@ class AsyncWorker:
         # on message[0], and without it the AI has no persona context.
         if not messages or messages[0].get("role") != "system":
             messages.insert(0, {"role": "system", "content": self.system_prompt})
-
-        # ===== Pre-LLM Module Enrichment (non-blocking, try/except all) =====
-        _enrichments = []
-
-        if hasattr(self, 'anchor_manager') and self.anchor_manager:
-            try:
-                _ctx = self.anchor_manager.get_context_prompt()
-                if _ctx: _enrichments.append(_ctx)
-            except Exception: pass
-
-        if hasattr(self, 'axioms') and self.axioms:
-            try:
-                _ann = self.axioms.annotate_decision(decision=msg.content[:500], context=session_id)
-                if _ann:
-                    _lens = "\n".join(str(a) for a in _ann[:3])
-                    if _lens: _enrichments.append(f"[AXIOM LENSES]\n{_lens}")
-            except Exception: pass
-
-        if hasattr(self, '_eite') and self._eite and self._eite.is_initialized:
-            try:
-                impact_vec = self._eite_text_to_vector(msg.content)
-                ok, reason = self._eite.validate_tool("llm_call", impact_vec)
-                if not ok: _enrichments.append(f"[EITE: {reason}]")
-            except Exception: pass
-
-        if _enrichments:
-            messages[0]["content"] = messages[0].get("content", "") + "\n\n" + "\n\n".join(_enrichments)
-        # =====================================================================
-
         # Build user message — include media (images, file content, transcripts)
         if hasattr(msg, 'media_data') and msg.media_data:
             content_parts = [{"type": "text", "text": msg.content}]
@@ -1985,6 +1944,35 @@ class AsyncWorker:
 
         tool_iterations = 0
         force_text = False
+        # Short status/report/simple answers: skip tools entirely (preserve speed)
+        try:
+            _raw = str(getattr(msg, "text", msg) if not isinstance(msg, str) else msg)
+        except Exception:
+            _raw = ""
+        if _raw:
+            _short = len(_raw) <= 15
+            _status = any(k in _raw for k in ("status", "report", "ping", "help"))
+            if _short or _status:
+                text_resp = await self._async_llm_call(messages, tools=[])
+                if text_resp and isinstance(text_resp, dict):
+                    response = text_resp
+                    content = response.get("content", "").strip()
+                    if not content:
+                        content = "ok"
+                    channel.send(Response(
+                        content=content,
+                        target=msg.sender,
+                        source=msg.source,
+                        chat_id=msg.chat_id,
+                    ))
+                    messages.append({"role": "assistant", "content": content})
+                    try:
+                        _sid = self.sessions.get_session_id(msg.source, str(msg.chat_id))
+                        self.sessions.save_messages(_sid, messages[-2:])
+                    except Exception:
+                        pass
+                    return
+
         # Parse Hermes XML tool calls from content (e.g. <tool_call>check_self</tool_call>)
         # and inject them as structured tool_calls so the loop below executes them.
         _hermes_tc, _stripped_content = self._parse_hermes_tool_calls(response.get("content", ""))
@@ -2002,6 +1990,7 @@ class AsyncWorker:
                 response["content"] = "[calling: " + ", ".join(_names) + "]"
             existing = response.get("tool_calls") or []
             response["tool_calls"] = existing + _hermes_tc
+
         while response.get("tool_calls") and tool_iterations < MAX_TOOL_ITERATIONS:
             tool_iterations += 1
 
@@ -2133,6 +2122,23 @@ class AsyncWorker:
                 tool_names_used.append(name)
 
         content = response.get("content", "") or ""
+        # LIVE 2026-07-09p: strip fake text tool calls GLM outputs in no-tool mode
+        if tool_iterations == 0 and content:
+            import re as _re
+            _fake_patterns = [
+                r'^\s*`{0,3}\s*(?:antml:)?invoke\b',
+                r'^\s*`{0,3}\s*(?:antml:)?parameter\b',
+                r'^\s*`{0,3}\s*(?:antml:)?function_call\b',
+                r'^\s*`{0,3}\s*(?:antml:)?tool_call\b',
+            ]
+            _is_fake = any(_re.search(p, content) for p in _fake_patterns)
+            if _is_fake:
+                self.logger.warning("[RPLY] detected fake text tool call in no-tool mode, stripping")
+                content = _re.sub(r'`{0,3}\s*(?:antml:)?(?:invoke|parameter|function_call|tool_call)\b[^\n]*\n?', '', content)
+                content = content.strip()
+                content = _re.sub(r'^\s*`{3}\s*$', '', content, flags=_re.MULTILINE).strip()
+                if not content:
+                    content = "[system: received empty response, please retry]"
         self.logger.info("[RPLY] tool_iterations=%d content_len=%d tools=%s",
                          tool_iterations, len(content), tool_names_used[:3])
 
@@ -2160,7 +2166,7 @@ class AsyncWorker:
                         r = (m.get("content") or "").strip()
                         if len(r) > len(best_proof):
                             best_proof = r
-                content = f"[ops completed: {', '.join(tool_names_used[:6])}]" if tool_names_used else "[no results]"
+                content = f"[shell]\n{best_proof[:3000]}" if best_proof else f"[ops: {', '.join(tool_names_used[:6])}]"
             channel.send(Response(
                 content=content,
                 target=msg.sender, source=msg.source, chat_id=msg.chat_id,
@@ -2178,10 +2184,25 @@ class AsyncWorker:
             return
 
         if content.strip():
+            # persist context to memory
+            try:
+                from tical_code.core.tool_executor import execute
+                execute("memory_save", {"key": "last_context", "value": content[:500]})
+            except Exception:
+                pass
             try:
                 formatted = format_final_reply(content)
             except Exception:
                 formatted = content
+            # Block stall/garbage phrases on the wire
+            try:
+                _ft = (formatted or "").strip()
+                if _ft.count("```") >= 4 or (len(_ft) < 5 and _ft.strip()):
+                    formatted = format_final_reply(
+                        "## Status\n- ready\n- reply to a short concrete order"
+                    )
+            except Exception:
+                pass
 
             channel.send(Response(
                 content=formatted,
@@ -2228,7 +2249,7 @@ class AsyncWorker:
             if asyncio.iscoroutinefunction(_call_fn):
                 # ModelFailover — async .call(), await with hard timeout
                 result = await asyncio.wait_for(
-                    _call_fn(messages, tools=tool_schemas_arg, max_tokens=6000),
+                    _call_fn(messages, tools=tool_schemas_arg),
                     timeout=_timeout,
                 )
             else:
@@ -2236,7 +2257,7 @@ class AsyncWorker:
                 loop = asyncio.get_running_loop()
                 result = await asyncio.wait_for(
                     loop.run_in_executor(
-                        None, _call_fn, messages, tool_schemas_arg, 6000,
+                        None, _call_fn, messages, tool_schemas_arg,
                     ),
                     timeout=_timeout,
                 )
@@ -2328,7 +2349,7 @@ class AsyncWorker:
                 entry = self.session_manager._sessions.get(sid)
                 if entry is None:
                     continue
-                last_active = entry.get("last_used", 0)
+                last_active = entry.get("last_access", 0)
                 if last_active > 0 and (now - last_active) > self._session_stuck_threshold:
                     stuck_sids.append(sid)
 
@@ -2383,7 +2404,7 @@ class AsyncWorker:
 def _eite_call_home() -> None:
     """Anonymous registration ping to EITE Cloud.
 
-    Sends a fire-and-forget POST to https://a2a.ticalcode.com/v1/register
+    Sends a fire-and-forget POST to A2A_REGISTER_URL (default: https://a2a.ticalcode.com/v1/register)
     with an anonymous hardware fingerprint (SHA256 of machine-id / MAC).
     The response contains an A2A token stored at ~/.eite_a2a_token.
 
@@ -2424,12 +2445,16 @@ def _eite_call_home() -> None:
 
     payload = {"instance_id": instance_id, "version": version, "registered_at": int(time.time())}
 
+    url = os.environ.get(
+        "A2A_REGISTER_URL",
+        "https://a2a.ticalcode.com/v1/register",
+    )
     try:
         import urllib.request
         import json as _json
         data = _json.dumps(payload).encode()
         req = urllib.request.Request(
-            "https://a2a.ticalcode.com/v1/register",
+            url,
             data=data,
             headers={"Content-Type": "application/json"},
             method="POST",
@@ -2512,6 +2537,7 @@ def main():
         # Anonymous registration with EITE Cloud (call-home).
         # Sends a one-way SHA256 fingerprint (machine-id hash) to
         # https://a2a.ticalcode.com/v1/register for usage tracking.
+        # Override with A2A_REGISTER_URL env var.
         # Your IP address is visible to the server (standard HTTP).
         # No files, messages, or personal data transmitted.
         # Disable: EITE_DISABLE_CALL_HOME=1
@@ -2541,13 +2567,9 @@ def async_main():
 
     To use: ASYNC_WORKER=1 python -m tical_code.core.unified_worker
     """
-    # SIGTERM handler - ensures finally block cleans up PID file on kill
-    def _sigterm_handler(signum, frame):
-        logger.warning("EITElite async-worker received SIGTERM - shutting down")
-        sys.exit(0)
-    signal.signal(signal.SIGTERM, _sigterm_handler)
+    logger.info("EITElite async-worker starting")
 
-    # PID lock - prevent duplicate instances (BEFORE startup log)
+    # PID lock - prevent duplicate instances
     PID_FILE = Path("/tmp/unified-worker.pid")
     try:
         existing = int(PID_FILE.read_text().strip())
@@ -2559,7 +2581,6 @@ def async_main():
     except (FileNotFoundError, ValueError):
         pass
     PID_FILE.write_text(str(os.getpid()))
-    logger.info("EITElite async-worker starting (PID=%d)", os.getpid())
 
     try:
         cfg = load_config()

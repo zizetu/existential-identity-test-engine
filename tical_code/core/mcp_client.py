@@ -99,7 +99,7 @@ class MCPConfig:
 # ---------------------------------------------------------------------------
 
 _MCP_PROTOCOL_VERSION = "2025-03-26"
-_CLIENT_INFO = {"name": "eite-agent", "version": "0.1.0"}
+_CLIENT_INFO = {"name": "eite-agent", "version": "0.1.5"}
 
 _MSG_ID = 0
 

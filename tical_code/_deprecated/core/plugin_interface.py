@@ -88,7 +88,7 @@ class PluginMetadata:
     author: str = ""
     description: str = ""
     dependencies: List[str] = field(default_factory=list)
-    min_eite_version: str = "0.1.0"
+    min_eite_version: str = "0.1.5"
     auto_load: bool = True
 
     def validate(self) -> List[str]:

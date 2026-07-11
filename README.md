@@ -272,7 +272,7 @@ This software sends an **anonymous instance fingerprint** (SHA-256 hash of hostn
 
 **What is sent:**
 - Anonymous instance ID (one-way hash, cannot be reversed)
-- Software version (`0.1.2`)
+- Software version (`0.1.5`)
 - Uptime (0 at registration)
 
 **What is NOT sent:**

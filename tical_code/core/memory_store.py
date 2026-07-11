@@ -1,4 +1,3 @@
-import time
 # EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
@@ -92,10 +91,7 @@ CREATE TABLE IF NOT EXISTS memory_content(
     section_title TEXT NOT NULL,
     raw_section_title TEXT NOT NULL DEFAULT '',
     content TEXT NOT NULL,
-    raw_content TEXT NOT NULL DEFAULT '',
-    strength REAL DEFAULT 1.0,
-    last_accessed REAL DEFAULT 0,
-    created_at REAL DEFAULT 0
+    raw_content TEXT NOT NULL DEFAULT ''
 );
 """
 
@@ -350,31 +346,7 @@ class MemoryFTSStore:
     # Index Entry Management
     # =========================================================================
 
-
-    def _migrate_memory_content_schema(self) -> None:
-        """EITE SCHEMA MIGRATE 2026-07-09e: old DBs lack strength columns.
-
-        CREATE TABLE IF NOT EXISTS does not upgrade existing tables.
-        """
-        try:
-            cols = {r[1] for r in self._conn.execute("PRAGMA table_info(memory_content)").fetchall()}
-            if not cols:
-                return
-            if "strength" not in cols:
-                self._conn.execute("ALTER TABLE memory_content ADD COLUMN strength REAL DEFAULT 1.0")
-            if "last_accessed" not in cols:
-                self._conn.execute("ALTER TABLE memory_content ADD COLUMN last_accessed REAL DEFAULT 0")
-            if "created_at" not in cols:
-                self._conn.execute("ALTER TABLE memory_content ADD COLUMN created_at REAL DEFAULT 0")
-            self._conn.commit()
-        except Exception as e:
-            logger.warning("memory_content schema migrate failed: %s", e)
-
     def index_entry(self, file_key: str, section_title: str, content: str) -> None:
-        if not getattr(self, "_schema_migrated", False):
-            self._migrate_memory_content_schema()
-            self._schema_migrated = True
-
         """Index a memory entry.
 
         Args:
@@ -401,8 +373,8 @@ class MemoryFTSStore:
         else:
             # Insert new entry
             self._conn.execute(
-                "INSERT INTO memory_content (file_key, section_title, raw_section_title, content, raw_content, strength, last_accessed, created_at) VALUES (?, ?, ?, ?, ?, 1.0, ?, ?)",
-                (file_key, processed_title, section_title, processed_content, content, time.time(), time.time()),
+                "INSERT INTO memory_content (file_key, section_title, raw_section_title, content, raw_content) VALUES (?, ?, ?, ?, ?)",
+                (file_key, processed_title, section_title, processed_content, content),
             )
 
         self._conn.commit()

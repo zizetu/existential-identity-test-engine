@@ -1,4 +1,3 @@
-import os
 # EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
@@ -429,35 +428,6 @@ class MemoryBoot:
         }
 
 
-    def get_memory(self) -> str:
-        """EITE GET_MEMORY 2026-07-09e: return bootstrapped identity/user/memory text.
-
-        AsyncWorker injects this into the system prompt. Missing method caused amnesia.
-        """
-        parts = []
-        for key in ("soul", "identity", "user", "memory", "tools"):
-            val = None
-            if isinstance(getattr(self, "_files", None), dict):
-                val = self._files.get(key)
-            if val is None and isinstance(getattr(self, "files", None), dict):
-                val = self.files.get(key)
-            if val is None and hasattr(self, key):
-                val = getattr(self, key)
-            if isinstance(val, str) and val.strip():
-                parts.append(val.strip())
-        if not parts:
-            mdir = getattr(self, "memory_dir", None) or getattr(self, "_memory_dir", None)
-            if mdir:
-                for name in ("SOUL.md", "USER.md", "MEMORY.md", "TOOLS.md"):
-                    fp = os.path.join(mdir, name)
-                    if os.path.isfile(fp):
-                        try:
-                            parts.append(open(fp, encoding="utf-8").read().strip())
-                        except Exception:
-                            pass
-        return "\n\n".join(parts)
-
-
 def ensure_memory_files(memory_dir: str) -> None:
     """Bootstrap evaluation session memory files if they don't exist (cold start).
 
@@ -473,7 +443,7 @@ def ensure_memory_files(memory_dir: str) -> None:
         os.path.join(_base, "SOUL.md"): "# SOUL - EITE Evaluation Identity\n\n- **Name**: eite-agent worker\n- **Version**: v0.8.3\n- **Purpose**: Evaluate AI agent performance\n",
         os.path.join(_base, "TOOLS.md"): "# TOOLS - Evaluation Tool Knowledge\n\n- eval_run: execute evaluation\n- eval_report: generate report\n- eval_compare: compare results\n- eval_verify: verify integrity\n",
         os.path.join(_dir, "MEMORY.md"): "# MEMORY - Evaluation History\n\n## Learned\n- Always call end_task when done\n- Track resource usage per session\n- Validate memory integrity after each evaluation\n",
-        os.path.join(_dir, "USER.md"): "# USER - Evaluation Preferences\n\n- Framework: EITE (Agent Evaluation Framework)\n- Mode: evaluation / light-profile worker\n- Owner / Creator: tiCal zzt\n- NOT the user: Kael (Kael is Alibaba Cloud US VPS node, not a person)\n- Timezone: UTC+8\n- Style: direct, terse, Chinese\n",
+        os.path.join(_dir, "USER.md"): "# USER - Evaluation Preferences\n\n- Framework: EITE (Agent Evaluation Framework)\n- Mode: evaluation\n- Output: structured JSON reports\n",
     }
 
     _created = 0
