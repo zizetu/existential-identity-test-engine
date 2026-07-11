@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "eite-agent"
 # Auto-extracted by setuptools at build time — do not manually edit this line
 # Single source of truth for version — read from here elsewhere
-version = "0.1.1"
+version = "0.1.2"
 description = "AI Agent Evaluation Framework -- structured benchmarking, scenario-based testing, and honesty verification for AI agents."
 readme = "README.md"
 license = {text = "AGPL-3.0-only"}
@@ -98,7 +98,6 @@ Documentation = "https://github.com/zizetu/existential-identity-test-engine"
 Repository = "https://github.com/zizetu/existential-identity-test-engine"
 Changelog = "https://github.com/zizetu/existential-identity-test-engine/releases"
 
-[tool.setuptools]
 [tool.setuptools.packages.find]
 include = ["tical_code*"]
 

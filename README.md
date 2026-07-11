@@ -2,7 +2,7 @@
 
 > **EITElite** · Self-hosted AI agent runtime
 
-[![CI](https://github.com/zizetu/eite-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/zizetu/eite-agent/actions/workflows/ci.yml)
+[![CI](https://github.com/zizetu/existential-identity-test-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/zizetu/existential-identity-test-engine/actions/workflows/ci.yml)
 
 **EITE** is an **AI agent runtime** with built-in identity verification, multi-provider failover, and pluggable communication channels. It deploys as a worker that:
 
@@ -46,7 +46,7 @@ EITE (Existential Identity Test Engine)
 
 ## Cognitive Workspace
 
-The Cognitive Workspace provides **persistent, structured cognitive state** across LLM turns. Enable with `TICAL_COGNITIVE=1`. (~350 LOC across `workspace.py` and `state.py`)
+The Cognitive Workspace provides **persistent, structured cognitive state** across LLM turns. Enable with `TICAL_COGNITIVE=1`. (~400 LOC across `workspace.py` and `state.py`)
 
 ```python
 # Auto-initialized in unified_worker.py when TICAL_COGNITIVE=1
@@ -63,6 +63,52 @@ summary = ws.get_prompt_summary()
 ```
 
 See `workspace.py` and `state.py` for the full API.
+
+## Vigil Security — Autonomous Threat Protection
+
+**Vigil Security** is a boot-time-activated, zero-touch autonomous defense system that runs on every EITE-agent worker node from the first second of deployment.
+
+### Architecture: Dual-Layer Protection
+
+| Layer | Engine | Language | Cycle | Responsibility |
+|-------|--------|----------|:-----:|----------------|
+| **Primary** | Vigil Security | Python + LLM | 120s | Threat detection → LLM decision → auto-response |
+| **Secondary** | Iron Wall | Bash | 180s | OS-level port/SSH/key baseline enforcement |
+
+### Autonomous Response Pipeline
+
+```
+Threat Detected → LLM Decision Engine → INSTANT_BLOCK
+     ↓                    ↓                   ↓
+  Port scan         QUARANTINE           iptables DROP
+  SSH anomaly       INVESTIGATE          kill connection
+  Reverse shell     ALERT_ONLY           quarantine process
+  Rogue port                             fail2ban jail
+```
+
+### Decision Tiers
+
+| Level | Trigger | Response |
+|-------|---------|----------|
+| **INSTANT_BLOCK** | Rogue port, reverse shell, unknown SSH key | Immediate iptables DROP + kill |
+| **QUARANTINE** | Suspicious process, unusual outbound connection | Isolate process, restrict network |
+| **INVESTIGATE** | Multiple failed auth, config change | Log, escalate, wait for next scan |
+| **ALERT_ONLY** | Baseline drift, non-critical anomaly | Notify, do not block |
+
+### Fail-Safe Design
+
+- If the LLM is unreachable (network outage, API quota exhausted, auth failure), Vigil **defaults to INSTANT_BLOCK** — never waits for model recovery
+- Iron Wall bash watchdog runs independently — if the Python layer crashes, bash still enforces the baseline
+- Both layers start via systemd on boot — no human intervention required
+
+### Coverage
+
+Every worker node (Seoul, Cang, Kael) runs the full Vigil Security + Iron Wall stack, each scanning its own local threats. SSH anomalies, port changes, reverse shells, and filesystem tampering are detected and autonomously blocked within seconds.
+
+```bash
+systemctl status vigil.service    # Primary Python+LLM scanner
+systemctl status iron-wall.timer  # Secondary bash watchdog
+```
 
 ## Why "Existential"?
 
@@ -128,7 +174,7 @@ This repository contains the evaluation and testing framework ("EITE") for AI ag
 
 ```bash
 # Install (one line, latest from GitHub)
-pip install git+https://github.com/zizetu/eite-agent.git
+pip install git+https://github.com/zizetu/existential-identity-test-engine.git
 
 # Set your API key (any OpenAI-compatible provider)
 export DEEPSEEK_API_KEY=your-key-here
@@ -226,7 +272,7 @@ This software sends an **anonymous instance fingerprint** (SHA-256 hash of hostn
 
 **What is sent:**
 - Anonymous instance ID (one-way hash, cannot be reversed)
-- Software version (`0.1.0`)
+- Software version (`0.1.2`)
 - Uptime (0 at registration)
 
 **What is NOT sent:**

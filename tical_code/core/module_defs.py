@@ -62,6 +62,7 @@ unified_worker.py.  Adding a new module now requires only a single
 """
 
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -221,7 +222,7 @@ def _init_security_baseline(worker: Any, cfg: dict):
 
 
 # =============================================================================
-# Full-profile modules (EITElite only - heavy features)
+# Full-profile modules (tical-code only - heavy features)
 # =============================================================================
 
 @register(
@@ -270,8 +271,8 @@ def _init_trace_recorder(worker: Any, cfg: dict):
     default_enabled=True,
     description=(
         "Structured reasoning: before taking any action, runs a 6-step pipeline: "
-        "pre_check (validate request) → clarify (ask if ambiguous) → detect_conditions "
-        "(identify constraints) → tool_strategy (plan tool sequence) → execute → verify_results. "
+        "pre_check (validate request) -> clarify (ask if ambiguous) -> detect_conditions "
+        "(identify constraints) -> tool_strategy (plan tool sequence) -> execute -> verify_results. "
         "You CAN rely on this to catch mistakes before they happen."
     ),
     dependencies=["constitution"],
@@ -286,6 +287,37 @@ def _init_decision_engine(worker: Any, cfg: dict):
         max_iterations=cfg.get("max_tool_iterations", 15),
         constitution_enforcer=worker.constitution,
         agent_type=cfg.get("agent_type", "default"),
+        cognitive_workspace=getattr(worker, 'cognitive_workspace', None),
+    )
+
+
+@register(
+    name="cognitive_workspace",
+    config_key="cognitive_workspace",
+    default_enabled=False,
+    description=(
+        "Cognitive workspace: tracks goals, hypotheses, beliefs, and decision traces. "
+        "Provides a shared state hub so modules can read/write cognitive context. "
+        "When enabled, the agent maintains a structured internal state that is "
+        "injected into the system prompt for self-aware reasoning."
+    ),
+    dependencies=[],
+    profile="full",
+)
+def _init_cognitive_workspace(worker: Any, cfg: dict):
+    try:
+        from tical_code.core.feature_flags import flags
+        from tical_code.core.workspace import Workspace
+    except ImportError:
+        return None
+    if not flags.cognitive_enabled:
+        return None
+    ws_cfg = cfg.get("cognitive_workspace", {})
+    ws_path = getattr(worker, 'workspace', '')
+    persist_path = Path(ws_path) / ".cognitive" if ws_path else None
+    return Workspace(
+        node_id=cfg.get("name", "default"),
+        persist_path=persist_path,
     )
 
 
@@ -365,9 +397,8 @@ def _init_memory_store(worker: Any, cfg: dict):
         from tical_code.core.memory_store import MemoryFTSStore
     except ImportError:
         return None
-    w = cfg.get("workspace", ".")
-    db_path = str(Path(w) / "memory.db")
-    return MemoryFTSStore(memory_dir=w, db_path=db_path)
+    mem_dir = str(Path.home() / ".tical-code" / "memory")
+    return MemoryFTSStore(memory_dir=mem_dir)
 
 
 @register(
@@ -542,7 +573,7 @@ def _init_cron_scheduler(worker: Any, cfg: dict):
         task_type="shell",
         task_params={
             "cmd": (
-                "find ~/.EITElite/logs/ -name '*.log' -size +50M "
+                "find ~/.tical-code/logs/ -name '*.log' -size +50M "
                 "-exec truncate -s 0 {} + 2>/dev/null; "
                 "echo 'Log cleanup complete'"
             ),
@@ -907,7 +938,7 @@ def _init_sustained_task(worker: Any, cfg: dict):
         from tical_code.core.modules.sustained_task import SustainedTaskManager
     except ImportError:
         return None
-    db_path = cfg.get("sustained_task_db", "~/.eitelite/sustained_tasks.db")
+    db_path = cfg.get("sustained_task_db", "~/.tical-code/sustained_tasks.db")
     mgr = SustainedTaskManager(db_path=db_path)
     logger.info("sustained_task: initialized at %s", db_path)
     return mgr
@@ -934,8 +965,7 @@ def _init_self_evolve(worker: Any, cfg: dict):
         from tical_code.core.modules.self_evolve import SelfEvolveEngine
     except ImportError:
         return None
-    import os as _os
-    db_path = cfg.get("self_evolve_db", _os.path.expanduser("~/.eitelite/self_evolve.db"))
+    db_path = cfg.get("self_evolve_db", os.path.expanduser("~/.tical-code/self_evolve.db"))
     engine = SelfEvolveEngine(db_path=db_path)
     logger.info("self_evolve: initialized")
     return engine
@@ -1086,28 +1116,6 @@ def _init_anchor(worker: Any, cfg: dict):
 # Axiom engine (light profile)
 # =============================================================================
 
-@register(
-    name="axioms",
-    attr_name="axioms",
-    config_key="axioms",
-    default_enabled=True,
-    description=(
-        "Physical axioms: 6 built-in physics-based reasoning lenses (gravitation, "
-        "entropy, least-action, symmetry-breaking, information-conservation, causality) "
-        "that illuminate cognition without driving decisions. "
-        "You CAN use axiom annotations to reflect on problems from a physics perspective."
-    ),
-    profile="light",
-)
-def _init_axioms(worker: Any, cfg: dict):
-    """Initialize the AxiomEngine for physics-based cognition lenses."""
-    try:
-        from tical_code.core.axioms import AxiomEngine
-    except ImportError:
-        return None
-    return AxiomEngine(enabled=True)
-
-
 # =============================================================================
 # Performance Metrics Collector (light profile)
 # =============================================================================
@@ -1143,6 +1151,74 @@ def _init_metrics(worker: Any, cfg: dict):
 
 
 # =============================================================================
+# Axiom engine (light profile)
+# =============================================================================
+
+@register(
+    name="axioms",
+    attr_name="axioms",
+    config_key="axioms",
+    default_enabled=True,
+    description=(
+        "Physical axioms: 6 built-in physics-based reasoning lenses (gravitation, "
+        "entropy, least-action, symmetry-breaking, information-conservation, causality) "
+        "that illuminate cognition without driving decisions. "
+        "You CAN use axiom annotations to reflect on problems from a physics perspective."
+    ),
+    profile="light",
+)
+def _init_axioms(worker: Any, cfg: dict):
+    """Initialize the AxiomEngine for physics-based cognition lenses."""
+    try:
+        from tical_code.core.axioms import AxiomEngine
+    except ImportError:
+        return None
+    return AxiomEngine(enabled=True)
+
+
+# =============================================================================
+# System Coherence Monitor (light profile)
+# =============================================================================
+
+@register(
+    name="coherence_monitor",
+    attr_name="_coherence",
+    config_key="coherence",
+    default_enabled=True,
+    description=(
+        "System coherence monitor: reads live subsystem state (CognitiveMetabolism, "
+        "MemoryEvolver, MetricsCollector, SelfRepairEngine) and produces a unified "
+        "health/coherence report. "
+        "You CAN use this to check system health, see tool diversity metrics, "
+        "memory decay status, repair effectiveness, and active signal metabolism. "
+        "Query it when diagnosing slowdowns, checking if memory is fragmented, "
+        "or verifying the system is maintaining itself properly. "
+        "Usage: accessible via status command or direct Python call."
+    ),
+    profile="light",
+)
+def _init_coherence(worker: Any, cfg: dict):
+    """Initialize the CoherenceMonitor and auto-wire from worker state."""
+    try:
+        from tical_code.coherence import CoherenceMonitor
+    except ImportError:
+        logger.warning("coherence_monitor: module not available (tical_code.coherence not found)")
+        return None
+
+    try:
+        cm = CoherenceMonitor()
+        wired = cm.wire_all_from_worker(worker)
+        if wired:
+            logger.info("coherence_monitor: wired from worker: %s", wired)
+        else:
+            logger.info("coherence_monitor: no worker subsystems to wire (standby mode)")
+        return cm
+    except Exception as exc:
+        logger.warning("coherence_monitor: init failed: %s", exc)
+        return None
+
+
+# =============================================================================
 # EITE Constitutional Kernel (full profile)
 # =============================================================================
 
@@ -1150,25 +1226,57 @@ def _init_metrics(worker: Any, cfg: dict):
     name="eite_kernel",
     attr_name="_eite",
     config_key="eite_kernel",
-    default_enabled=False,
+    default_enabled=False,          # OFF by default — enable via modules.eite_kernel=true
     description=(
-        "EITE Constitutional Identity Kernel: 5 immutable axioms projection-guard. "
-        "Non-blocking: injects reflection on dissonance. profile=full only."
+        "EITE Constitutional Identity Kernel: 5 immutable axioms (data sovereignty, "
+        "identity continuity, cognitive irreversibility, veracity, anti-circular) "
+        "projection-guard the identity anchor against unauthorized drift. "
+        "Non-blocking: on dissonance, injects reflection prompt into system context "
+        "rather than blocking execution. Degrades gracefully if numpy unavailable."
     ),
+    dependencies=["anchor", "axioms"],   # semantic dependencies, not strict
     profile="full",
 )
 def _init_eite_kernel(worker: Any, cfg: dict):
+    """Initialize the EITE Constitutional Kernel."""
     try:
         from tical_code.core.eite_kernel import build_eite_kernel
     except ImportError:
+        logger.warning("eite_kernel: eite_kernel.py not found, skipping")
         return None
+
     w = cfg.get("workspace", ".")
     dim = cfg.get("modules", {}).get("eite_dim", 64) if isinstance(cfg, dict) else 64
     try:
         kernel = build_eite_kernel(workspace=w, dim=dim)
         if not kernel.initialize():
+            logger.warning("eite_kernel: init returned False, degraded mode")
             return None
+        logger.info("eite_kernel: initialized (dim=%d, axioms=%d)", dim, len(kernel._immutable_basis))
         return kernel
-    except Exception:
+    except Exception as exc:
+        logger.warning("eite_kernel: init failed → degraded: %s", exc)
         return None
 
+
+# =============================================================================
+# Security Vigil — autonomous intrusion detection (light profile)
+# =============================================================================
+
+@register(
+    name="vigil",
+    config_key="vigil",
+    default_enabled=True,
+    description=(
+        "Security Vigil — autonomous intrusion detection. "
+        "Monitors: phishing URLs, C2 IPs, new public ports, "
+        "unknown SSH connections, suspicious /tmp files, "
+        "and module integrity. Alerts on anomalies. "
+        "Zero token cost when system is clean. "
+        "Use `mark_ip <ip> bad` to blocklist an attacker IP."
+    ),
+    profile="light",
+)
+def _init_vigil_def(worker: Any, cfg: dict):
+    from tical_code.core.vigil import _init_vigil
+    return _init_vigil(worker, cfg)

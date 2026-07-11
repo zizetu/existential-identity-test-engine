@@ -7,13 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [0.1.2] - 2026-07-11
 
 ### Added
-- Continuous improvements and bug fixes aligned with EITE-agent v0.8.3+.
+- **Vigil Security** — autonomous dual-layer threat detection and response system:
+  - Python-based threat scanner (port scan, SSH anomaly, reverse shell, rogue port detection)
+  - LLM-driven decision engine with 4-tier response: INSTANT_BLOCK / QUARANTINE / INVESTIGATE / ALERT_ONLY
+  - Fail-safe: auto-blocks threats when LLM is unavailable (never waits for model recovery)
+  - Boot-time activation via systemd — first scan runs within 120s of node startup
+  - Iron Wall bash watchdog retained as secondary defense layer
+- **ModelFailover auto-rotation** — MIMO 4-key provider chain with session-affinity LRU and circuit-breaker health states
+- **VPS mesh self-healing** — worker service auto-restart, health endpoint monitoring across all nodes
 
 ### Changed
-- Tracks upstream EITE-agent core refactors as they land.
+- All worker nodes (Seoul/Cang/Kael) now run Vigil Security + Iron Wall dual-layer protection
+- Version bump: 0.1.1 → 0.1.2
+
+### Security
+- Iron Wall awk syntax fix (prevented zero real-time protection since initial deployment)
+- Kael IPv6 SSH blocked; Cang mesh SSH key removed from Seoul authorized_keys
+- All 3 nodes: fail2ban SSH jail (5 failures → 1h block), UFW tightened, .env 600 permissions
+- Cang clock synced (systemd-timesyncd, 8h drift corrected)
 
 ---
 
@@ -59,5 +73,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/tical-asi/eite-agent/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/tical-asi/eite-agent/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/tical-asi/eite-agent/releases/tag/v0.1.2
 [0.1.0]: https://github.com/tical-asi/eite-agent/releases/tag/v0.1.0
