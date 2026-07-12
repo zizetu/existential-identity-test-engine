@@ -2479,7 +2479,14 @@ def main():
             logger.warning(f"Stale PID file ({existing}) - overwriting")
     except (FileNotFoundError, ValueError):
         pass
-    PID_FILE.write_text(str(os.getpid()))
+    try:
+        PID_FILE.write_text(str(os.getpid()))
+    except PermissionError:
+        import logging
+        logging.getLogger("EITElite.worker").error(
+            f"Cannot write PID file {PID_FILE}: permission denied - exiting"
+        )
+        sys.exit(1)
 
     try:
         cfg = load_config()
@@ -2557,7 +2564,14 @@ def async_main():
             logger.warning(f"Stale PID file ({existing}) - overwriting")
     except (FileNotFoundError, ValueError):
         pass
-    PID_FILE.write_text(str(os.getpid()))
+    try:
+        PID_FILE.write_text(str(os.getpid()))
+    except PermissionError:
+        import logging
+        logging.getLogger("EITElite.worker").error(
+            f"Cannot write PID file {PID_FILE}: permission denied - exiting"
+        )
+        sys.exit(1)
 
     try:
         cfg = load_config()
