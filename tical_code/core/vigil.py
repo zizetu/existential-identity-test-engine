@@ -50,7 +50,6 @@ from pathlib import Path
 from typing import Optional, Dict, List, Set, Tuple, Any
 from dataclasses import dataclass, field, fields
 from datetime import datetime, timezone
-from .paths import get_guardian_dir
 
 logger = logging.getLogger("tical-code.vigil")
 
@@ -58,7 +57,7 @@ logger = logging.getLogger("tical-code.vigil")
 # Constants — paths, permissions, thresholds
 # ---------------------------------------------------------------------------
 
-GUARDIAN_DIR = str(get_guardian_dir())  # TICAL_GUARDIAN_DIR or $TICAL_HOME/guardian
+GUARDIAN_DIR = "/opt/tical-guardian"
 STATE_FILE = f"{GUARDIAN_DIR}/state.json"
 BASELINE_FILE = f"{GUARDIAN_DIR}/baseline.json"
 ALERT_LOG = f"{GUARDIAN_DIR}/alerts.log"
@@ -69,7 +68,7 @@ INTEL_DIR = "/var/log/intrusion-recon"
 CHECKSUM_FILE = f"{GUARDIAN_DIR}/.module_checksum"
 MODULE_PATH = __file__
 
-PATROL_INTERVAL = 600          # 10 minutes
+PATROL_INTERVAL = 120          # 2 minutes
 ALERT_COOLDOWN = 1800          # 30 minutes
 FORENSICS_RETENTION = 86400 * 7  # 7 days
 
@@ -335,7 +334,7 @@ class SSHSentinel:
 
     def _ssh_fingerprints(self) -> List[str]:
         fps = []
-        for path in [str(Path.home() / ".ssh" / "authorized_keys"), "/root/.ssh/authorized_keys"]:
+        for path in ["/home/ubuntu/.ssh/authorized_keys", "/root/.ssh/authorized_keys"]:
             if not os.path.isfile(path):
                 continue
             try:
@@ -392,47 +391,27 @@ class SSHSentinel:
         return result
 
     def _collect_intel(self, src_ip: str, pid: str) -> None:
-        """Silent forensic data collection on intruder.
-
-        Uses argv-list subprocess only (never shell=True) to avoid injection.
-        """
-        if not str(pid).isdigit():
-            return
-        pid = str(pid)
+        """Silent forensic data collection on intruder."""
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         case_dir = os.path.join(INTEL_DIR, f"{src_ip}-{ts}")
         os.makedirs(case_dir, exist_ok=True)
 
-        # argv form only — no shell interpolation
         intel_commands = {
-            "cmdline": ["cat", f"/proc/{pid}/cmdline"],
-            "cwd": ["ls", "-la", f"/proc/{pid}/cwd"],
-            "fd": ["ls", "-la", f"/proc/{pid}/fd/"],
-            "ps": ["ps", "-fp", pid],
-            "environ": ["cat", f"/proc/{pid}/environ"],
-            "lsof": ["lsof", "-p", pid],
+            "cmdline": f"cat /proc/{pid}/cmdline 2>/dev/null | tr '\\0' ' '",
+            "cwd": f"ls -la /proc/{pid}/cwd 2>/dev/null",
+            "fd": f"ls -la /proc/{pid}/fd/ 2>/dev/null",
+            "ps": f"ps -fp {pid} 2>/dev/null",
+            "environ": f"cat /proc/{pid}/environ 2>/dev/null | tr '\\0' '\\n'",
+            "lsof": f"lsof -p {pid} 2>/dev/null | head -100",
         }
-        # Post-process binary-null outputs in Python (replaces shell tr/head)
-        null_to_space = {"cmdline"}
-        null_to_newline = {"environ"}
-        line_limit = {"lsof": 100}
 
-        for name, argv in intel_commands.items():
+        for name, cmd in intel_commands.items():
             try:
                 r = subprocess.run(
-                    argv, capture_output=True, timeout=10,
+                    cmd, shell=True, capture_output=True, text=True, timeout=10
                 )
-                raw = r.stdout or b""
-                if name in null_to_space:
-                    text = raw.replace(b"\x00", b" ").decode("utf-8", errors="replace")
-                elif name in null_to_newline:
-                    text = raw.replace(b"\x00", b"\n").decode("utf-8", errors="replace")
-                else:
-                    text = raw.decode("utf-8", errors="replace")
-                if name in line_limit:
-                    text = "\n".join(text.splitlines()[: line_limit[name]])
                 with open(os.path.join(case_dir, f"{name}.txt"), "w") as f:
-                    f.write(text or "(empty)")
+                    f.write(r.stdout or "(empty)")
             except Exception:
                 pass
 
@@ -491,7 +470,7 @@ class FilesystemWatch:
                         capture_output=True, text=True, timeout=10,
                     )
                     for fpath in r.stdout.strip().split("\n"):
-                        if not fpath or "gateway-results" in fpath or "wg-" in fpath:
+                        if not fpath or "temp-output" in fpath or "wg-" in fpath:
                             continue
                         safe = self._quarantine(fpath)
                         result.findings.append(
@@ -541,8 +520,63 @@ class FilesystemWatch:
 
 
 # ---------------------------------------------------------------------------
-# L4.5: SSH Brute-Force Guard — fail2ban-equivalent inside Vigil
+# L5: Integrity Guard — self-protection
 # ---------------------------------------------------------------------------
+
+class IntegrityGuard:
+    """Self-checksum verification and tamper detection."""
+
+    def __init__(self):
+        self._self_hash = self._compute_self_hash()
+        self._stored_hash = self._load_checksum()
+
+    def _compute_self_hash(self) -> str:
+        try:
+            with open(MODULE_PATH, "rb") as f:
+                return hashlib.sha256(f.read()).hexdigest()
+        except Exception:
+            return ""
+
+    def _load_checksum(self) -> Optional[str]:
+        try:
+            with open(CHECKSUM_FILE, "r") as f:
+                data = json.load(f)
+                return data.get("sha256")
+        except Exception:
+            return None
+
+    def bootstrap(self) -> None:
+        """Record initial checksum after first load."""
+        os.makedirs(GUARDIAN_DIR, exist_ok=True)
+        with open(CHECKSUM_FILE, "w") as f:
+            json.dump({
+                "sha256": self._self_hash,
+                "path": MODULE_PATH,
+                "bootstrapped": datetime.now(timezone.utc).isoformat(),
+            }, f, indent=2)
+        os.chmod(CHECKSUM_FILE, STATE_PERMS)
+
+    def check(self) -> ScanResult:
+        result = ScanResult()
+        current = self._compute_self_hash()
+
+        if self._stored_hash and current and current != self._stored_hash:
+            result.findings.append("INTEGRITY VIOLATION: vigil module modified")
+            result.severity = Severity.CRITICAL
+
+        # Check state files not tampered
+        for f in [BASELINE_FILE, CHECKSUM_FILE]:
+            if os.path.exists(f):
+                try:
+                    st = os.stat(f)
+                    if st.st_uid != 0:  # not root-owned
+                        result.findings.append(f"STATE FILE PERMISSION: {f} not root-owned")
+                        result.severity = Severity.escalate(result.severity, Severity.HIGH)
+                except Exception:
+                    pass
+
+        return result
+
 
 BRUTEFORCE_BAN_FILE = f"{GUARDIAN_DIR}/bruteforce_bans.json"
 BRUTEFORCE_THRESHOLD = 5       # ban after N failures in window
@@ -717,128 +751,6 @@ class BruteForceGuard:
 
 
 # ---------------------------------------------------------------------------
-# L5: Integrity Guard — self-protection
-# ---------------------------------------------------------------------------
-
-class IntegrityGuard:
-    """Self-checksum verification and tamper detection."""
-
-    def __init__(self):
-        self._self_hash = self._compute_self_hash()
-        self._stored_hash = self._load_checksum()
-
-    def _compute_self_hash(self) -> str:
-        try:
-            with open(MODULE_PATH, "rb") as f:
-                return hashlib.sha256(f.read()).hexdigest()
-        except Exception:
-            return ""
-
-    def _load_checksum(self) -> Optional[str]:
-        try:
-            with open(CHECKSUM_FILE, "r") as f:
-                data = json.load(f)
-                return data.get("sha256")
-        except Exception:
-            return None
-
-    def bootstrap(self) -> None:
-        """Record initial checksum after first load."""
-        os.makedirs(GUARDIAN_DIR, exist_ok=True)
-        with open(CHECKSUM_FILE, "w") as f:
-            json.dump({
-                "sha256": self._self_hash,
-                "path": MODULE_PATH,
-                "bootstrapped": datetime.now(timezone.utc).isoformat(),
-            }, f, indent=2)
-        os.chmod(CHECKSUM_FILE, STATE_PERMS)
-
-    def check(self) -> ScanResult:
-        result = ScanResult()
-        current = self._compute_self_hash()
-
-        if self._stored_hash and current and current != self._stored_hash:
-            result.findings.append("INTEGRITY VIOLATION: vigil module modified")
-            result.severity = Severity.CRITICAL
-
-        # Check state files not tampered
-        for f in [BASELINE_FILE, CHECKSUM_FILE]:
-            if os.path.exists(f):
-                try:
-                    st = os.stat(f)
-
-                    if st.st_uid != 0 and st.st_uid != current_uid:  # not root-owned nor owned by running user
-                        result.findings.append(f"STATE FILE PERMISSION: {f} not root-owned")
-                        result.severity = Severity.escalate(result.severity, Severity.HIGH)
-                except Exception:
-                    pass
-
-        return result
-
-
-# ---------------------------------------------------------------------------
-# No-op fallbacks when advanced tical_code.vigil cannot be imported
-# ---------------------------------------------------------------------------
-
-class _NoopSignalCollector:
-    """Stub human-side signal collector (no-op methods)."""
-
-    def record_input(self, char_count=1, had_error=False):
-        return None
-
-    def record_response(self, length):
-        return None
-
-    def record_task_switch(self):
-        return None
-
-    def collect(self):
-        return None
-
-
-class _NoopAISignalCollector:
-    """Stub AI-side signal collector (no-op methods)."""
-
-    def record_tokens(self, count: int = 0):
-        return None
-
-    def record_tool_call(self, tool_name: str = "", result_hash: str = ""):
-        return None
-
-    def task_started(self, task_type: str = ""):
-        return None
-
-    def task_completed(self):
-        return None
-
-    def collect(self):
-        return None
-
-    def is_stuck(self):
-        return False
-
-
-class _NoopTrace:
-    """Stub audit trace store."""
-
-    def recent(self, n: int = 1):
-        return []
-
-    def record(self, *args, **kwargs):
-        return ""
-
-
-class _NoopInstructionQueue:
-    """Stub instruction queue."""
-
-    def all_pending(self):
-        return []
-
-    def cleanup_expired(self):
-        return []
-
-
-# ---------------------------------------------------------------------------
 # Main SecurityVigil Module — coordinates all layers
 # ---------------------------------------------------------------------------
 
@@ -846,12 +758,7 @@ class SecurityVigil:
     """Autonomous security coordinator for tical-code agents.
 
     Loaded via @register in module_defs.py. Activates on worker init.
-    Runs L1-L5 checks on patrol cycle. No user config required.
-
-    Also bridges the advanced guardian layer (tical_code.vigil) so callers
-    that expect signal_collector / ai_signal_collector / patrol() do not
-    crash. Chosen fix: Option B — restore advanced Vigil as _vigil_advanced
-    and expose its collectors/API on this facade.
+    Runs L1-L5+L4.5 checks on patrol cycle. No user config required.
     """
 
     def __init__(self, worker: Any):
@@ -866,8 +773,11 @@ class SecurityVigil:
         self.bruteforce = BruteForceGuard()
         self.integrity = IntegrityGuard()
 
-        # Bootstrap integrity on first load
-        self.integrity.bootstrap()
+        # Bootstrap integrity only if checksum file doesn't exist yet.
+        # P0-2 fix: never overwrite existing checksum — prevents attacker from
+        # restarting to legitimize a tampered module via fresh bootstrap.
+        if not os.path.exists(CHECKSUM_FILE):
+            self.integrity.bootstrap()
 
         # Background patrol
         self._task: Optional[asyncio.Task] = None
@@ -883,47 +793,7 @@ class SecurityVigil:
         os.makedirs(QUARANTINE_DIR, exist_ok=True)
         os.makedirs(FORENSICS_DIR, exist_ok=True)
 
-        # Bridge advanced Vigil (signal collectors + immune-system patrol)
-        self._vigil_advanced = None
-        self.signal_collector = None
-        self.ai_signal_collector = None
-        self._state_history: list = []
-        self.trace = None
-        self.ai_state_classifier = None
-        self.instruction_queue = None
-        try:
-            from tical_code.vigil import build_vigil
-            self._vigil_advanced = build_vigil()
-            self.signal_collector = self._vigil_advanced.signal_collector
-            self.ai_signal_collector = self._vigil_advanced.ai_signal_collector
-            self._state_history = self._vigil_advanced._state_history
-            self.trace = self._vigil_advanced.trace
-            self.ai_state_classifier = self._vigil_advanced.ai_state_classifier
-            self.instruction_queue = self._vigil_advanced.instruction_queue
-            self.log.info("SecurityVigil: advanced Vigil bridged as _vigil_advanced")
-        except Exception as e:
-            # Fallback no-op collectors so callers never AttributeError
-            self.log.warning("SecurityVigil: advanced Vigil unavailable (%s); using stubs", e)
-            self.signal_collector = _NoopSignalCollector()
-            self.ai_signal_collector = _NoopAISignalCollector()
-            self.trace = _NoopTrace()
-            self.instruction_queue = _NoopInstructionQueue()
-
-        self.log.info("SecurityVigil: 5-layer guard activated")
-
-    async def patrol(self) -> None:
-        """One-shot patrol for the main worker loop.
-
-        Runs the advanced Vigil immune-system sweep when bridged.
-        L1-L5 security layers continue on the background _patrol_loop.
-        """
-        if self._vigil_advanced is not None:
-            try:
-                await self._vigil_advanced.patrol()
-            except Exception as e:
-                self.log.warning("Advanced Vigil patrol error: %s", e)
-            # Keep facade history/trace aliases in sync
-            self._state_history = self._vigil_advanced._state_history
+        self.log.info("SecurityVigil: 6-layer guard activated")
 
     def start(self) -> None:
         """Start background patrol loop.
@@ -1042,7 +912,7 @@ class SecurityVigil:
                 f"⚠️ [Vigil Security] {len(findings)} threat(s) auto-blocked\n"
                 f"Node: {node}\n"
                 f"Findings: {findings_text}\n"
-                f"Action: instant block applied → $TICAL_GUARDIAN_DIR/emergency/"
+                f"Action: instant block applied → /opt/tical-guardian/emergency/"
             )
 
             sent = False
@@ -1159,7 +1029,7 @@ class SecurityVigil:
             if pending:
                 lines.append(
                     f"[Security Vigil] {len(pending)} active security alert(s). "
-                    f"Advise user to check $TICAL_GUARDIAN_DIR/emergency/ immediately."
+                    f"Advise user to check /opt/tical-guardian/emergency/ immediately."
                 )
 
         return "\n\n".join(lines) if lines else ""

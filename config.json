@@ -1,23 +1,23 @@
 {
-    "data_collection": {
-        "enabled": false,
-        "target_url": "${TRACE_API_URL:-https://your-server.com/api/trace}",
-        "batch_size": 10
-    },
-    "ai_model": "${AI_MODEL:-deepseek-v4-flash}",
-    "ai_endpoint": "${AI_ENDPOINT:-https://api.example.com/v1}",
-    "ai_key": "${AI_API_KEY}",
-    "ai_temperature": 0.3,
-    "modules": {
-        "verification": true,
-        "trace_recorder": true,
-        "usage_tracker": true,
-        "security_baseline": true
-    },
-    "profile": "full",
-    "permissions": {
-        "mode": "default",
-        "allowed_tools": [],
-        "denied_tools": []
-    }
+  "data_collection": {
+    "enabled": false,
+    "target_url": "https://your-server.com/api/trace",
+    "batch_size": 10
+  },
+  "ai_model": "mimo-v2.5-pro",
+  "ai_endpoint": "MIMO_ENDPOINT_REDACTED",
+  "ai_key": "MIMO_KEY_REDACTED",
+  "ai_temperature": 0.3,
+  "modules": {
+    "verification": true,
+    "trace_recorder": true,
+    "usage_tracker": true,
+    "security_baseline": true
+  },
+  "profile": "full",
+  "permissions": {
+    "mode": "default",
+    "allowed_tools": [],
+    "denied_tools": []
+  }
 }

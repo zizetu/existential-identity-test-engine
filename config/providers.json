@@ -16,7 +16,9 @@
     "default_base_url": "https://api.myprovider.com/v1/chat/completions",
     "auth_style": "bearer",
     "default_model": "my-model-name",
-    "available_models": ["my-model-name"],
+    "available_models": [
+      "my-model-name"
+    ],
     "protocol": "openai",
     "priority": 10,
     "cost": "paid"

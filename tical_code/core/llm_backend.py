@@ -17,7 +17,6 @@
 # Original repository: https://github.com/zizetu/eite-agent
 #
 
-# provenance:ticalasi-zzt-2026
 """
 EITE LLM Backend - Evaluation Model Calling
 =============================================
@@ -303,6 +302,6 @@ def create_llm_backend(
         )
 
     if not model:
-        model = "gpt-4o"
+        model = ""  # model will be selected by provider config or environment
 
     return OpenAIBackend(api_key=api_key, base_url=base_url, model=model)
