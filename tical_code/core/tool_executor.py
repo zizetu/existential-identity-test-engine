@@ -17,7 +17,6 @@
 # Original repository: https://github.com/zizetu/eite-agent
 #
 
-# provenance:ticalasi-zzt-2026
 """Tool Executor - secure command execution with post-execution verification.
 
 This module provides the secure tool execution pipeline for EITElite. Every tool
@@ -1417,37 +1416,31 @@ def exec_file_write(args: dict, base_dir: str = "") -> dict:
         return {"error": f"Path outside workspace: {path}"}
     try:
         full_path.parent.mkdir(parents=True, exist_ok=True)
-        # CRITICAL: Validate syntax before writing .py files (py_compile only for .py)
-        # NOTE: Do not use local "import os" inside this function — it makes `os` a
-        # function-local name and breaks non-.py writes with UnboundLocalError.
+        # CRITICAL: Validate syntax before writing .py files
         if str(full_path).endswith('.py') and content.strip():
-            import py_compile
+            import py_compile, tempfile
             try:
-                tmp = _tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False)
+                tmp = tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False)
                 tmp.write(content)
                 tmp.close()
                 py_compile.compile(tmp.name, doraise=True)
-                os.unlink(tmp.name)
+                import os; os.unlink(tmp.name)
             except py_compile.PyCompileError as e:
+                import os; os.unlink(tmp.name)
+                return {"error": f"SyntaxError in Python file, write blocked: {e}"}
+            # Atomic write via tempfile + rename (AG-C5: TOCTOU fix)
+            fd2, tmp_path2 = _tempfile.mkstemp(suffix=full_path.suffix, prefix='tc_write_', dir=str(full_path.parent))
+            try:
+                with os.fdopen(fd2, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                os.rename(tmp_path2, str(full_path))
+            except BaseException:
                 try:
-                    os.unlink(tmp.name)
+                    os.unlink(tmp_path2)
                 except Exception:
                     pass
-                return {"error": f"SyntaxError in Python file, write blocked: {e}"}
-        # Atomic write via tempfile + replace for ALL file types (AG-C5: TOCTOU fix)
-        # os.replace works on Windows when dest exists; os.rename does not (WinError 183).
-        fd2, tmp_path2 = _tempfile.mkstemp(suffix=full_path.suffix, prefix='tc_write_', dir=str(full_path.parent))
-        try:
-            with os.fdopen(fd2, 'w', encoding='utf-8') as f:
-                f.write(content)
-            os.replace(tmp_path2, str(full_path))
-        except BaseException:
-            try:
-                os.unlink(tmp_path2)
-            except Exception:
-                pass
-            raise
-        logger.info(f"[executor] wrote {len(content)} bytes to {full_path}")
+                raise
+            logger.info(f"[executor] wrote {len(content)} bytes to {full_path}")
         return {"ok": True, "path": str(full_path)}
     except Exception as e:
         return {"error": str(e)}
@@ -3179,9 +3172,111 @@ class ToolExecutor:
             return {"error": "invalid_arguments"}
         return execute(name, args, base_dir)
 
+_SUSTAINED_TASK_MGR = None
+_SELF_EVOLVE_ENGINE = None
+
+
 def set_sustained_task_manager(mgr) -> None:
     """Inject SustainedTaskManager from worker bootstrap."""
     global _SUSTAINED_TASK_MGR
     _SUSTAINED_TASK_MGR = mgr
+
+
+def set_self_evolve_engine(engine) -> None:
+    """Inject SelfEvolveEngine from worker bootstrap."""
+    global _SELF_EVOLVE_ENGINE
+    _SELF_EVOLVE_ENGINE = engine
+
+
+def _run_async(coro):
+    """Run async coroutine from sync tool handlers."""
+    import asyncio
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                return pool.submit(asyncio.run, coro).result(timeout=60)
+        return loop.run_until_complete(coro)
+    except RuntimeError:
+        return asyncio.run(coro)
+
+
+def exec_task_create(args: dict) -> dict:
+    if _SUSTAINED_TASK_MGR is None:
+        return {"error": "SustainedTaskManager not wired"}
+    goal = (args.get("goal") or args.get("description") or "").strip()
+    if not goal:
+        return {"error": "goal required"}
+    context = args.get("context") or ""
+    max_retries = int(args.get("max_retries") or 3)
+    meta = {"context": context} if context else {}
+    try:
+        task_id = _run_async(_SUSTAINED_TASK_MGR.submit(goal, max_retries=max_retries, metadata=meta))
+        return {"ok": True, "task_id": task_id, "state": "pending", "goal": goal}
+    except Exception as e:
+        return {"error": f"task_create failed: {e}"}
+
+
+def exec_task_list(args: dict) -> dict:
+    if _SUSTAINED_TASK_MGR is None:
+        return {"error": "SustainedTaskManager not wired"}
+    try:
+        from tical_code.core.modules.sustained_task import TaskState
+        state = None
+        if args.get("state"):
+            state = TaskState(str(args["state"]).lower())
+        limit = int(args.get("limit") or 20)
+        rows = _run_async(_SUSTAINED_TASK_MGR.list_tasks(state=state, limit=limit))
+        return {"ok": True, "count": len(rows), "tasks": rows}
+    except Exception as e:
+        return {"error": f"task_list failed: {e}"}
+
+
+def exec_task_status(args: dict) -> dict:
+    if _SUSTAINED_TASK_MGR is None:
+        return {"error": "SustainedTaskManager not wired"}
+    task_id = (args.get("task_id") or "").strip()
+    if not task_id:
+        return {"error": "task_id required"}
+    try:
+        rec = _run_async(_SUSTAINED_TASK_MGR.get_status(task_id))
+        if rec is None:
+            return {"error": f"task not found: {task_id}"}
+        return {"ok": True, "task": rec.to_dict() if hasattr(rec, "to_dict") else rec}
+    except Exception as e:
+        return {"error": f"task_status failed: {e}"}
+
+
+def exec_task_cancel(args: dict) -> dict:
+    if _SUSTAINED_TASK_MGR is None:
+        return {"error": "SustainedTaskManager not wired"}
+    task_id = (args.get("task_id") or "").strip()
+    if not task_id:
+        return {"error": "task_id required"}
+    try:
+        ok = _run_async(_SUSTAINED_TASK_MGR.cancel_task(task_id))
+        return {"ok": bool(ok), "task_id": task_id}
+    except Exception as e:
+        return {"error": f"task_cancel failed: {e}"}
+
+
+def exec_evolve_stats(args: dict) -> dict:
+    if _SELF_EVOLVE_ENGINE is None:
+        return {"error": "SelfEvolveEngine not wired"}
+    try:
+        stats = _run_async(_SELF_EVOLVE_ENGINE.get_stats())
+        suggestions = _run_async(_SELF_EVOLVE_ENGINE.get_suggestions(min_frequency=1))
+        errors = _run_async(_SELF_EVOLVE_ENGINE.get_frequent_errors(limit=10))
+        insights = _run_async(_SELF_EVOLVE_ENGINE.get_insights(min_confidence=0.0))
+        return {
+            "ok": True,
+            "stats": stats,
+            "suggestions": suggestions,
+            "frequent_errors": errors,
+            "insights": insights,
+        }
+    except Exception as e:
+        return {"error": f"evolve_stats failed: {e}"}
 
 

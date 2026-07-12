@@ -516,6 +516,12 @@ class Worker:
         # SustainedTaskManager - persistent task queue with auto-recovery
         if SustainedTaskManager is not None:
             self._sustained_task_mgr = SustainedTaskManager()
+            # LIVE WIRE INJECT 2026-07-13
+            try:
+                from tical_code.core.tool_executor import set_sustained_task_manager
+                set_sustained_task_manager(self._sustained_task_mgr)
+            except Exception as _inj_s:
+                logger.warning("sustained inject failed: %s", _inj_s)
             self.logger.info("SustainedTaskManager initialized")
         else:
             self._sustained_task_mgr = None
@@ -526,6 +532,12 @@ class Worker:
             self._self_evolve = SelfEvolveEngine(
                 db_path=self._data_dir + "/self_evolve.db"
             )
+            # LIVE WIRE INJECT 2026-07-13
+            try:
+                from tical_code.core.tool_executor import set_self_evolve_engine
+                set_self_evolve_engine(self._self_evolve)
+            except Exception as _inj_e:
+                logger.warning("self_evolve inject failed: %s", _inj_e)
             self.logger.info("SelfEvolveEngine initialized")
         else:
             self._self_evolve = None
@@ -1457,8 +1469,35 @@ class AsyncWorker:
         self.workspace = cfg["workspace"]
         self.logger = logging.getLogger(f"EITElite.async_worker.{self.name}")
 
-        # SustainedTaskManager - initialized to None; Worker.__init__ creates it
-        self._sustained_task_mgr = None
+        # SustainedTaskManager - persistent task queue with auto-recovery
+        if SustainedTaskManager is not None:
+            self._sustained_task_mgr = SustainedTaskManager()
+            # LIVE WIRE INJECT 2026-07-13
+            try:
+                from tical_code.core.tool_executor import set_sustained_task_manager
+                set_sustained_task_manager(self._sustained_task_mgr)
+            except Exception as _inj_s:
+                self.logger.warning("sustained inject failed: %s", _inj_s)
+            self.logger.info("SustainedTaskManager initialized")
+        else:
+            self._sustained_task_mgr = None
+            self.logger.warning("SustainedTaskManager unavailable")
+
+        # SelfEvolveEngine - error pattern tracking and usage insights
+        if SelfEvolveEngine is not None:
+            self._self_evolve = SelfEvolveEngine(
+                db_path=os.path.expanduser("~/.tical-code/self_evolve.db")
+            )
+            # LIVE WIRE INJECT 2026-07-13
+            try:
+                from tical_code.core.tool_executor import set_self_evolve_engine
+                set_self_evolve_engine(self._self_evolve)
+            except Exception as _inj_e:
+                self.logger.warning("self_evolve inject failed: %s", _inj_e)
+            self.logger.info("SelfEvolveEngine initialized")
+        else:
+            self._self_evolve = None
+            self.logger.warning("SelfEvolveEngine unavailable")
 
         # Session management (LRU, 30-min idle timeout for long-term tracking)
         self.session_manager = SessionManager(
