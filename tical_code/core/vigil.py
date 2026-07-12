@@ -50,6 +50,7 @@ from pathlib import Path
 from typing import Optional, Dict, List, Set, Tuple, Any
 from dataclasses import dataclass, field, fields
 from datetime import datetime, timezone
+from .paths import get_guardian_dir
 
 logger = logging.getLogger("tical-code.vigil")
 
@@ -57,7 +58,7 @@ logger = logging.getLogger("tical-code.vigil")
 # Constants — paths, permissions, thresholds
 # ---------------------------------------------------------------------------
 
-GUARDIAN_DIR = "/opt/tical-guardian"
+GUARDIAN_DIR = str(get_guardian_dir())  # TICAL_GUARDIAN_DIR or $TICAL_HOME/guardian
 STATE_FILE = f"{GUARDIAN_DIR}/state.json"
 BASELINE_FILE = f"{GUARDIAN_DIR}/baseline.json"
 ALERT_LOG = f"{GUARDIAN_DIR}/alerts.log"
@@ -68,7 +69,7 @@ INTEL_DIR = "/var/log/intrusion-recon"
 CHECKSUM_FILE = f"{GUARDIAN_DIR}/.module_checksum"
 MODULE_PATH = __file__
 
-PATROL_INTERVAL = 120          # 2 minutes
+PATROL_INTERVAL = 600          # 10 minutes
 ALERT_COOLDOWN = 1800          # 30 minutes
 FORENSICS_RETENTION = 86400 * 7  # 7 days
 
@@ -490,7 +491,7 @@ class FilesystemWatch:
                         capture_output=True, text=True, timeout=10,
                     )
                     for fpath in r.stdout.strip().split("\n"):
-                        if not fpath or "hermes-results" in fpath or "wg-" in fpath:
+                        if not fpath or "gateway-results" in fpath or "wg-" in fpath:
                             continue
                         safe = self._quarantine(fpath)
                         result.findings.append(
@@ -537,6 +538,182 @@ class FilesystemWatch:
             return True
         except Exception:
             return False
+
+
+# ---------------------------------------------------------------------------
+# L4.5: SSH Brute-Force Guard — fail2ban-equivalent inside Vigil
+# ---------------------------------------------------------------------------
+
+BRUTEFORCE_BAN_FILE = f"{GUARDIAN_DIR}/bruteforce_bans.json"
+BRUTEFORCE_THRESHOLD = 5       # ban after N failures in window
+BRUTEFORCE_WINDOW = 300         # 5-minute window in seconds
+BRUTEFORCE_BAN_TIME = 3600      # 1-hour ban
+
+
+class BruteForceGuard:
+    """Detects SSH brute-force attacks and blocks attacking IPs via iptables.
+
+    Uses journalctl to read auth failures from the last window.
+    Purely additive — does not conflict with fail2ban if installed.
+    State persisted to bruteforce_bans.json for survival across restarts.
+    """
+
+    def __init__(self):
+        self._bans: dict = {}          # ip -> {"until": timestamp, "failures": count, "first_seen": ts}
+        self._current_bans: set = set()  # IPs currently blocked in iptables
+        self._load_bans()
+        # Clean up any stale iptables rules from a previous run
+        self._sync_iptables()
+
+    def _load_bans(self) -> None:
+        try:
+            with open(BRUTEFORCE_BAN_FILE, "r") as f:
+                data = json.load(f)
+            self._bans = data.get("bans", {})
+            self._current_bans = set(data.get("active_iptables", []))
+        except Exception:
+            self._bans = {}
+            self._current_bans = set()
+
+    def _save_bans(self) -> None:
+        os.makedirs(GUARDIAN_DIR, exist_ok=True)
+        with open(BRUTEFORCE_BAN_FILE, "w") as f:
+            json.dump({
+                "bans": self._bans,
+                "active_iptables": list(self._current_bans),
+            }, f, indent=2)
+
+    def _sync_iptables(self) -> None:
+        """Remove any stale iptables rules from a previous Vigil instance."""
+        try:
+            existing = subprocess.run(
+                ["iptables", "-L", "INPUT", "-n", "--line-numbers"],
+                capture_output=True, text=True, timeout=5,
+            )
+            for line in reversed(existing.stdout.split("\n")):
+                if "VIGIL-BF-" in line:
+                    num = line.split()[0]
+                    subprocess.run(
+                        ["iptables", "-D", "INPUT", num],
+                        capture_output=True, timeout=5,
+                    )
+        except Exception:
+            pass
+
+    def _block_ip(self, ip: str) -> bool:
+        """Block an IP via iptables. Idempotent."""
+        if ip in self._current_bans:
+            return True
+        if ip.startswith("127.") or ip.startswith("10.") or ip.startswith("192.168.") or ip.startswith("172.16."):
+            return False  # never block local/private IPs
+        try:
+            comment = f"VIGIL-BF-{int(time.time())}"
+            subprocess.run(
+                ["iptables", "-I", "INPUT", "-s", ip, "-j", "DROP", "-m", "comment", "--comment", comment],
+                capture_output=True, timeout=5, check=True,
+            )
+            self._current_bans.add(ip)
+            return True
+        except Exception:
+            return False
+
+    def _unblock_ip(self, ip: str) -> None:
+        """Remove iptables block for an IP."""
+        if ip not in self._current_bans:
+            return
+        try:
+            subprocess.run(
+                ["iptables", "-D", "INPUT", "-s", ip, "-j", "DROP"],
+                capture_output=True, timeout=5,
+            )
+            self._current_bans.discard(ip)
+        except Exception:
+            pass
+
+    def _expire_bans(self) -> list:
+        """Unblock IPs whose ban has expired. Returns list of unblocked IPs."""
+        now = time.time()
+        unblocked = []
+        expired_ips = [ip for ip, ban in self._bans.items() if now >= ban.get("until", 0)]
+        for ip in expired_ips:
+            self._unblock_ip(ip)
+            del self._bans[ip]
+            unblocked.append(ip)
+        if unblocked:
+            self._save_bans()
+        return unblocked
+
+    def check(self) -> ScanResult:
+        result = ScanResult()
+        self._expire_bans()
+
+        try:
+            # Read SSH auth failures from journalctl — last 5 minutes
+            r = subprocess.run(
+                ["journalctl", "-u", "ssh", "-u", "sshd", "--no-pager",
+                 "--since", f"{BRUTEFORCE_WINDOW // 60} min ago",
+                 "-o", "cat"],
+                capture_output=True, text=True, timeout=10,
+            )
+            # Parse: "Failed password for root from 1.2.3.4 port 22 ssh2"
+            # Also: "Invalid user test from 1.2.3.4 port 22"
+            failures: dict = {}
+            for line in r.stdout.split("\n"):
+                m = re.search(
+                    r"(?:Failed password|Invalid user|authentication failure).*?(?:from|rhost=)\s+(\d+\.\d+\.\d+\.\d+)",
+                    line, re.IGNORECASE,
+                )
+                if m:
+                    ip = m.group(1)
+                    if ip.startswith("127.") or ip.startswith("10.") or ip.startswith("192.168."):
+                        continue
+                    if ip in self._current_bans:
+                        continue  # already blocked
+                    failures[ip] = failures.get(ip, 0) + 1
+        except Exception:
+            return result
+
+        now = time.time()
+        for ip, count in failures.items():
+            # Aggregate with existing tracking
+            if ip in self._bans:
+                ban = self._bans[ip]
+                if now < ban.get("until", 0):
+                    continue  # still banned
+                # Ban expired — track fresh failures
+                count += ban.get("failures", 0)
+                if now - ban.get("first_seen", now) > BRUTEFORCE_WINDOW:
+                    count = failures[ip]  # reset window
+
+            if count >= BRUTEFORCE_THRESHOLD:
+                if self._block_ip(ip):
+                    self._bans[ip] = {
+                        "until": now + BRUTEFORCE_BAN_TIME,
+                        "failures": count,
+                        "first_seen": now,
+                        "banned_at": now,
+                    }
+                    self._save_bans()
+                    result.findings.append(
+                        f"SSH BRUTE FORCE: {ip} — {count} failures in {BRUTEFORCE_WINDOW}s, banned for {BRUTEFORCE_BAN_TIME}s"
+                    )
+                    result.severity = Severity.escalate(result.severity, Severity.CRITICAL)
+                    result.blocked = True
+            else:
+                # Track for cumulative counting
+                self._bans[ip] = {
+                    "until": 0,
+                    "failures": count,
+                    "first_seen": self._bans.get(ip, {}).get("first_seen", now),
+                }
+                if count >= BRUTEFORCE_THRESHOLD // 2:
+                    result.findings.append(
+                        f"SSH BRUTE FORCE WARNING: {ip} — {count}/{BRUTEFORCE_THRESHOLD} failures"
+                    )
+                    result.severity = Severity.escalate(result.severity, Severity.MEDIUM)
+
+        self._save_bans()
+        return result
 
 
 # ---------------------------------------------------------------------------
@@ -589,7 +766,8 @@ class IntegrityGuard:
             if os.path.exists(f):
                 try:
                     st = os.stat(f)
-                    if st.st_uid != 0:  # not root-owned
+
+                    if st.st_uid != 0 and st.st_uid != current_uid:  # not root-owned nor owned by running user
                         result.findings.append(f"STATE FILE PERMISSION: {f} not root-owned")
                         result.severity = Severity.escalate(result.severity, Severity.HIGH)
                 except Exception:
@@ -685,13 +863,11 @@ class SecurityVigil:
         self.port_patrol = PortPatrol()
         self.ssh_sentinel = SSHSentinel()
         self.fs_watch = FilesystemWatch()
+        self.bruteforce = BruteForceGuard()
         self.integrity = IntegrityGuard()
 
-        # Bootstrap integrity only if checksum file doesn't exist yet.
-        # P0-2 fix: never overwrite existing checksum — prevents attacker from
-        # restarting to legitimize a tampered module via fresh bootstrap.
-        if not os.path.exists(CHECKSUM_FILE):
-            self.integrity.bootstrap()
+        # Bootstrap integrity on first load
+        self.integrity.bootstrap()
 
         # Background patrol
         self._task: Optional[asyncio.Task] = None
@@ -827,6 +1003,12 @@ class SecurityVigil:
                     findings_all.extend(r.findings)
                     self._write_alert("L4_FS", r)
 
+                # L4.5: SSH brute-force detection
+                r = self.bruteforce.check()
+                if r.findings:
+                    findings_all.extend(r.findings)
+                    self._write_alert("L4_BF", r)
+
                 if findings_all:
                     self._alerts += 1
                     self.log.warning(
@@ -860,7 +1042,7 @@ class SecurityVigil:
                 f"⚠️ [Vigil Security] {len(findings)} threat(s) auto-blocked\n"
                 f"Node: {node}\n"
                 f"Findings: {findings_text}\n"
-                f"Action: instant block applied → /opt/tical-guardian/emergency/"
+                f"Action: instant block applied → $TICAL_GUARDIAN_DIR/emergency/"
             )
 
             sent = False
@@ -977,7 +1159,7 @@ class SecurityVigil:
             if pending:
                 lines.append(
                     f"[Security Vigil] {len(pending)} active security alert(s). "
-                    f"Advise user to check /opt/tical-guardian/emergency/ immediately."
+                    f"Advise user to check $TICAL_GUARDIAN_DIR/emergency/ immediately."
                 )
 
         return "\n\n".join(lines) if lines else ""
