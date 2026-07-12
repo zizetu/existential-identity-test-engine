@@ -1126,33 +1126,10 @@ class Worker:
 
         while True:
             try:
-                # 1. RESUME ACTIVE TASKS - autonomous continuation
-                active = None
-                if list_active_tasks is not None:
-                    try:
-                        active = list_active_tasks(workspace=self.workspace)
-                    except Exception:
-                        pass
-                if active:
-                    for task in active:
-                        try:
-                            logger.info("Resuming task: %s step=%d goal=%s",
-                                        task.task_id, task.step, task.goal[:60])
-                            self._run_task(task)
-                        except Exception as e:
-                            if self.error_logger and ErrorCategory is not None:
-                                try:
-                                    self.error_logger.log(ErrorCategory.WORKER, f"Task {task.task_id} error", exc=e)
-                                except Exception:
-                                    pass
-                            logger.error("Task %s error: %s\n%s",
-                                       task.task_id, e, traceback.format_exc())
-                            if fail_task is not None:
-                                try:
-                                    fail_task(task, str(e), workspace=self.workspace)
-                                except Exception:
-                                    pass
-                    continue  # re-check for more tasks or new messages
+                # REFACTOR 2026-07-12: decouple task recovery from main poll loop.
+                # Synchronous task resumption blocked channel polling when stale
+                # task dirs remained. Recovery is opt-in via sustained_task module.
+                
 
                 # 2. POLL CHANNELS - normal message handling
                 for channel in self.channels:
