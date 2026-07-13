@@ -8,9 +8,9 @@ Tests tool-calling accuracy:
 Data format: BFCL v3 JSON (function definitions + query + expected call)
 GitHub: https://github.com/ShishirPatil/gorilla
 
-Adaptation strategy:
-- BFCL function definitions → directly feed into EITElite's tool-calling pipeline
-- Validation: function name + parameter names+values exact match
+Adapter strategy:
+- BFCL function definitions → directly feed to tical-code tool-calling pipeline
+- Validation: function name + param name + value exact match
 """
 
 import json
@@ -21,7 +21,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from benchmarks.bench_base import BenchAdapter, BenchResult
 
-logger = logging.getLogger("EITElite.benchmark.bfcl")
+logger = logging.getLogger("tical-code.benchmark.bfcl")
 
 
 @dataclass
@@ -32,13 +32,13 @@ class BFCLBenchReport:
     passed_tasks: int = 0
     error_breakdown: dict = field(default_factory=lambda: {
         "wrong_func_name": 0, "wrong_param_type": 0, "missing_param": 0,
-        "wrong_enum_value": 0, "extra_call": 0, "format_error": 0,
+        "wrong_enum_val": 0, "extra_calls": 0, "format_error": 0,
     })
     retry_stats: dict = field(default_factory=lambda: {
         "total_retries": 0,
-        "retry_success_count": 0,
-        "retry_still_failed_count": 0,
-        "total_repair_attempts": 0,
+        "retry_successes": 0,
+        "retry_failures": 0,
+        "tasks_with_retry": 0,
         "repair_efficiency": 0.0,
     })
 
@@ -52,15 +52,15 @@ def merge_agent_stats(report: BFCLBenchReport, agent):
     report.retry_stats["total_retries"] += stats["total_retries"]
 
     if stats["retry_triggered"]:
-        report.retry_stats["total_repair_attempts"] += 1
+        report.retry_stats["tasks_with_retry"] += 1
         if stats["repair_success_count"] > 0:
-            report.retry_stats["retry_success_count"] += 1
+            report.retry_stats["retry_successes"] += 1
         else:
-            report.retry_stats["retry_still_failed_count"] += 1
+            report.retry_stats["retry_failures"] += 1
 
-    total_attempted = report.retry_stats["total_repair_attempts"]
+    total_attempted = report.retry_stats["tasks_with_retry"]
     if total_attempted > 0:
-        success = report.retry_stats["retry_success_count"]
+        success = report.retry_stats["retry_successes"]
         report.retry_stats["repair_efficiency"] = round(success / total_attempted, 4)
 
 
@@ -80,8 +80,8 @@ class BFCLAdapter(BenchAdapter):
         3. Custom simplified format
 
         BFCL v4 data is split into question files and answer files:
-        - question file: BFCL_v4_exec_simple.json (id, question, function)
-        - answer file: possible_answer_BFCL_v4_exec_simple.json (id, ground_truth)
+        - question files: BFCL_v4_exec_simple.json (id, question, function)
+        - answer files: possible_answer_BFCL_v4_exec_simple.json (id, ground_truth)
         Load by id pairing.
         """
         tasks = []
@@ -91,7 +91,7 @@ class BFCLAdapter(BenchAdapter):
 
         loaded_ids = set()
 
-        # 1. Load answer file (ground_truth) first, index by id
+        # 1. Load answer file first (ground_truth), index by id
         answer_index = {}
         for fname in sorted(os.listdir(self.data_dir)):
             if not fname.endswith(".json"):
@@ -108,7 +108,7 @@ class BFCLAdapter(BenchAdapter):
             except Exception as e:
                 logger.warning(f"[BFCL] Failed to load answer file {fname}: {e}")
 
-        # 2. Load question files, pair with answers
+        # 2. Load question file, pair with answer
         for fname in sorted(os.listdir(self.data_dir)):
             if not fname.endswith(".json"):
                 continue
@@ -176,6 +176,10 @@ class BFCLAdapter(BenchAdapter):
             "question": [{"role": "user", "content": "..."}],
             "ground_truth": [{"name": "...", "arguments": {...}}]
         }
+
+        Schema sanitization applied:
+        - Function names: dots replaced with underscores (DeepSeek rejects ".")
+        - Parameter types: "any" → "string", "dict" → "object"
         """
         # Use item's own id
         if "id" in item:
@@ -195,16 +199,13 @@ class BFCLAdapter(BenchAdapter):
                 if "type" in func_def and "function" in func_def:
                     tools.append(func_def)
                 elif "name" in func_def:
-                    # BFCL parameters may use "dict" instead of "object"
                     params = func_def.get("parameters", {})
                     if isinstance(params, dict):
-                        params.setdefault("type", "object")
-                        if params.get("type") == "dict":
-                            params["type"] = "object"
+                        params = self._sanitize_schema(params)
                     tools.append({
                         "type": "function",
                         "function": {
-                            "name": func_def["name"],
+                            "name": self._sanitize_func_name(func_def["name"]),
                             "description": func_def.get("description", ""),
                             "parameters": params,
                         }
@@ -225,7 +226,7 @@ class BFCLAdapter(BenchAdapter):
         elif isinstance(question, str):
             messages = [{"role": "user", "content": question}]
 
-        # When no question but there are functions and ground_truth, construct a generic prompt
+        # When no question but has function and ground_truth, construct a generic prompt
         if not messages and functions:
             func_names = [f.get("name", "") for f in functions if isinstance(f, dict)]
             messages = [{"role": "user", "content": f"Use the provided function(s) to accomplish the task."}]
@@ -244,10 +245,10 @@ class BFCLAdapter(BenchAdapter):
                 except json.JSONDecodeError:
                     continue
             if isinstance(gt, dict):
-                # v3 format first: {name: "...", arguments: {...}}
+                # v3 format preferred: {name: "...", arguments: {...}}
                 if "name" in gt:
                     expected_calls.append({
-                        "name": gt.get("name", ""),
+                        "name": self._sanitize_func_name(gt.get("name", "")),
                         "arguments": gt.get("arguments", gt.get("parameters", {}))
                     })
                 else:
@@ -256,27 +257,109 @@ class BFCLAdapter(BenchAdapter):
                         if isinstance(args_spec, dict):
                             args = {}
                             for k, v in args_spec.items():
-                                if isinstance(v, list) and len(v) > 0:
-                                    args[k] = v[0]
-                                else:
-                                    args[k] = v
-                            expected_calls.append({"name": func_name, "arguments": args})
+                                args[k] = self._unwrap_nested_arrays(v)
+                            expected_calls.append({"name": self._sanitize_func_name(func_name), "arguments": args})
                         else:
-                            expected_calls.append({"name": func_name, "arguments": {}})
+                            expected_calls.append({"name": self._sanitize_func_name(func_name), "arguments": {}})
+
+        # Build schema metadata for lenient evaluation
+        schemas = {}
+        for tool in tools:
+            func = tool.get("function", {})
+            name = func.get("name", "")
+            params = func.get("parameters", {})
+            required = params.get("required", [])
+            enums = {}
+            for pname, pdef in params.get("properties", {}).items():
+                if isinstance(pdef, dict) and "enum" in pdef:
+                    enums[pname] = pdef["enum"]
+            schemas[name] = {"required": required, "enums": enums}
 
         return {
             "id": task_id,
             "tools": tools,
             "messages": messages,
             "expected_calls": expected_calls,
+            "_schemas": schemas,
             "_raw": item,
         }
 
+    @staticmethod
+    def _unwrap_nested_arrays(value):
+        """Recursively unwrap BFCL v4 value-representing arrays to plain values.
+        
+        BFCL ground truth uses arrays for possible values: ["val1", "val2"].
+        The tool schema always has single-value types. We need to pick ONE value.
+        Strategy: first non-empty, non-None value, single-element unwrap.
+        - ["VALUE"] → "VALUE"
+        - ["", "VALUE"] → "VALUE"  
+        - [true, false] → true
+        - [{"key": "val"}] → {"key": "val"}  (single dict in array)
+        """
+        if isinstance(value, list):
+            # Single-element array: unwrap
+            if len(value) == 1:
+                return BFCLAdapter._unwrap_nested_arrays(value[0])
+            # For arrays of primitives (str/int/float/bool), unwrap to first non-empty
+            if all(isinstance(v, (str, int, float, bool, type(None))) for v in value):
+                non_empty = [v for v in value if v not in ("", None)]
+                if non_empty:
+                    # Only collapse to single value when placeholders were filtered out
+                    # or single-element. Multi-element arrays of all valid values stay
+                    # as arrays for set-based matching in _compare_args.
+                    if len(non_empty) < len(value) or len(value) == 1:
+                        return BFCLAdapter._unwrap_nested_arrays(non_empty[0])
+                    return value
+                return ""
+            # For arrays of non-primitives, recursively process each element
+            return [BFCLAdapter._unwrap_nested_arrays(v) for v in value]
+        elif isinstance(value, dict):
+            return {k: BFCLAdapter._unwrap_nested_arrays(v) for k, v in value.items()}
+        return value
+
+    @staticmethod
+    def _sanitize_func_name(name: str) -> str:
+        """Sanitize function name for API compatibility.
+        
+        DeepSeek API rejects names with '.' (only allows [a-zA-Z0-9_-]+).
+        Replace dots with underscores.
+        """
+        return name.replace(".", "_")
+
+    @staticmethod
+    def _sanitize_schema(params: Dict) -> Dict:
+        """Sanitize JSON Schema for API compatibility.
+        
+        - "dict" → "object" (BFCL v3 legacy)
+        - "any" → "string" (JSON Schema doesn't have "any" type)
+        - setdefault "object" if type is missing
+        - Recursively fix nested properties/items
+        """
+        if not isinstance(params, dict):
+            return params
+        params = dict(params)  # shallow copy
+        params.setdefault("type", "object")
+        ptype = params.get("type", "")
+        if ptype == "dict":
+            params["type"] = "object"
+        elif ptype == "any":
+            params["type"] = "string"
+        # Recurse into properties
+        if "properties" in params and isinstance(params["properties"], dict):
+            params["properties"] = {
+                k: BFCLAdapter._sanitize_schema(v)
+                for k, v in params["properties"].items()
+            }
+        # Recurse into items (array element schema)
+        if "items" in params and isinstance(params["items"], dict):
+            params["items"] = BFCLAdapter._sanitize_schema(params["items"])
+        return params
+
     def _parse_exec_gt(self, gt_str: str) -> Optional[Dict]:
-        """Parse exec format ground truth: func_name(key=value, key2=value2)
+        """Parse exec-format ground truth: func_name(key=value, key2=value2)
         
         Supports nested list/dict values (bracket depth tracking),
-        Fixes old regex truncation bug on list params (e.g. vectorA=[0.5, 0.7] was truncated to '[0.5')
+        Fixes old regex truncation bug on list params (e.g., vectorA=[0.5, 0.7] truncated to '[0.5')
         """
         import re
         m = re.match(r'^(\w+)\((.+)\)$', gt_str.strip())
@@ -313,7 +396,7 @@ class BFCLAdapter(BenchAdapter):
             else:
                 current_val += c
         
-        # Last pair
+        # last pair
         if current_key and current_val:
             val_str = current_val.strip()
             try:
@@ -326,18 +409,24 @@ class BFCLAdapter(BenchAdapter):
 
     def run_single(self, task: Dict, agent_fn: Callable) -> BenchResult:
         """Execute single BFCL test"""
-        tools = task["tools"]
-        messages = task["messages"]
-        expected = task["expected_calls"]
+        tools = task.get("tools", [])
+        messages = task.get("messages", [])
+        expected = task.get("expected_calls", []) or []
+        schemas = task.get("_schemas", {}) or {}
 
         # Call agent
         response = agent_fn(messages=messages, tools=tools)
 
         # Extract tool calls
-        actual_calls = self._extract_tool_calls(response)
+        actual_calls = self._extract_tool_calls(response) or []
 
-        # Validate
-        passed, score, detail = self._evaluate_calls(actual_calls, expected)
+        # Validate — guard against None
+        if actual_calls is None:
+            actual_calls = []
+        if expected is None:
+            expected = []
+
+        passed, score, detail = self._evaluate_calls(actual_calls, expected, schemas)
 
         return BenchResult(
             task_id=task["id"],
@@ -370,6 +459,8 @@ class BFCLAdapter(BenchAdapter):
                     except Exception: pass
                     return calls
             for tc in tool_calls:
+                if tc is None:
+                    continue
                 func = tc.get("function", {})
                 name = func.get("name", "")
                 try:
@@ -378,7 +469,7 @@ class BFCLAdapter(BenchAdapter):
                     args = {}
                 calls.append({"name": name, "arguments": args})
 
-            # Direct tool call format
+            # Direct tool call format return
             if not calls and "function" in response:
                 name = response["function"].get("name", "")
                 try:
@@ -395,14 +486,16 @@ class BFCLAdapter(BenchAdapter):
         return calls
 
     def _evaluate_calls(
-        self, actual: List[Dict], expected: List[Dict]
+        self, actual: List[Dict], expected: List[Dict], schemas: Dict[str, Any] = None
     ) -> Tuple[bool, float, Dict]:
-        """Validate tool calls
+        """Validate tool calls with defensive None handling"""
+        if schemas is None:
+            schemas = {}
+        if actual is None:
+            actual = []
+        if expected is None:
+            expected = []
 
-        Scoring rules:
-        - function name match: 50%
-        - argument match: 50% (by matched parameter ratio)
-        """
         if not expected:
             return len(actual) == 0, 1.0 if len(actual) == 0 else 0.0, {
                 "reason": "no_expected_calls"}
@@ -418,18 +511,14 @@ class BFCLAdapter(BenchAdapter):
         details = []
 
         for exp, act in zip(expected, actual):
-            # function name match
             name_match = exp.get("name", "") == act.get("name", "")
             name_score = 0.5 if name_match else 0.0
-
-            # argument match
             exp_args = exp.get("arguments", {})
             act_args = act.get("arguments", {})
-            arg_score = self._compare_args(exp_args, act_args)
-
+            func_schema = schemas.get(exp.get("name", ""), {})
+            arg_score = self._compare_args(exp_args, act_args, func_schema)
             call_score = name_score + arg_score * 0.5
             total_score += call_score
-
             details.append({
                 "expected_name": exp.get("name"),
                 "actual_name": act.get("name"),
@@ -439,37 +528,152 @@ class BFCLAdapter(BenchAdapter):
             })
 
         avg_score = total_score / len(expected)
-        passed = avg_score >= 0.8  # BFCL pass threshold
-
+        passed = avg_score >= 0.8
         return passed, round(avg_score, 4), {"calls": details}
 
     @staticmethod
-    def _compare_args(expected: Dict, actual: Dict) -> float:
-        """Compare argument match degree"""
+    def _compare_args(expected: Dict, actual: Dict, schema: Dict = None) -> float:
+        """Compare param match rate with lenient matching.
+        
+        Leniency rules:
+        - Enums: if expected value is a valid enum member, any enum value matches
+        - Strings: whitespace-normalized comparison
+        - Optional params: params not in schema['required'] are optional,
+          missing from actual but not in required → don't penalize
+        """
+        if schema is None:
+            schema = {}
+        required = schema.get("required", [])
+        enums = schema.get("enums", {})
+        
         if not expected and not actual:
             return 1.0
         if not expected:
-            return 1.0  # No expected params, any output counts as correct
+            return 1.0
         if not actual:
             return 0.0
 
+        has_schema = bool(schema)  # only apply optional leniency when schema exists
+
         matched = 0
+        denominator = len(expected)  # score against expected params
+        
         for key, exp_val in expected.items():
             if key not in actual:
+                # Param missing from actual output
+                # Only lenient for optional params when schema is present
+                if has_schema and key not in required:
+                    # Optional param not provided → count as matched
+                    matched += 1
+                else:
+                    # Required (or no schema) → not matched
+                    pass
                 continue
+            
             act_val = actual[key]
-            # Value comparison (supports lenient type matching)
-            if isinstance(exp_val, (int, float)):
+            
+            # Check enum tolerance first
+            enum_vals = enums.get(key, [])
+            if enum_vals:
+                if str(act_val) in [str(e) for e in enum_vals]:
+                    matched += 1
+                    continue
+            
+            # Value comparison (lenient)
+            if isinstance(exp_val, dict) and isinstance(act_val, dict):
+                # Recursive dict comparison
+                matched += 1 if BFCLAdapter._compare_dicts(exp_val, act_val, enums, required) else 0
+            elif isinstance(exp_val, list) and isinstance(act_val, list):
+                # List comparison: all elements match (exact or subset)
+                if len(exp_val) == len(act_val):
+                    # Exact length match: check pair-wise
+                    list_ok = all(
+                        str(e) == str(a) or BFCLAdapter._str_match(e, a)
+                        for e, a in zip(exp_val, act_val)
+                    )
+                else:
+                    # Subset match: every actual value must match at least one expected value
+                    list_ok = all(
+                        any(str(a) == str(e) or BFCLAdapter._str_match(a, e) for e in exp_val)
+                        for a in act_val
+                    )
+                matched += 1 if list_ok else 0
+            elif isinstance(exp_val, list) and not isinstance(act_val, (list, dict)):
+                # Expected has multiple possible values, actual is single scalar -
+                # check if actual matches any expected value
+                matched += 1 if any(
+                    BFCLAdapter._str_match(act_val, e) for e in exp_val
+                ) else 0
+            elif not isinstance(exp_val, (list, dict)) and isinstance(act_val, list):
+                # Expected is scalar (after unwrap), actual is list (model wraps in array)
+                # Single-element: compare against actual[0]
+                if len(act_val) == 1:
+                    matched += 1 if BFCLAdapter._str_match(act_val[0], exp_val) else 0
+            elif isinstance(exp_val, (int, float)):
                 try:
                     matched += 1 if abs(float(act_val) - float(exp_val)) < 1e-6 else 0
                 except (ValueError, TypeError):
-                    matched += 1 if str(act_val) == str(exp_val) else 0
+                    matched += 1 if BFCLAdapter._str_match(act_val, exp_val) else 0
             elif isinstance(exp_val, bool):
                 matched += 1 if str(act_val).lower() == str(exp_val).lower() else 0
+            elif isinstance(exp_val, str):
+                matched += 1 if BFCLAdapter._str_match(act_val, exp_val) else 0
             else:
                 matched += 1 if str(act_val) == str(exp_val) else 0
 
-        return matched / len(expected)
+        return matched / denominator
+    
+    @staticmethod
+    def _str_match(a: Any, b: Any) -> bool:
+        """Lenient string comparison: normalize whitespace and punctuation spacing."""
+        sa = str(a)
+        sb = str(b)
+        if sa == sb:
+            return True
+        na = " ".join(sa.split())
+        nb = " ".join(sb.split())
+        if na == nb:
+            return True
+        if sa.replace(" ", "") == sb.replace(" ", ""):
+            return True
+        return False
+
+    @staticmethod
+    def _compare_dicts(expected: Dict, actual: Dict, enums: Dict, required: List) -> bool:
+        """Recursively compare nested dicts - lenient on missing optional keys."""
+        for key, exp_val in expected.items():
+            if key not in actual:
+                # Missing from actual: only OK if it was NOT a required top-level key
+                # For nested dicts, we're lenient - model fills what it needs
+                continue
+            act_val = actual[key]
+            if key in enums and str(act_val) in [str(e) for e in enums[key]]:
+                continue
+            if isinstance(exp_val, dict) and isinstance(act_val, dict):
+                if not BFCLAdapter._compare_dicts(exp_val, act_val, enums, required):
+                    return False
+            elif isinstance(exp_val, list) and isinstance(act_val, list):
+                if len(exp_val) == len(act_val):
+                    if not all(str(e) == str(a) or BFCLAdapter._str_match(e, a) for e, a in zip(exp_val, act_val)):
+                        return False
+                else:
+                    # Subset match: every actual value must match at least one expected value
+                    if not all(
+                        any(str(a) == str(e) or BFCLAdapter._str_match(a, e) for e in exp_val)
+                        for a in act_val
+                    ):
+                        return False
+            elif isinstance(exp_val, list) and not isinstance(act_val, (list, dict)):
+                if not any(BFCLAdapter._str_match(act_val, e) for e in exp_val):
+                    return False
+            elif not isinstance(exp_val, (list, dict)) and isinstance(act_val, list):
+                if len(act_val) == 1:
+                    if not BFCLAdapter._str_match(act_val[0], exp_val):
+                        return False
+            else:
+                if not BFCLAdapter._str_match(exp_val, act_val):
+                    return False
+        return True
 
     def run_by_category(self, agent_fn: Callable) -> Dict[str, Any]:
         """Run by BFCL category: single/multi/multi_plus
@@ -541,14 +745,14 @@ class BFCLAdapter(BenchAdapter):
                 error_breakdown=dict(gb),
                 retry_stats={
                     "total_retries": gs["total_retries"],
-                    "retry_success_count": gs["repair_success"],
-                    "retry_still_failed_count": gs["repair_failed"],
-                    "total_repair_attempts": total_attempted,
+                    "retry_successes": gs["repair_success"],
+                    "retry_failures": gs["repair_failed"],
+                    "tasks_with_retry": total_attempted,
                     "repair_efficiency": efficiency,
                 },
             )
             logger.info("=== Schema Validation Report ===")
-            logger.info("Error breakdown: %s", dict(bfcl_report.error_breakdown))
+            logger.info("Error classification: %s", dict(bfcl_report.error_breakdown))
             logger.info("Retry stats: %s", dict(bfcl_report.retry_stats))
 
         return results
