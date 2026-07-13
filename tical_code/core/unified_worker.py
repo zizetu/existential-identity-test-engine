@@ -1741,19 +1741,6 @@ class AsyncWorker:
                     _content = open(_fpath).read().strip()
                     if _content:
                         self.system_prompt += f"\n\n## {_label}\n{_content[:2000]}"
-
-            # Inject CLAUDE.md from project root (standard AI agent convention)
-            _claude_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
-                os.path.abspath(__file__)))), "CLAUDE.md")
-            if os.path.exists(_claude_path):
-                try:
-                    _claude_content = open(_claude_path).read().strip()
-                    if _claude_content:
-                        self.system_prompt += f"\n\n[Project Context: CLAUDE.md]\n{_claude_content[:2000]}"
-                        self.logger.info("CLAUDE.md injected: %d chars", len(_claude_content))
-                except Exception:
-                    pass
-
             self.logger.info("Memory injected into system prompt")
         except Exception as e:
             self.logger.debug("Memory injection skipped: %s", e)
@@ -1821,6 +1808,81 @@ class AsyncWorker:
                 self.doom_loop = DoomLoopDetector(config)
             except Exception as e:
                 self.logger.warning("DoomLoopDetector init failed: %s", e)
+
+        # Register doom-loop recovery callbacks (inline — AsyncWorker does not
+        # inherit from Worker, so _register_doom_loop_recovery_callbacks isn't
+        # available here.  This mirrors Worker._register_doom_loop_recovery_callbacks.)
+        _detector = getattr(self, 'doom_loop', None)
+        if _detector is not None:
+            try:
+                from tical_code.core.doom_loop import RecoveryAction
+
+                async def _retry_different_args(result):
+                    self.logger.info("[doom_loop] recovery: RETRY_DIFFERENT_ARGS")
+                    self._ctx._doom_loop_recovery_change_approach = True
+                    return True
+
+                async def _switch_tool(result):
+                    self.logger.info("[doom_loop] recovery: SWITCH_TOOL")
+                    self._ctx._doom_loop_recovery_tool_switch = True
+                    return True
+
+                async def _rollback_steps(result):
+                    _cp = getattr(self, 'checkpoint', None)
+                    if _cp is None:
+                        self.logger.warning("[doom_loop] recovery: ROLLBACK_STEPS — no checkpoint")
+                        return False
+                    try:
+                        _latest = _cp.get_latest()
+                        if _latest is None:
+                            self.logger.warning("[doom_loop] recovery: ROLLBACK_STEPS — no checkpoints")
+                            return False
+                        _cp.restore(_latest["id"])
+                        self.logger.info("[doom_loop] recovery: ROLLBACK_STEPS restored %s", _latest["id"])
+                        return True
+                    except Exception as _e:
+                        self.logger.warning("[doom_loop] recovery: ROLLBACK_STEPS failed: %s", _e)
+                        return False
+
+                async def _downgrade_model(result):
+                    _llm = getattr(self, 'llm', None)
+                    if _llm is None:
+                        self.logger.warning("[doom_loop] recovery: DOWNGRADE_MODEL — no LLM")
+                        return False
+                    try:
+                        if hasattr(_llm, 'fallback_provider') and _llm.fallback_provider:
+                            _llm.switch_to_fallback()
+                            self.logger.info("[doom_loop] recovery: DOWNGRADE_MODEL switched to fallback")
+                            return True
+                        if hasattr(_llm, 'degrade') and callable(_llm.degrade):
+                            _llm.degrade()
+                            self.logger.info("[doom_loop] recovery: DOWNGRADE_MODEL degraded tier")
+                            return True
+                    except Exception as _e:
+                        self.logger.warning("[doom_loop] recovery: DOWNGRADE_MODEL failed: %s", _e)
+                    return False
+
+                async def _force_summarize(result):
+                    _comp = getattr(self, 'context_compactor', None)
+                    if _comp is None:
+                        self.logger.warning("[doom_loop] recovery: FORCE_SUMMARIZE — no compactor")
+                        return False
+                    try:
+                        _comp._force_compact_pending = True
+                        self.logger.info("[doom_loop] recovery: FORCE_SUMMARIZE flag set")
+                        return True
+                    except Exception as _e:
+                        self.logger.warning("[doom_loop] recovery: FORCE_SUMMARIZE failed: %s", _e)
+                        return False
+
+                _detector.register_recovery_callback(RecoveryAction.RETRY_DIFFERENT_ARGS, _retry_different_args)
+                _detector.register_recovery_callback(RecoveryAction.SWITCH_TOOL, _switch_tool)
+                _detector.register_recovery_callback(RecoveryAction.ROLLBACK_STEPS, _rollback_steps)
+                _detector.register_recovery_callback(RecoveryAction.DOWNGRADE_MODEL, _downgrade_model)
+                _detector.register_recovery_callback(RecoveryAction.FORCE_SUMMARIZE, _force_summarize)
+                self.logger.info("Doom loop recovery callbacks registered: 5 actions")
+            except Exception as _e:
+                self.logger.warning("Failed to register doom loop recovery callbacks: %s", _e)
 
         # Tool schemas
         self.tool_schemas = TOOL_SCHEMAS_CLEAN

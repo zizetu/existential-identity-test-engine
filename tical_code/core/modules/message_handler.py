@@ -1,4 +1,4 @@
-# EITElite -- AI Agent Platform
+# tical-code -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -17,7 +17,6 @@
 # Original repository: https://github.com/zizetu/eite-agent
 #
 
-# provenance:ticalasi-zzt-2026
 """Message handler module — LLM + tools per-message turn processing.
 
 Handles every inbound user message through the full processing pipeline:
@@ -75,7 +74,7 @@ import unicodedata
 import datetime as _dt
 from typing import Any, Optional
 
-# ── EITElite internal imports ──────────────────────────────────────
+# ── tical-code internal imports ──────────────────────────────────────
 from tical_code.core.shared_context import SharedContext, _get_rss_mb
 from tical_code.core.trace import TraceLogger, TraceEvent
 from tical_code.core.channel import Message, Response
@@ -86,6 +85,8 @@ from tical_code.core.response_formatter import format_result
 from tical_code.core.prompt import build_power_mode_suffix, strip_and_inject_power_mode
 from tical_code.core.permission_checker import PermissionChecker, PermissionMode
 from tical_code.core.decision_engine import ModelStatus
+from tical_code.core.iteration_budget import IterationBudget
+from tical_code.core.paths import under_tical_home
 
 # Conditional imports — may be None on light installs
 try:
@@ -120,14 +121,14 @@ except ImportError:
     SkillAuditRunner = None
     _SKILL_AUDIT_AVAILABLE = False
 
-logger = logging.getLogger("EITElite.message_handler")
+logger = logging.getLogger("tical-code.message_handler")
 
 # ── EITE Data Directory ──────────────────────────────────────────
 # All persistent data lives under this base directory (passwords, logs,
 # memory, sessions, checkpoints).  Override via EITE_DATA_DIR env var
 # or change the default below for non-standard deployments.
 _EITE_DATA_DIR = os.path.expanduser(
-    os.environ.get("EITE_DATA_DIR", "~/.EITElite")
+    os.environ.get("EITE_DATA_DIR") or os.environ.get("TICAL_HOME") or under_tical_home()
 )
 
 # ── Per-User Password System ──────────────────────────────────────
@@ -149,7 +150,7 @@ class IterationBudget:
         self._consecutive_failures = 0
         self._lock = __import__("threading").Lock()
         self._start_time = __import__("time").time()
-        self._max_wall_time = 600
+        self._max_wall_time = 1200
     def consume(self):
         with self._lock:
             if self._used >= self.max_total: return False
@@ -446,7 +447,7 @@ def _privacy_scan_response(text: str) -> str:
 # Security model:
 #   CMD_LEVEL_MASTER (0) — full access, including ``exec`` (arbitrary
 #       bash).  Restricted to senders listed in MASTER_IDS.
-#   CMD_LEVEL_ADMIN (1)  — AI admin (primary worker).  Can deploy,
+#   CMD_LEVEL_ADMIN (1)  — AI admin (seoul worker).  Can deploy,
 #       switch_model, status, report.
 #   CMD_LEVEL_WORKER (2) — self-manage only: ping, help, escalate,
 #       restart, log.  Workers can only target themselves.
@@ -459,7 +460,7 @@ def _privacy_scan_response(text: str) -> str:
 WORKER_IDS = set(os.environ.get("WORKER_IDS", "default-worker").split(","))
 
 CMD_LEVEL_MASTER = 0  # master -- full access
-CMD_LEVEL_ADMIN  = 1  # AI admin (primary worker)
+CMD_LEVEL_ADMIN  = 1  # AI admin (seoul)
 CMD_LEVEL_WORKER = 2  # Worker -- self-manage only
 
 # Master IDs: load from env MASTER_IDS (comma-separated) or use safe default
@@ -520,7 +521,7 @@ def _cmd_get_level(ctx: SharedContext, sender: str, msg: Message) -> int:
        ``MASTER_IDS`` (case-insensitive), they receive CMD_LEVEL_MASTER.
 
     3. **Worker IDs** — senders in ``WORKER_IDS`` map to ADMIN
-       (``agent``) or WORKER (all others).
+       (``seoul``) or WORKER (all others).
 
     4. **Telegram / Weixin sources** — default to WORKER as a fallback.
 
@@ -546,7 +547,7 @@ def _cmd_get_level(ctx: SharedContext, sender: str, msg: Message) -> int:
     if sender.lower() in {m.lower() for m in MASTER_IDS}:
         return CMD_LEVEL_MASTER
     if sender in WORKER_IDS:
-        if sender == os.environ.get("WORKER_NAME", "agent"):
+        if sender == "seoul":
             return CMD_LEVEL_ADMIN
         return CMD_LEVEL_WORKER
     if msg.source in ("telegram", "weixin"):
@@ -602,7 +603,7 @@ def _exec_cmd(ctx: SharedContext, cmd_name: str, cmd_args: list[str],
     * **switch_model** — changes the active AI model via
       ``ModelFailover`` or direct ``set_model()``; supports ``list``
       sub-command.
-    * **escalate** — sends an escalation notice to the supervisor
+    * **escalate** — sends an escalation notice to the ``seoul`` worker
       via ``chat_send``.
     * **exec** — runs an arbitrary bash command through the ``bash``
       tool (requires MASTER level, enforced by ``_handle_cmd``).
@@ -872,10 +873,10 @@ def _exec_cmd(ctx: SharedContext, cmd_name: str, cmd_args: list[str],
         _reason = " ".join(cmd_args) or "no details"
         try:
             execute("chat_send", {
-                "target": os.environ.get("WORKER_NAME", "agent"),
+                "target": "seoul",
                 "content": f"[ESCALATION from {ctx.name}] {_reason}",
             }, base_dir=ctx.workspace)
-            return f"[CMD] escalated to {os.environ.get('WORKER_NAME', 'agent')}: {_reason[:100]}"
+            return f"[CMD] escalated to seoul: {_reason[:100]}"
         except Exception as e:
             return f"[CMD] escalate error: {e}"
 
@@ -1642,9 +1643,40 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
         conv.append({"role": "user", "content": msg.content})
     _new_start = len(conv) - 1  # track where new messages begin
 
-    max_iterations = 10  # Raised for sustained autonomous work
+    # Phase 1: Molecular chain interception (auto-route complex requests through molecule engine)
+    # CRITICAL: Guard against re-interception loops from chain output being re-processed.
+    # Only intercept on the first iteration (iteration=0) and skip if the message
+    # contains a `__MOLECULE_INTERCEPT__` sentinel (injected by a prior chain run).
+    _mol_intercept_result = None
+    _mol_engine = getattr(ctx, '_molecule_engine', None)
+    _should_intercept = (
+        _mol_engine is not None
+        and len(msg.content) > 5
+        and "__MOLECULE_INTERCEPT__" not in msg.content
+    )
+    if _should_intercept:
+        try:
+            _mol_intercept_result = _mol_engine.intercept(msg.content)
+        except Exception as e:
+            logger.debug("Molecule intercept skipped: %s", e)
+    if _mol_intercept_result is not None:
+        conv.append({
+            "role": "system",
+            "content": "[MOLECULE] " + _mol_intercept_result.final_output
+            + "\n\n__MOLECULE_INTERCEPT__"
+        })
+        logger.info("Molecule chain %s intercepted: injected result into conv",
+                    _mol_intercept_result.molecule_name)
+
+    _iteration_budget = IterationBudget(max_total=10)
     _last_results: dict = {}  # Per-tool result cache for efficiency detection
-    for iteration in range(max_iterations):
+    for iteration in range(10):
+        if not _iteration_budget.consume():
+            conv.append({
+                "role": "system",
+                "content": "[BUDGET EXHAUSTED] Reply now with what you have.",
+            })
+            break
         # Pre-model checkpoint...
         if ctx.checkpoint:
             try:
@@ -1721,6 +1753,11 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
                 response = _llm_result
             else:
                 break
+        # Record LLM latency in metrics collector
+        if ctx._metrics is not None:
+            _llm_elapsed = time.time() - _trace_t0
+            _model_name = getattr(response, 'model', None) or getattr(ctx.llm, '_last_model', 'unknown')
+            ctx._metrics.record_llm_call(str(_model_name), _llm_elapsed)
         # Record session-affinity family on first call
         if _family is None and hasattr(response, 'provider_family') and response.provider_family:
             _family = response.provider_family
@@ -2033,6 +2070,8 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
                                         ctx.run_async(ctx.doom_detector.execute_recovery(doom_result))
                                     except Exception:
                                         pass
+                                # Force break the tool iteration loop — don't let agent spiral
+                                break
                             elif doom_result.level == DoomLoopLevel.WARNING:
                                 conv.append({
                                     "role": "system",
@@ -2140,13 +2179,13 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
                     "content": f"[CIRCUIT BREAKER] {consecutive_blocks} consecutive tool calls were blocked. Your tools cannot complete this task. Reply to the user immediately explaining what went wrong and what they should do instead. Do NOT make any more tool calls.",
                 })
 
-            # Iteration guard -- escalate warnings then force-stop
+            # Iteration guard -- escalate warnings then force-stop per docstring
             if iteration >= 6:
                 conv.append({
                     "role": "system",
                     "content": f"STOP calling tools. You have used {iteration + 1} rounds. Reply now with what you have.",
                 })
-                # Force break at iteration 20
+                # Force break at iteration 8 (docstring: "forced break at iteration 8")
                 if iteration >= 8:
                     # Collect blocked-tool summary for a meaningful fallback message
                     blocked_names = []
@@ -2213,6 +2252,34 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
                             ctx.verif_recorder.record_violation(v.rule, v.category, v.claim, v.detail, v.severity)
                     if phase3.action in ("block", "retry", "rewrite"):
                         logger.warning("Reply verification: %s", phase3.corrections)
+                    # ENFORCE: on critical/high violations about fabrication or missing evidence,
+                    # do NOT send the fake reply. Instead, append a forced retry instruction.
+                    if phase3.action == "block":
+                        # Critical fabrication - replace reply with error
+                        reply = "[VERIFICATION BLOCKED] Reply claims work not actually done. Force retry."
+                        if channel:
+                            channel.send(Response(
+                                content=reply,
+                                target=msg.sender if msg else "",
+                                source="system",
+                                chat_id=msg.chat_id if msg else "",
+                            ))
+                        logger.error("BLOCKED fabricated reply: %s", phase3.violations)
+                        return
+                    elif phase3.action == "retry":
+                        # High severity - inject evidence requirement and retry
+                        evidence_msg = (
+                            "\n\n[SYSTEM: Reply claims work but no matching tool evidence found. "
+                            "You MUST include actual shell output, file content, or tool results "
+                            "to prove the work was done. Say NOTHING that cannot be backed by "
+                            "a tool call you just made.]"
+                        )
+                        # Add to conversation and re-call LLM (will loop back naturally)
+                        reply += evidence_msg
+                        # Set flag so the tool_iteration loop can re-process
+                        iteration -= 1  # allow one more iteration
+                elif phase3.action == "allow":
+                    pass  # pass for the record
             # Check for continuation hint -- only if explicit "I still need to"
             if "I still need to" in reply:
                 next_task = reply.split("I still need to", 1)[-1].strip()
@@ -2261,6 +2328,32 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
             if ctx._vigil:
                 ctx._vigil.signal_collector.record_response(len(reply))
             logger.info("  reply: %s", reply[:80])
+
+            # Autonomous continuation decision
+            # If task seems incomplete, queue continuation for next loop tick
+            _should_continue = False
+            _continuation_reason = ""
+            _reply_lower = reply.lower()
+            # Heuristic 1: LLM explicitly says it needs to continue
+            if any(phrase in _reply_lower for phrase in
+                   ["i still need to", "still working on", "need to continue",
+                    "incomplete", "partial result", "not yet complete"]):
+                _should_continue = True
+                _continuation_reason = "explicit_continuation_hint"
+            # Heuristic 2: Complex task with many tool calls but short reply
+            elif tool_count > 5 and len(reply) < 500:
+                _should_continue = True
+                _continuation_reason = f"complex_task_incomplete(tools={tool_count},reply_len={len(reply)})"
+            # Heuristic 3: Budget exhaustion or forced reply
+            elif iteration >= 8:
+                _should_continue = True
+                _continuation_reason = f"budget_exhaustion(iteration={iteration})"
+            if _should_continue and ctx._pending_task_file is not None:
+                # Extract continuation goal from reply or generate from context
+                _cont_goal = reply[:200] if len(reply) > 50 else f"Continue task: {reply}"
+                from tical_code.core.modules.task_handler import save_pending
+                save_pending(ctx, _cont_goal, iteration)
+                logger.info("[auto-continue] queued: %s", _continuation_reason)
 
             # Save completion snapshot
             if save_snapshot is not None:

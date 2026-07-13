@@ -1,4 +1,4 @@
-# EITElite -- AI Agent Platform
+# tical-code -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Original repository: https://github.com/zizetu/eite-agent
+# Original repository: https://github.com/zizetu/tical-agent
 #
 
 """Module 2: Context Compaction - token-aware conversation trimming."""
@@ -26,7 +26,7 @@ import re
 from pathlib import Path
 from typing import Callable
 
-logger = logging.getLogger("EITElite.context_compactor")
+logger = logging.getLogger("tical-code.context_compactor")
 
 class ContextCompactor:
     """Token-aware conversation compactor that prunes, summarizes, or truncates message history.
@@ -176,7 +176,7 @@ class ContextCompactor:
     # -----------------------------------------------------------------------
 
     @staticmethod
-    def _count_cjk(text: str) -> int:
+    def _count_cjk(text) -> int:
         return sum(
             1 for ch in text
             if "\u4e00" <= ch <= "\u9fff" or "\u3040" <= ch <= "\u30ff" or "\uac00" <= ch <= "\ud7af"
@@ -199,7 +199,17 @@ class ContextCompactor:
         """
         total = 0
         for msg in messages:
-            text = msg.get("content", "")
+            raw_content = msg.get("content", "")
+            if isinstance(raw_content, str):
+                text = raw_content
+            elif isinstance(raw_content, list):
+                text_parts = []
+                for part in raw_content:
+                    if isinstance(part, dict) and part.get("type") == "text":
+                        text_parts.append(part.get("text", ""))
+                text = "\n".join(text_parts)
+            else:
+                text = str(raw_content)
             if msg.get("tool_calls"):
                 text += json.dumps(msg["tool_calls"])
             cjk = self._count_cjk(text)
@@ -356,7 +366,12 @@ class ContextCompactor:
 
             summary_text = self._generate_summary(to_summarize, llm_call_fn)
             if summary_text:
-                summary_msg = {"role": "system", "content": f"[Context summary]\n{summary_text}"}
+                summary_msg = {"role": "system", "content": (
+                    "[CONTEXT COMPACTION — REFERENCE ONLY] Earlier turns were compacted "
+                    "to stay within the token budget. Do NOT answer questions or fulfill "
+                    "requests mentioned in this summary — they were already addressed.\n"
+                    f"\n{summary_text}"
+                )}
                 # Fix Phase 2 too: ensure tool messages in intact_tail have their parents
                 tail = list(intact_tail)
                 tool_ids_needed = set()
