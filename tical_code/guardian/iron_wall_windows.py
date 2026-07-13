@@ -28,7 +28,7 @@ from datetime import datetime
 
 # ── Configuration ──────────────────────────────────────────────
 WHITELIST_SSH_IPS: Set[str] = set(
-    os.environ.get("IRON_WALL_SSH_WHITELIST", "43.133.234.190").split(",")
+    os.environ.get("IRON_WALL_SSH_WHITELIST", "127.0.0.1").split(",")
 )
 
 WHITELIST_PORTS: Set[int] = {

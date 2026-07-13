@@ -38,3 +38,4 @@ credentials*
 
 .tical_mod_count.json
 _test_safe_modify*
+*.db.bak*
