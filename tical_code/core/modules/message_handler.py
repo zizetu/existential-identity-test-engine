@@ -1642,7 +1642,7 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
         conv.append({"role": "user", "content": msg.content})
     _new_start = len(conv) - 1  # track where new messages begin
 
-    max_iterations = 20  # Raised for sustained autonomous work
+    max_iterations = 10  # Raised for sustained autonomous work
     _last_results: dict = {}  # Per-tool result cache for efficiency detection
     for iteration in range(max_iterations):
         # Pre-model checkpoint...
@@ -2141,13 +2141,13 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
                 })
 
             # Iteration guard -- escalate warnings then force-stop
-            if iteration >= 12:
+            if iteration >= 6:
                 conv.append({
                     "role": "system",
                     "content": f"STOP calling tools. You have used {iteration + 1} rounds. Reply now with what you have.",
                 })
                 # Force break at iteration 20
-                if iteration >= 20:
+                if iteration >= 8:
                     # Collect blocked-tool summary for a meaningful fallback message
                     blocked_names = []
                     for m in conv:

@@ -1,4 +1,4 @@
-# EITElite -- AI Agent Platform
+# tical-code -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Original repository: https://github.com/zizetu/eite-agent
+# Original repository: https://github.com/zizetu/tical-agent
 #
 
 """
@@ -173,8 +173,8 @@ class DoomLoopConfig:
     """
     enabled: bool = True
     history_size: int = 30
-    warn_threshold_base: int = 5
-    critical_threshold_base: int = 8
+    warn_threshold_base: int = 2
+    critical_threshold_base: int = 3
     adaptive_enabled: bool = True
     cross_agent_enabled: bool = True
     semantic_similarity_enabled: bool = True
@@ -540,6 +540,14 @@ class DoomLoopDetector:
                 # [Security fix] after recovery success, clear corresponding detector internal state
                 if success:
                     self._reset_detector_state(result.detector)
+                    # Post-recovery validation: re-detect to confirm recovery actually resolved the loop
+                    post_recovery = self.detect()
+                    if post_recovery.stuck:
+                        logger.warning(
+                            f"[DoomLoop] post-recovery validation FAILED - loop persists after {action.value}. "
+                            f"Escalating: {post_recovery.message}"
+                        )
+                        return False
                 return success
             except Exception as e:
                 logger.error(f"[DoomLoop] Recovery strategyExecuteFailed: {e}")
@@ -635,8 +643,8 @@ class DoomLoopDetector:
             critical = max(12, int(critical * 0.7))
         elif freq < 0.1:
             # low-freq: increase threshold, avoid false alarms
-            warn = int(warn * 1.5)
-            critical = int(critical * 1.5)
+            warn = min(int(warn * 1.5), 50)  # Cap at 50 max
+            critical = min(int(critical * 1.5), 100)  # Cap at 100 max
 
         return warn, critical
 
