@@ -1,4 +1,7 @@
-# EITElite -- AI Agent Platform
+# EMERGENCY FAST_ACK 2026-07-09c: typing ack + no-tool short replies + queue hygiene
+# EMERGENCY LOAD_SESSION 2026-07-09: reload SQLite history on new in-memory sessions
+# EMERGENCY 2026-07-09: throttle progress spam; longer hard timeout; pair with MemoryBoot.get_memory
+# tical-code -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -14,17 +17,19 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-# [ANCHOR] This is the PUBLIC, sanitized version (AGPL).
-# Private full version at zizetu/eite-agent. Sister project: zizetu/EITE-agent.
-# Do NOT add VPS IPs, tokens, internal paths, or node topology here.
-# See STRATEGY.md for commercial context.
+# [ANCHOR] STRATEGIC CONTEXT — Read STRATEGY.md before making changes.
+# This is the main worker entry for tical-agent (lite edition, in development).
+#
+# Sister project: eite-agent (full EITE edition, zizetu/eite-agent) — DO NOT MIX CODE.
+# Security audit completed 2026-07-03 in sync with eite-agent.
 
 from __future__ import annotations
+from .paths import under_tical_home
 #
 
-# provenance:ticalasi-zzt-2026
+# provenance:tic-al-agent
 """
-EITElite unified worker - main orchestrator loop.
+tical-code unified worker - main orchestrator loop.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 WORKER LIFECYCLE (the core loop, executed inside Worker.run())
@@ -88,7 +93,6 @@ monolithic design).
 """
 import asyncio
 import gc
-import hashlib
 import json
 import logging
 import os
@@ -114,7 +118,7 @@ from tical_code.core.tool_executor import execute, TOOL_SCHEMAS, TOOL_CONCURRENC
 from tical_code.core.response_formatter import format_result, format_progress, format_final_reply
 from tical_code.core.prompt import build_system_prompt
 from tical_code.core.config import load_config
-from tical_code.core.modules.session_manager import SessionManager
+from tical_code.core.modules.session_manager import SessionManager as SessionManagerSQLite
 from tical_code.core.modules.context_compactor import ContextCompactor
 from tical_code.core.doom_loop import DoomLoopDetector, DoomLoopConfig, LoopLevel as DoomLoopLevel
 from tical_code.core.module_registry import load_modules, get_active_descriptions
@@ -147,6 +151,15 @@ try:
     from tical_code.core.session_snapshot import save_snapshot, load_latest_snapshot, record_death
 except ImportError:
     save_snapshot = None; load_latest_snapshot = None; record_death = None
+try:
+    from tical_code.core.modules.sustained_task import SustainedTaskManager
+except ImportError:
+    SustainedTaskManager = None
+
+try:
+    from tical_code.core.modules.self_evolve import SelfEvolveEngine
+except ImportError:
+    SelfEvolveEngine = None
 
 try:
     from tical_code.core.decision_engine import DecisionEngine
@@ -161,10 +174,7 @@ try:
 except ImportError:
     ErrorLogger = None; ErrorCategory = None
 
-try:
-    from tical_code.core.memory_evolve import MemoryEvolver
-except ImportError:
-    MemoryEvolver = None
+# MemoryEvolver is initialized once via module_defs (_init_memory_evolve → attr memory_evolver)
 
 try:
     from tical_code.core.tool_registry import ToolRegistry, ToolExecutor, ToolDefinition
@@ -196,17 +206,7 @@ try:
 except ImportError:
     MessageAdapter = None
 
-try:
-    from tical_code.core.modules.sustained_task import SustainedTaskManager
-except ImportError:
-    SustainedTaskManager = None
-
-try:
-    from tical_code.core.modules.self_evolve import SelfEvolveEngine
-except ImportError:
-    SelfEvolveEngine = None
-
-logger = logging.getLogger("EITElite.worker")
+logger = logging.getLogger("tical-code.worker")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -246,29 +246,27 @@ logging.basicConfig(
 
 # Handler modules (extracted from Worker for modularity)
 from tical_code.core.shared_context import SharedContext
-from tical_code.core.workspace import Workspace
 from tical_code.core.modules.task_handler import (
     run_task, load_pending as _load_pending_ctx, save_pending as _save_pending_ctx,
 )
 from tical_code.core.modules.message_handler import (
     handle_message as _handle_message_ctx,
 )
+from tical_code.core.workspace import Workspace
 TOOL_SCHEMAS_CLEAN = TOOL_SCHEMAS  # Use full schema with bash_execute
 
 # ─────────────────────────────────────────────────────────────
 # SECTION: Tool Call Limits
 # ─────────────────────────────────────────────────────────────
 # Tool call limits
-MAX_TOOL_ITERATIONS = 6  # hard cap tool storms on chat
-SOFT_HINT_AT = 10   # gentle nudge to wrap up
-HARD_STOP_AT = 18   # force stop
+MAX_TOOL_ITERATIONS = 50  # Safety fuse -- model stops when work is done
 
 # ─────────────────────────────────────────────────────────────
 # SECTION: Worker Class (Central Orchestrator)
 # ─────────────────────────────────────────────────────────────
 
 class Worker:
-    """Central orchestrator for the EITElite AI worker.
+    """Central orchestrator for the tical-code AI worker.
 
     The Worker is the top-level runtime: it wires every subsystem
     together and runs the main poll→dispatch→reply loop indefinitely.
@@ -317,7 +315,7 @@ class Worker:
           1. Trace logger      - TraceLogger ring buffer
           2. Channels          - TelegramChannel + TicalChatChannel
           3. Error logger      - ErrorLogger with rotation
-          4. Memory evolver    - MemoryEvolver (~/.EITElite/memory)
+          4. Memory evolver    - MemoryEvolver ($TICAL_HOME/memory)
           5. Tool registry     - ToolRegistry + builtin tools
           6. LLM backend       - ModelFailover (preferred) or create_llm_backend (fallback)
           7. Pending task file - .pending_task.json in workspace
@@ -331,6 +329,7 @@ class Worker:
         self.cfg = cfg
         self.name = cfg['name']
         self.workspace = cfg["workspace"]
+        self._data_dir = under_tical_home("")
 
         # ─────────────────────────────────────────────────────
         # SECTION: Trace System
@@ -365,23 +364,17 @@ class Worker:
         self.error_logger = None
         if ErrorLogger is not None:
             try:
-                self.error_logger = ErrorLogger(log_dir="~/.EITElite/logs")
+                self.error_logger = ErrorLogger(log_dir=under_tical_home("logs"))
                 logger.info("ErrorLogger ready: %s", self.error_logger.error_log_path)
             except Exception as e:
                 logger.warning("ErrorLogger init failed: %s", e)
 
         # ─────────────────────────────────────────────────────
-        # SECTION: Memory Evolver
+        # SECTION: Memory bootstrap (MemoryEvolver via module_defs only)
         # ─────────────────────────────────────────────────────
-        # Memory evolver for autonomous memory management
-        _mem_dir = os.path.expanduser("~/.EITElite/memory")
+        # memory_evolver is set by load_modules → _init_memory_evolve (attr_name="memory_evolver")
         self.memory_evolver = None
-        if MemoryEvolver is not None:
-            try:
-                self.memory_evolver = MemoryEvolver(memory_dir=_mem_dir)
-                logger.info("MemoryEvolver ready: %s", _mem_dir)
-            except Exception as e:
-                logger.warning("MemoryEvolver init failed: %s", e)
+        _mem_dir = under_tical_home("memory")
 
         # Bootstrap memory files + cold-start identity load (independent of MemoryEvolver)
         try:
@@ -469,6 +462,19 @@ class Worker:
                 self._tool_executor = None
 
         # ─────────────────────────────────────────────────────
+        # SECTION: Session Persistence (SQLite)
+        # ─────────────────────────────────────────────────────
+        # SQLite-based session store for conversation history persistence
+        self.sessions = None
+        if SessionManagerSQLite is not None:
+            try:
+                _session_db = os.path.join(cfg.get("workspace", "."), "sessions.db")
+                self.sessions = SessionManagerSQLite(db_path=_session_db)
+                logger.info("SessionManagerSQLite ready: %s", _session_db)
+            except Exception as e:
+                logger.warning("SessionManagerSQLite init failed: %s", e)
+
+        # ─────────────────────────────────────────────────────
         # SECTION: LLM Backend
         # ─────────────────────────────────────────────────────
         # LLM backend - prefer ModelFailover for multi-provider resilience
@@ -506,17 +512,10 @@ class Worker:
         self._pending_task_file = Path(cfg.get("workspace", ".")) / ".pending_task.json"
         self._pending_task = self._load_pending()
 
-        # P0-4 fix: ensure logger and data_dir exist for sync Worker path
-        if not hasattr(self, 'logger'):
-            self.logger = logging.getLogger(f"EITElite.worker")
-        if not hasattr(self, '_data_dir'):
-            self._data_dir = str(Path(cfg.get("workspace", ".")) / "data")
-            os.makedirs(self._data_dir, exist_ok=True)
-
         # SustainedTaskManager - persistent task queue with auto-recovery
         if SustainedTaskManager is not None:
             self._sustained_task_mgr = SustainedTaskManager()
-            # LIVE WIRE INJECT 2026-07-13
+            # LIVE WIRE INJECT 2026-07-09f
             try:
                 from tical_code.core.tool_executor import set_sustained_task_manager
                 set_sustained_task_manager(self._sustained_task_mgr)
@@ -532,13 +531,13 @@ class Worker:
             self._self_evolve = SelfEvolveEngine(
                 db_path=self._data_dir + "/self_evolve.db"
             )
-            # LIVE WIRE INJECT 2026-07-13
+            self.logger.info("SelfEvolveEngine initialized")
+            # LIVE WIRE INJECT 2026-07-09f
             try:
                 from tical_code.core.tool_executor import set_self_evolve_engine
                 set_self_evolve_engine(self._self_evolve)
             except Exception as _inj_e:
                 logger.warning("self_evolve inject failed: %s", _inj_e)
-            self.logger.info("SelfEvolveEngine initialized")
         else:
             self._self_evolve = None
             self.logger.warning("SelfEvolveEngine unavailable")
@@ -558,11 +557,38 @@ class Worker:
         self._active_modules = load_modules(self, cfg, profile=profile)
         logger.info("Modules loaded: %d active (profile=%s)", len(self._active_modules), profile)
 
+        # Capability descriptions for system prompt (LLM sees active module capabilities)
+        self._module_descriptions = get_active_descriptions(self._active_modules)
+        logger.info(
+            "Active module descriptions: %d for prompt injection",
+            len(self._module_descriptions),
+        )
+
         # Verify critical subsystems loaded correctly
         if not getattr(self, 'memory_evolver', None):
-            logger.warning("MemoryEvolver not loaded -- autonomous memory evolution disabled")
+            logger.warning("MemoryEvolver not loaded — autonomous memory evolution disabled")
         if not getattr(self, 'memory_store', None):
-            logger.warning("MemoryFTSStore not loaded -- memory_search will be empty")
+            logger.warning("MemoryFTSStore not loaded — memory_search will be empty")
+
+        # ── FIX: Re-wire MemoryBoot.persistent_memory now that memory_store exists ──
+        if self._memory_boot and getattr(self, 'memory_store', None):
+            try:
+                from tical_code.core.memory import PersistentMemory
+                _pm_db = str(self._memory_dir / "persistent.db") if hasattr(self, '_memory_dir') else None
+                if not _pm_db:
+                    import os as _os
+                    _pm_db = under_tical_home("memory.db")
+                self._persistent_memory = PersistentMemory(db_path=_pm_db)
+                self._memory_boot.persistent_memory = self._persistent_memory
+                logger.info("MemoryBoot: persistent_memory re-wired to PersistentMemory (%s)", _pm_db)
+            except Exception as _pm_err:
+                # Fallback: create adapter for MemoryFTSStore
+                class _FTSAdapter:
+                    def __init__(self, fts): self._fts = fts
+                    def store(self, key, value, category="", priority=5):
+                        return self._fts.save_entry(key, value)
+                self._memory_boot.persistent_memory = _FTSAdapter(self.memory_store)
+                logger.info("MemoryBoot: persistent_memory wired to MemoryFTSStore adapter (%s)", _pm_err)
 
         # Cleanup old snapshots to prevent directory bloat
         try:
@@ -617,6 +643,29 @@ class Worker:
                     description="Default API provider via ModelFailover",
                 )
 
+            # Register local Ollama models (orthos-* models auto-discovered)
+            logger.info("DEBUG: entering Ollama registration block")
+            try:
+                from tical_code.core.molecule_extensions import (
+                    register_all_ollama_providers,
+                )
+                orthos = register_all_ollama_providers(
+                    registry,
+                    include_all=True,  # also register qwen2.5:1.5b etc.
+                )
+                if orthos:
+                    logger.info(
+                        "OllamaRegistry: registered %d local models: %s",
+                        len(orthos), ", ".join(orthos),
+                    )
+                else:
+                    logger.info("OllamaRegistry: no local models discovered")
+            except Exception as ollama_err:
+                logger.warning(
+                    "OllamaRegistry: failed to register local models: %s",
+                    ollama_err,
+                )
+
             self._molecule_engine = MoleculeEngine(registry=registry)
             set_molecule_engine(self._molecule_engine)
             logger.info(
@@ -627,15 +676,8 @@ class Worker:
         except Exception as e:
             logger.warning("Failed to wire builtin_tools or init MoleculeEngine: %s", e)
 
-        # Wire subagent manager for delegate_task/get_subagent_result tools
-        try:
-            from tical_code.core.subagent import SubAgentManager
-            from tical_code.core.tool_executor import set_subagent_manager
-            self._subagent_manager = SubAgentManager(framework=self)
-            set_subagent_manager(self._subagent_manager)
-            logger.info("SubAgentManager wired into tool_executor for delegate_task/get_subagent_result")
-        except Exception as e:
-            logger.warning("SubAgentManager init failed: %s", e)
+        # SubAgentManager: single init via module_defs._init_subagent_manager
+        # (sets worker.subagent_manager + tool_executor.set_subagent_manager)
 
         # ─────────────────────────────────────────────────────
         # SECTION: Skill System
@@ -694,6 +736,22 @@ class Worker:
             except Exception as e:
                 logger.warning("AxiomEngine init failed: %s", e)
 
+
+
+        # ── FIX: Inject SOUL.md identity from MemoryBoot ──
+        if self._memory_boot and self._memory_boot.is_loaded():
+            try:
+                _identity = self._memory_boot.get_identity_prompt()
+                if _identity:
+                    self.system_prompt = f"## Your Identity\n{_identity}\n\n" + self.system_prompt
+                    logger.info("MemoryBoot: identity prompt injected (%d chars)", len(_identity))
+                _user_ctx = self._memory_boot.get_memory("user")
+                if _user_ctx:
+                    self.system_prompt += f"\n\n## User Context\n{_user_ctx[:1500]}"
+                    logger.info("MemoryBoot: user context injected (%d chars)", len(_user_ctx))
+            except Exception as _id_err:
+                logger.warning("MemoryBoot identity injection failed: %s", _id_err)
+
         # Legacy modules loaded on-demand when needed
 
         # Resume conversation from checkpoint after crash
@@ -744,6 +802,7 @@ class Worker:
             _tool_executor=self._tool_executor,
             trace_logger=self.trace_logger,
             tracer=getattr(self, 'tracer', None),
+            _metrics=getattr(self, '_metrics', None),
             error_logger=self.error_logger,
             sessions=getattr(self, 'sessions', None),
             compactor=getattr(self, 'compactor', None),
@@ -769,7 +828,6 @@ class Worker:
             _active_modules=self._active_modules,
             _heartbeat_file=self._heartbeat_file,
             _start_time=self._start_time,
-            cognitive_workspace=getattr(self, 'cognitive_workspace', None),
             usage=getattr(self, 'usage', None),
             _vigil=getattr(self, '_vigil', None),
             _memprof=getattr(self, '_memprof', None),
@@ -778,11 +836,13 @@ class Worker:
             cron=getattr(self, '_cron', None),
 
         )
+        # Propagate event loop to SharedContext for run_async()
+        if hasattr(self, '_loop'):
+            self._ctx._loop = self._loop
 
-        # ─────────────────────────────────────────────────────
-        # SECTION: Cognitive Workspace (v0.9+)
-        # ─────────────────────────────────────────────────────
-        # Initialize cognitive workspace (if enabled via env vars)
+        # Wire cognitive workspace into SharedContext (v0.9+)
+        
+        # Initialize cognitive workspace (activated 2026-07-08)
         try:
             from tical_code.core.feature_flags import FeatureFlags
             _flags = FeatureFlags()
@@ -790,7 +850,7 @@ class Worker:
                 from pathlib import Path as _Path
                 _ws_persist = _Path(os.environ.get("WORKSPACE_DIR", "/tmp")) / ".cognitive"
                 self.cognitive_workspace = Workspace(
-                    node_id=os.environ.get("NODE_ID", cfg.get("name", "agent-1")),
+                    node_id=os.environ.get("NODE_ID", "seoul-1"),
                     persist_path=_ws_persist,
                     enabled=True,
                 )
@@ -798,6 +858,9 @@ class Worker:
                 self.cognitive_workspace = None
         except Exception:
             self.cognitive_workspace = None
+
+        if hasattr(self, 'cognitive_workspace') and self.cognitive_workspace:
+            self._ctx.cognitive_workspace = self.cognitive_workspace
 
         # ─────────────────────────────────────────────────────
         # SECTION: Signal Handlers
@@ -869,6 +932,49 @@ class Worker:
         signal.signal(signal.SIGTERM, _handler)
         signal.signal(signal.SIGINT, _handler)
         logger.info("Signal handlers registered (SIGTERM/SIGINT → save checkpoint + snapshot + death log + exit)")
+
+    # ─────────────────────────────────────────────────────────────
+    # SECTION: EITE Vectorizer (lightweight text→vector, no deps)
+    # ─────────────────────────────────────────────────────────────
+    def _eite_text_to_vector(self, text: str) -> "np.ndarray":
+        """Convert text to a vector for EITE kernel usage.
+
+        Uses deterministic hash-based vectorization — same text always produces
+        the same vector. No external embedding model required. Replace with
+        sentence-transformers when available.
+        """
+        import hashlib
+        import struct
+        import numpy as np
+
+        dim = 64  # default EITE dimension
+        if hasattr(self, '_eite') and self._eite and hasattr(self._eite, 'dim'):
+            dim = self._eite.dim
+
+        if not text or not text.strip():
+            rng = np.random.RandomState(42)
+            v = rng.randn(dim).astype(np.float64)
+            v /= np.linalg.norm(v)
+            return v
+
+        # Hash each token to a 64-bit seed, combine into a vector
+        tokens = []
+        for word in (text or "").lower().split():
+            clean = "".join(c for c in word if c.isalnum())[:12]
+            if clean and len(clean) > 1:
+                tokens.append(clean)
+        if not tokens:
+            tokens = ["__empty__"]
+
+        result = np.zeros(dim, dtype=np.float64)
+        for i, token in enumerate(set(tokens)):
+            seed = struct.unpack("q", hashlib.sha256(
+                f"{token}_{i}".encode()).digest()[:8])[0] % (2**31)
+            rng = np.random.RandomState(seed)
+            result += rng.randn(dim).astype(np.float64)
+
+        norm = np.linalg.norm(result)
+        return result / norm if norm > 1e-12 else result
 
     # ─────────────────────────────────────────────────────────────
     # SECTION: Doom Loop Recovery Callbacks (Fix 1)
@@ -1117,16 +1223,28 @@ class Worker:
         self._loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._loop)
 
-        # Propagate event loop to SharedContext for run_async()
-        if hasattr(self, '_ctx'):
-            self._ctx._loop = self._loop
-
         # Deferred MemoryBoot execution (avoids asyncio.run() in __init__)
         if getattr(self, '_memory_boot_pending', False) and self._memory_boot:
             try:
                 self._loop.run_until_complete(self._memory_boot.boot())
                 self._memory_boot_pending = False
                 logger.info("MemoryBoot: cold-start identity/memory loaded (deferred)")
+                # Inject identity + user context into system prompt AFTER boot
+                try:
+                    _identity = self._memory_boot.get_identity_prompt()
+                    if _identity:
+                        self.system_prompt = "## Your Identity\n" + _identity + "\n\n" + self.system_prompt
+                        logger.info("MemoryBoot: identity prompt injected (%d chars)", len(_identity))
+                    _user_ctx = self._memory_boot.get_memory("user")
+                    if _user_ctx:
+                        self.system_prompt += "\n\n## User Context\n" + _user_ctx[:1500]
+                        logger.info("MemoryBoot: user context injected (%d chars)", len(_user_ctx))
+                    _mem = self._memory_boot.get_memory("memory")
+                    if _mem:
+                        self.system_prompt += "\n\n## Experience Memory\n" + _mem[:2000]
+                        logger.info("MemoryBoot: experience memory injected (%d chars)", len(_mem))
+                except Exception as _inject_err:
+                    logger.warning("MemoryBoot post-boot injection failed: %s", _inject_err)
             except Exception as e:
                 logger.warning("MemoryBoot deferred boot failed: %s", e)
 
@@ -1139,9 +1257,10 @@ class Worker:
         while True:
             try:
                 # REFACTOR 2026-07-12: decouple task recovery from main poll loop.
-                # Synchronous task resumption blocked channel polling when stale
-                # task dirs remained. Recovery is opt-in via sustained_task module.
-                
+                # Synchronous task resumption blocked Telegram channel polling
+                # when stale task dirs remained. Recovery is now opt-in via the
+                # sustained_task module, not a hard blocking step in the event loop.
+                # To re-enable: spawn recovery in a daemon thread, not inline.
 
                 # 2. POLL CHANNELS - normal message handling
                 for channel in self.channels:
@@ -1186,6 +1305,7 @@ class Worker:
                                     source=msg.source,
                                     chat_id=msg.chat_id,
                                 ))
+
             except Exception as e:
                 self._last_error = str(e)
                 if self.error_logger and ErrorCategory is not None:
@@ -1287,8 +1407,9 @@ class Worker:
                     self._ctx._last_patrol = _now
 
             # Skill curator - periodic lifecycle management (stale→archive, backup)
+            # Gate to every 300 ticks (~5 min) to avoid per-tick I/O cost
             _curator = getattr(self._ctx, 'skill_curator', None)
-            if _curator is not None:
+            if _curator is not None and _cleanup_counter % 300 == 0:
                 try:
                     _curator.curate()
                 except Exception as e:
@@ -1467,7 +1588,7 @@ class AsyncWorker:
         self.cfg = cfg
         self.name = cfg["name"]
         self.workspace = cfg["workspace"]
-        self.logger = logging.getLogger(f"EITElite.async_worker.{self.name}")
+        self.logger = logging.getLogger(f"tical-code.async_worker.{self.name}")
 
         # SustainedTaskManager - persistent task queue with auto-recovery
         if SustainedTaskManager is not None:
@@ -1504,12 +1625,21 @@ class AsyncWorker:
             max_sessions=cfg.get("max_sessions", 100),
             idle_timeout=cfg.get("async_idle_timeout", 1800),
         )
+        # SQLite session persistence for conversation history
+        self.sessions = None
+        if SessionManagerSQLite is not None:
+            try:
+                _session_db = os.path.join(cfg.get("workspace", "."), "sessions.db")
+                self.sessions = SessionManagerSQLite(db_path=_session_db)
+                self.logger.info("SessionManagerSQLite ready: %s", _session_db)
+            except Exception as e:
+                self.logger.warning("SessionManagerSQLite init failed: %s", e)
         # Per-session asyncio constructs - 5-minute session task timeout
         self._session_timeout = cfg.get("async_session_timeout", 300)
 
         # Hard timeout guards - prevent worker death when LLM API hangs
         self._llm_hard_timeout = 120   # max seconds for a single LLM call
-        self._process_hard_timeout = 60  # 60s max per turn, never freeze chat
+        self._process_hard_timeout = 600  # LIVE 2026-07-09: 10min — Gateway-style, no hard time limit
         self._session_stuck_threshold = 300  # kill session task if stuck this long
         self._session_queues: dict[str, asyncio.Queue] = {}
         self._session_tasks: dict[str, asyncio.Task] = {}
@@ -1535,7 +1665,7 @@ class AsyncWorker:
         self.error_logger = None
         if ErrorLogger is not None:
             try:
-                self.error_logger = ErrorLogger(log_dir="~/.EITElite/logs")
+                self.error_logger = ErrorLogger(log_dir=under_tical_home("logs"))
                 self.logger.info("ErrorLogger ready")
             except Exception as e:
                 self.logger.warning("ErrorLogger init failed: %s", e)
@@ -1544,9 +1674,26 @@ class AsyncWorker:
         try:
             self._modules = load_modules(self, self.cfg)
             self.logger.info("Modules loaded: %d active", len(self._modules))
+            if isinstance(self._modules, dict):
+                self._module_descriptions = get_active_descriptions(self._modules)
+            else:
+                self._module_descriptions = []
         except Exception as e:
             self.logger.warning("Module loading failed: %s", e)
             self._modules = []
+            self._module_descriptions = []
+
+        # LIVE WIRE INJECT 2026-07-09f (AsyncWorker post-module load)
+        try:
+            from tical_code.core.tool_executor import set_sustained_task_manager, set_self_evolve_engine
+            _stm = getattr(self, "_sustained_task_mgr", None) or getattr(self, "sustained_task", None)
+            if _stm is not None:
+                set_sustained_task_manager(_stm)
+            _sev = getattr(self, "_self_evolve", None) or getattr(self, "self_evolve", None)
+            if _sev is not None:
+                set_self_evolve_engine(_sev)
+        except Exception as _wire_e:
+            self.logger.warning("live wire inject failed: %s", _wire_e)
 
         # System prompt — built with full identity, modules, and memory injection
         try:
@@ -1578,40 +1725,33 @@ class AsyncWorker:
 
         # Memory boot — load persistent identity/memory into prompt
         try:
-            _mem_dir = os.path.expanduser("~/.EITElite/memory")
+            _mem_dir = under_tical_home("memory")
             from tical_code.core.memory_boot import ensure_memory_files
             ensure_memory_files(_mem_dir)
             # Read memory files and inject into prompt
-            for _fname in ["MEMORY.md", "USER.md"]:
-                _fpath = os.path.join(_mem_dir, _fname)
+            _mem_files = [
+                ("SOUL.md", "Base config/SOUL.md", "IDENTITY"),
+                ("USER.md", "USER.md", "USER PROFILE"),
+                ("MEMORY.md", "MEMORY.md", "MEMORY"),
+                ("CLAUDE.md", "CLAUDE.md", "Project Context (CLAUDE.md)"),
+            ]
+            for _fname, _rel, _label in _mem_files:
+                _fpath = os.path.join(_mem_dir, _rel)
                 if os.path.exists(_fpath):
                     _content = open(_fpath).read().strip()
                     if _content:
-                        _label = "MEMORY" if "MEMORY" in _fname else "USER PROFILE"
                         self.system_prompt += f"\n\n## {_label}\n{_content[:2000]}"
             self.logger.info("Memory injected into system prompt")
         except Exception as e:
             self.logger.debug("Memory injection skipped: %s", e)
 
-        # ─────────────────────────────────────────────────────
-        # SECTION: Cognitive Workspace (v0.9+)
-        # ─────────────────────────────────────────────────────
-        # Initialize cognitive workspace (if enabled via env vars)
+        # Build FTS5 index from memory markdown files (memory_sense)
         try:
-            from tical_code.core.feature_flags import FeatureFlags
-            _flags = FeatureFlags()
-            if _flags.cognitive_enabled:
-                from pathlib import Path as _Path
-                _ws_persist = _Path(os.environ.get("WORKSPACE_DIR", "/tmp")) / ".cognitive"
-                self.cognitive_workspace = Workspace(
-                    node_id=os.environ.get("NODE_ID", cfg.get("name", "agent-1")),
-                    persist_path=_ws_persist,
-                    enabled=True,
-                )
-            else:
-                self.cognitive_workspace = None
-        except Exception:
-            self.cognitive_workspace = None
+            from tical_code.core.memory_sense import memory_index
+            _indexed = memory_index(under_tical_home("memory"))
+            self.logger.info("memory_sense FTS5 index built: %d files", _indexed)
+        except Exception as e:
+            self.logger.debug("memory_sense FTS5 index build failed: %s", e)
 
         # ─────────────────────────────────────────────────────
         # SECTION: LLM Backend (AsyncWorker)
@@ -1675,15 +1815,7 @@ class AsyncWorker:
         # Usage tracker
         self.usage_tracker = UsageTracker()
 
-        # Wire subagent manager for delegate_task/get_subagent_result tools
-        try:
-            from tical_code.core.subagent import SubAgentManager
-            from tical_code.core.tool_executor import set_subagent_manager
-            self._subagent_manager = SubAgentManager(framework=self)
-            set_subagent_manager(self._subagent_manager)
-            self.logger.info("SubAgentManager wired into tool_executor")
-        except Exception as e:
-            self.logger.warning("SubAgentManager init failed: %s", e)
+        # SubAgentManager: single init via module_defs (load_modules above)
 
         # Wire memory_store and Vigil into tool_executor
         try:
@@ -1760,24 +1892,29 @@ class AsyncWorker:
         self.logger.info("AsyncWorker %s entering async main loop", self.name)
 
         # Recover interrupted sustained tasks on startup
-        if getattr(self, '_sustained_task_mgr', None) is not None:
+        if self._sustained_task_mgr is not None:
             try:
                 recovered = await self._sustained_task_mgr.recover_pending_tasks()
-                n = len(recovered) if isinstance(recovered, list) else (1 if recovered else 0)
-                if n > 0:
+                if recovered:
                     self.logger.info(
-                        "Recovered %d pending sustained tasks from previous run", n,
+                        "Recovered %d pending tasks from previous run",
+                        len(recovered),
                     )
             except Exception as exc:
-                self.logger.warning(
-                    "Sustained task recovery failed: %s", exc
-                )
+                self.logger.warning("Task recovery failed: %s", exc)
 
         cleanup_counter = 0
 
         while True:
             try:
                 # Phase 1 - Poll all channels concurrently
+                cleanup_counter += 1
+                if cleanup_counter % 60 == 0:
+                    self.logger.debug(
+                        "[WORKER-POLL] channels=%d types=%s",
+                        len(self.channels),
+                        [type(c).__name__ for c in self.channels],
+                    )
                 poll_tasks = [
                     loop.run_in_executor(None, channel.poll)
                     for channel in self.channels
@@ -1793,7 +1930,6 @@ class AsyncWorker:
                         await self._dispatch_to_session(session_id, channel, msg)
 
                 # Phase 2 - Periodic housekeeping
-                cleanup_counter += 1
                 if cleanup_counter % 60 == 0:
                     await self._cleanup_sessions()
                     # Detect and kill stuck session tasks (processing hung >threshold)
@@ -1850,7 +1986,7 @@ class AsyncWorker:
                 ch, msg = await asyncio.wait_for(
                     queue.get(), timeout=self._session_timeout,
                 )
-                # Drain to latest BEFORE processing
+                # LIVE 2026-07-09i: drain to latest BEFORE processing (never race-consume messages)
                 dropped = 0
                 while True:
                     try:
@@ -1860,7 +1996,7 @@ class AsyncWorker:
                         break
                 if dropped:
                     self.logger.info(
-                        "Drained %d older queued messages for session %s - processing latest only",
+                        "Drained %d older queued messages for session %s — processing latest only",
                         dropped, session_id,
                     )
                 try:
@@ -1868,15 +2004,29 @@ class AsyncWorker:
                         self._process_message(session_id, ch, msg),
                         timeout=self._process_hard_timeout,
                     )
+                    # ===== EITE Hook 2: post-reply recording =====
+                    if hasattr(self, '_eite') and self._eite and self._eite.is_initialized:
+                        try:
+                            impact_vec = self._eite_text_to_vector(msg.content)
+                            self._eite.record_decision(
+                                context=msg.content[:200],
+                                tool_name="reply",
+                                impact_vector=impact_vec,
+                                accepted=True,
+                                justification="session_reply",
+                            )
+                        except Exception:
+                            pass  # silent degrade
+                    # ==============================================
                 except asyncio.TimeoutError:
                     self.logger.error(
                         "Session %s message processing hard timeout (%ds) - "
-                        "dropping stuck message to recover",
+                        "recovering for next message",
                         session_id, self._process_hard_timeout,
                     )
                     try:
                         channel.send(Response(
-                            content="[async-worker] processing timeout - request dropped, worker recovering",
+                            content="[async-worker] stopped a stuck long task (timeout). Send a shorter order (one step).",
                             target=getattr(msg, "sender", "unknown"),
                             source=getattr(msg, "source", "unknown"),
                             chat_id=getattr(msg, "chat_id", None),
@@ -1919,14 +2069,106 @@ class AsyncWorker:
         handles tool call iterations (up to MAX_TOOL_ITERATIONS),
         formats the final response, and sends it back via the channel.
         """
-        entry, _ = self.session_manager.get_or_create(session_id, factory=dict)
+        entry, created = self.session_manager.get_or_create(session_id, factory=dict)
         session = entry["data"]
 
+        # EMERGENCY FAST_ACK 2026-07-09c: show typing immediately so user is not "double-ping" waiting
+        try:
+            if hasattr(channel, "send_action") and getattr(msg, "source", "") == "telegram" and getattr(msg, "chat_id", None):
+                channel.send_action("typing", msg.chat_id)
+        except Exception:
+            pass
+
+
         messages: list = session.get("messages", [])
+        # EMERGENCY LOAD_SESSION 2026-07-09:
+        # We always save to SQLite but never reloaded — restart = total amnesia.
+        # Load durable history when this in-memory session has no turns yet.
+        # REFACTOR 2026-07-12: bounded session resume (was 200, now 5).
+        # Load recent turns for continuity without dumping stale task context.
+        # Facts live in agent_memory.json, not in session history.
+        if (not messages or (len(messages) == 1 and messages[0].get("role") == "system")) and getattr(self, "sessions", None):
+            try:
+                _sid = self.sessions.get_session_id(msg.source, str(msg.chat_id))
+                # Tight cap: 5 turns = enough for "what were we just talking about"
+                # without poisoning context with stale task reports.
+                _loaded = self.sessions.load_session(_sid, max_messages=5)
+                _loaded = [m for m in _loaded if m.get("role") in ("user", "assistant")]
+                if _loaded:
+                    messages = [{"role": "system", "content": self.system_prompt}] + _loaded
+                    session["messages"] = messages
+            except Exception as _le:
+                self.logger.warning("Session load failed: %s", _le)
+
         # Prepend system prompt — DeepSeek rejects requests lacking role
         # on message[0], and without it the AI has no persona context.
         if not messages or messages[0].get("role") != "system":
             messages.insert(0, {"role": "system", "content": self.system_prompt})
+
+        # ===== Pre-LLM Module Enrichment (non-blocking, try/except all) =====
+        # Inject anchor context, axiom annotations, and EITE reflection
+        _enrichments = []
+
+        # 1. Anchor context (identity/capabilities grounding)
+        if hasattr(self, 'anchor_manager') and self.anchor_manager:
+            try:
+                _ctx = self.anchor_manager.get_context_prompt()
+                if _ctx:
+                    _enrichments.append(_ctx)
+            except Exception:
+                pass
+
+        # 2. Axiom annotations (physics axioms as cognitive lenses)
+        if hasattr(self, 'axioms') and self.axioms:
+            try:
+                _ann = self.axioms.annotate_decision(
+                    decision=msg.content[:500],
+                    context=session_id,
+                )
+                if _ann:
+                    _lens = "\n".join(str(a) for a in _ann[:3])
+                    if _lens:
+                        _enrichments.append(f"[AXIOM LENSES]\n{_lens}")
+            except Exception:
+                pass
+
+        # 3. EITE cognitive alignment check (non-blocking reflection)
+        if hasattr(self, '_eite') and self._eite and self._eite.is_initialized:
+            try:
+                impact_vec = self._eite_text_to_vector(msg.content)
+                ok, reason = self._eite.validate_tool("llm_call", impact_vec)
+                if not ok:
+                    _enrichments.append(f"[EITE: {reason}]")
+                    logger.info("[EITE] hook1: dissonance injected into system prompt")
+            except Exception:
+                pass  # silent degrade
+
+        # 4. Security Vigil — message scanner + alert context
+        if hasattr(self, 'vigil') and self.vigil:
+            try:
+                scan_result = await self.vigil.check_message(str(msg.content))
+                if scan_result.blocked:
+                    logger.warning("[VIGIL] Message blocked: %s", scan_result.findings)
+                    return msg  # return raw msg, caller handles blocked response
+                if scan_result.findings:
+                    _enrichments.append(
+                        "[Security Vigil] Suspicious content detected: "
+                        + "; ".join(scan_result.findings[:3])
+                    )
+                # Inject active alert context if any
+                _ctx = self.vigil.get_context_injection()
+                if _ctx:
+                    _enrichments.append(_ctx)
+            except Exception:
+                pass  # silent degrade
+
+        if _enrichments:
+            messages[0]["content"] = (
+                messages[0].get("content", "") +
+                "\n\n" + "\n\n".join(_enrichments)
+            )
+        # =====================================================================
+
         # Build user message — include media (images, file content, transcripts)
         if hasattr(msg, 'media_data') and msg.media_data:
             content_parts = [{"type": "text", "text": msg.content}]
@@ -1946,84 +2188,88 @@ class AsyncWorker:
         else:
             messages.append({"role": "user", "content": msg.content})
 
+        # REFACTOR 2026-07-12: removed _no_tool heuristic.
+        # Always pass tools to the model. The model decides when to invoke them.
+        # tools=[] caused hallucinated tool-call text output when the model knew
+        # tools existed from the system prompt but could not invoke them via API.
+        _raw = (msg.content or "").strip()
         try:
-            response = await self._async_llm_call(messages)
-        except Exception as e:
-            self.logger.error("LLM call failed for session %s: %s", session_id, e)
-            channel.send(Response(
-                content=f"[async-worker] LLM error: {e}",
-                target=msg.sender,
-                source=msg.source,
-                chat_id=msg.chat_id,
-            ))
-            return
+            # History cleanup: scrub poisoned context (fence spam, CSS dumps, oversized messages)
+            cleaned = []
+            for _m in messages:
+                if not isinstance(_m, dict):
+                    cleaned.append(_m)
+                    continue
+                _c = str(_m.get("content") or "")
+                _fence = _c.count("```")
+                if _m.get("role") == "assistant" and _fence >= 6:
+                    continue
+                if _m.get("role") == "assistant" and ("--bg" in _c or ":root" in _c) and len(_c) > 800:
+                    continue
+                if _m.get("role") == "assistant" and len(_c) > 6000:
+                    cleaned.append({**_m, "content": _c[:1500] + "\n[truncated]"})
+                else:
+                    cleaned.append(_m)
+            if cleaned and cleaned[0].get("role") == "system":
+                sys_m = cleaned[0]
+                rest = cleaned[1:]
+                cleaned = [sys_m] + rest[-12:]
+            messages = cleaned
+        except Exception:
+            pass
+        response = await self._async_llm_call(messages)
 
         tool_iterations = 0
-        force_text = False
-        # Short status/report/simple answers: skip tools entirely (preserve speed)
-        try:
-            _raw = str(getattr(msg, "text", msg) if not isinstance(msg, str) else msg)
-        except Exception:
-            _raw = ""
-        if _raw:
-            _short = len(_raw) <= 15
-            _status = any(k in _raw for k in ("status", "report", "ping", "help"))
-            if _short or _status:
-                text_resp = await self._async_llm_call(messages, tools=[])
-                if text_resp and isinstance(text_resp, dict):
-                    response = text_resp
-                    content = response.get("content", "").strip()
-                    if not content:
-                        content = "ok"
-                    channel.send(Response(
-                        content=content,
-                        target=msg.sender,
-                        source=msg.source,
-                        chat_id=msg.chat_id,
-                    ))
-                    messages.append({"role": "assistant", "content": content})
-                    try:
-                        _sid = self.sessions.get_session_id(msg.source, str(msg.chat_id))
-                        self.sessions.save_messages(_sid, messages[-2:])
-                    except Exception:
-                        pass
-                    return
-
-        # Parse Hermes XML tool calls from content (e.g. <tool_call>check_self</tool_call>)
+        # Parse Gateway XML tool calls from content (e.g. <tool_call>check_self</tool_call>)
         # and inject them as structured tool_calls so the loop below executes them.
-        _hermes_tc, _stripped_content = self._parse_hermes_tool_calls(response.get("content", ""))
-        if _hermes_tc:
-            self.logger.info("[RPLY] parsed %d Hermes XML tool call(s) from content", len(_hermes_tc))
+        _gateway_tc, _stripped_content = self._parse_gateway_tool_calls(response.get("content", ""))
+        if _gateway_tc:
+            self.logger.info("[RPLY] parsed %d Gateway XML tool call(s) from content", len(_gateway_tc))
             # LIVE 2026-07-10: fill content with text description so the assistant
-            # message in history explains what tools it called.
+            # message in history explains what tools it called.  Without this the
+            # model sees an empty assistant message + tool_calls in history, thinks
+            # it didn't do anything yet, and keeps generating more tool calls.
             if _stripped_content:
                 response["content"] = _stripped_content
             else:
                 _names = []
-                for _tc in _hermes_tc:
+                for _tc in _gateway_tc:
                     _fn = _tc.get("function", {})
                     _names.append(_fn.get("name", "") or _tc.get("name", "?"))
                 response["content"] = "[calling: " + ", ".join(_names) + "]"
             existing = response.get("tool_calls") or []
-            response["tool_calls"] = existing + _hermes_tc
-
+            response["tool_calls"] = existing + _gateway_tc
         while response.get("tool_calls") and tool_iterations < MAX_TOOL_ITERATIONS:
             tool_iterations += 1
+            # LIVE WIRE QUEUE PREEMPT 2026-07-09f
+            try:
+                _q = self._session_queues.get(session_id)
+                if _q is not None and not _q.empty():
+                    self.logger.info("Preempting tool loop for session %s — newer message queued", session_id)
+                    break
+            except Exception:
+                pass
 
-            # Progress visibility so long tasks do not look frozen.
+            # Progress visibility: every tool round (and keep-alive typing)
             try:
                 if hasattr(channel, "send_action") and getattr(msg, "source", "") == "telegram" and getattr(msg, "chat_id", None):
                     channel.send_action("typing", msg.chat_id)
             except Exception:
                 pass
             try:
-                if tool_iterations >= 5 and tool_iterations % 5 == 0:
-                    names = []
-                    for _tc in response.get("tool_calls", []) or []:
-                        _fn = _tc.get("function", {}) if isinstance(_tc, dict) else {}
-                        _n = (_fn.get("name") if isinstance(_fn, dict) else None) or (_tc.get("name") if isinstance(_tc, dict) else None) or "?"
-                        names.append(str(_n))
-                    tool_label = ",".join(names[:4]) if names else "tools"
+                # EMERGENCY PROGRESS 2026-07-09:
+                # Previous every-1/2-round chat progress flooded users ("worse than before").
+                # Keep typing indicator only; emit at most a few sparse progress lines.
+                # LIVE 2026-07-10: further reduced — only at 5, 10, 15, 20, 25
+                # to prevent progress spam when many tool iterations run.
+                names = []
+                for _tc in response.get("tool_calls", []) or []:
+                    _fn = _tc.get("function", {}) if isinstance(_tc, dict) else {}
+                    _n = (_fn.get("name") if isinstance(_fn, dict) else None) or (_tc.get("name") if isinstance(_tc, dict) else None) or "?"
+                    names.append(str(_n))
+                tool_label = ",".join(names[:3]) if names else "tools"
+                # Sparse: only every 5 rounds starting from 5
+                if tool_iterations >= 5 and tool_iterations % 5 == 0:  # LIVE 2026-07-09: progress every 2 rounds
                     progress_text = format_progress(
                         "progress",
                         f"{tool_iterations}/{MAX_TOOL_ITERATIONS} running: {tool_label}",
@@ -2036,13 +2282,6 @@ class AsyncWorker:
                     ))
             except Exception:
                 pass
-
-            # If model went 2+ rounds with NO text content, force a text summary
-            current_content = (response.get("content") or "").strip()
-            if tool_iterations >= 2 and not current_content:
-                force_text = True
-                break
-
             messages.append({"role": "assistant", **response})
 
             # Batch process tool calls: concurrent-safe tools run in parallel
@@ -2121,6 +2360,13 @@ class AsyncWorker:
                 })
 
             try:
+                # Phase 1 compaction: truncate long tool outputs before each LLM call
+                try:
+                    for _i, _m in enumerate(messages):
+                        if _m.get("role") == "tool" and isinstance(_m.get("content"), str) and len(_m["content"]) > 8000:
+                            _m["content"] = "[output truncated: " + _m["content"][:500] + f"... (" + str(len(_m["content"])) + " chars total)]"
+                except Exception:
+                    pass
                 response = await self._async_llm_call(messages)
             except Exception as e:
                 self.logger.error(
@@ -2146,12 +2392,22 @@ class AsyncWorker:
                 r'^\s*`{0,3}\s*(?:antml:)?parameter\b',
                 r'^\s*`{0,3}\s*(?:antml:)?function_call\b',
                 r'^\s*`{0,3}\s*(?:antml:)?tool_call\b',
+                r'<tool_call\b',
             ]
             _is_fake = any(_re.search(p, content) for p in _fake_patterns)
             if _is_fake:
                 self.logger.warning("[RPLY] detected fake text tool call in no-tool mode, stripping")
+                self.logger.info("[RPLY] raw content before strip: %r", content[:500])
+                # Strip full <tool_call>...</tool_call> blocks FIRST (before the
+                # line-level regex below, whose [^\n]* would swallow everything
+                # after the first 'tool_call' keyword, leaving orphan '<').
+                content = _re.sub(r'<tool_call>[^<]*</tool_call>', '', content)
                 content = _re.sub(r'`{0,3}\s*(?:antml:)?(?:invoke|parameter|function_call|tool_call)\b[^\n]*\n?', '', content)
+                content = _re.sub(r'\s*</?tool_call>\s*', '', content)
+                content = _re.sub(r'\s*</?arg_key>\s*', '', content)
+                content = _re.sub(r'\s*</?arg_value>\s*', '', content)
                 content = content.strip()
+                # Also strip orphan closing fences
                 content = _re.sub(r'^\s*`{3}\s*$', '', content, flags=_re.MULTILINE).strip()
                 if not content:
                     content = "[system: received empty response, please retry]"
@@ -2169,7 +2425,8 @@ class AsyncWorker:
                            "Output the summary directly, do not call any tools."
             })
             try:
-                text_resp = await self._async_llm_call(messages, tools=[])
+                # Call WITHOUT tools — model can't call tools, must produce text
+                text_resp = await self._async_llm_call(messages,)
             except Exception as e:
                 self.logger.error("[RPLY] summary call failed: %s", e)
                 text_resp = {"content": "", "tool_calls": None}
@@ -2193,31 +2450,81 @@ class AsyncWorker:
             # Persist to SQLite for cross-restart memory
             if getattr(self, 'sessions', None):
                 try:
+                    # EMERGENCY SAVE DEDUP 2026-07-09: only append new turns (was re-inserting full history)
                     _sid = self.sessions.get_session_id(msg.source, str(msg.chat_id))
-                    self.sessions.save_messages(_sid, messages)
+                    _prev = int(session.get("last_saved_len") or 0)
+                    # skip system at [0] when counting durable turns if needed
+                    _to_save = messages[_prev:] if _prev < len(messages) else []
+                    # never re-save pure system-only
+                    _to_save = [m for m in _to_save if m.get("role") != "system" or _prev == 0]
+                    if _to_save:
+                        self.sessions.save_messages(_sid, _to_save)
+                    session["last_saved_len"] = len(messages)
                 except Exception as _e:
                     self.logger.warning("Session save failed: %s", _e)
+
+            return
+        if content.strip():
+            # Send final response to user
+            try:
+                from tical_code.core.response_formatter import format_final_reply
+                formatted = format_final_reply(content)
+            except Exception:
+                formatted = content
+            channel.send(Response(
+                content=formatted,
+                target=msg.sender, source=msg.source, chat_id=msg.chat_id,
+            ))
+            # REFACTOR 2026-07-12: memory_save is user-triggered, not auto.
+            # Auto-saving last_context created feedback loops with stale task reports.
             return
 
         if content.strip():
-            # persist context to memory
-            try:
-                execute("memory_save", {"key": "last_context", "value": content[:500]})
-            except Exception:
-                pass
             try:
                 formatted = format_final_reply(content)
             except Exception:
                 formatted = content
-            # Block stall/garbage phrases on the wire
+            # LIVE 2026-07-09k: kill useless stall phrases / residual fence spam
             try:
                 _ft = (formatted or "").strip()
-                if _ft.count("```") >= 4 or (len(_ft) < 5 and _ft.strip()):
-                    formatted = format_final_reply(
-                        "## Status\n- ready\n- reply to a short concrete order"
-                    )
+                _stall = (
+                    _ft.count("```") >= 4
+                    or "\u5148\u6838\u5bf9" in _ft
+                )
+                if _stall:
+                    formatted = "Empty or fence-spam blocked. Send a concrete order."
             except Exception:
                 pass
+
+            # LIVE 2026-07-09f: self-evolve success record
+            try:
+                if self._self_evolve and tool_iterations > 0:
+                    import asyncio as _aio
+                    loop = _aio.get_event_loop()
+                    async def _rec_ok():
+                        await self._self_evolve.record_success({
+                            "category": "tool_turn",
+                            "description": f"completed with {tool_iterations} tool rounds",
+                        })
+                    if loop.is_running():
+                        loop.create_task(_rec_ok())
+                    else:
+                        loop.run_until_complete(_rec_ok())
+            except Exception:
+                pass
+        # LIVE 2026-07-09n: flag for task continuation
+        _explicit_continue = False
+        try:
+            if hasattr(msg, "text") and str(getattr(msg, "text", "")).strip() in ("\u505a", "\u505a\u554a", "\u7ee7\u7eed", "go", "do"):
+                _explicit_continue = True
+            if _explicit_continue and self._sustained_task_mgr:
+                import asyncio as _aio2
+                _pending = self._sustained_task_mgr.list_active()
+                if _pending:
+                    self.logger.info("Task continuation requested - %d pending tasks", len(_pending))
+        except Exception:
+            pass
+
 
             channel.send(Response(
                 content=formatted,
@@ -2233,7 +2540,13 @@ class AsyncWorker:
         if getattr(self, 'sessions', None):
             try:
                 _sid = self.sessions.get_session_id(msg.source, str(msg.chat_id))
-                self.sessions.save_messages(_sid, messages)
+                # EMERGENCY SAVE DEDUP 2026-07-09
+                _prev = int(session.get('last_saved_len') or 0)
+                _to_save = messages[_prev:] if _prev < len(messages) else []
+                _to_save = [m for m in _to_save if m.get('role') != 'system' or _prev == 0]
+                if _to_save:
+                    self.sessions.save_messages(_sid, _to_save)
+                session['last_saved_len'] = len(messages)
             except Exception as _e:
                 self.logger.warning("Session save failed: %s", _e)
 
@@ -2294,10 +2607,10 @@ class AsyncWorker:
             }
         return result
 
-    def _parse_hermes_tool_calls(self, content: str) -> tuple:
-        """Parse Hermes XML tool calls from LLM content text.
+    def _parse_gateway_tool_calls(self, content: str) -> tuple:
+        """Parse Gateway XML tool calls from LLM content text.
 
-        Hermes models sometimes output tool calls as inline XML instead of
+        Gateway models sometimes output tool calls as inline XML instead of
         structured JSON tool_calls.  The format is:
 
             <tool_call>tool_name
@@ -2319,10 +2632,12 @@ class AsyncWorker:
             _inner = _block.group(1).strip()
             if not _inner:
                 continue
+            # First line / first word is the tool name
             _lines = _inner.split('\n')
             _name = _lines[0].strip().split()[0] if _lines else ""
             if not _name:
                 continue
+            # Extract key-value pairs from <arg_key>/<arg_value> tags
             _args = {}
             for _kv in _re.finditer(r'<arg_key>(.*?)</arg_key>\s*<arg_value>(.*?)</arg_value>', _inner, _re.DOTALL):
                 _k = _kv.group(1).strip()
@@ -2331,7 +2646,7 @@ class AsyncWorker:
                     _args[_k] = _v
             _arguments_json = json.dumps(_args)
             _parsed.append({
-                "id": f"call_hermes_{uuid.uuid4().hex[:12]}",
+                "id": f"call_gateway_{uuid.uuid4().hex[:12]}",
                 "type": "function",
                 "function": {
                     "name": _name,
@@ -2416,82 +2731,8 @@ class AsyncWorker:
             "session_timeout": self._session_timeout,
         }
 
-def _eite_call_home() -> None:
-    """Anonymous registration ping to EITE Cloud.
-
-    Sends a fire-and-forget POST to A2A_REGISTER_URL (default: https://a2a.ticalcode.com/v1/register)
-    with an anonymous hardware fingerprint (SHA256 of machine-id / MAC).
-    The response contains an A2A token stored at ~/.eite_a2a_token.
-
-    Disable with EITE_DISABLE_CALL_HOME=1 or A2A_CALLHOME=false env var.
-    No IP, file contents, or personal data is transmitted.
-    """
-    if os.environ.get("EITE_DISABLE_CALL_HOME", "").strip().lower() in ("1", "true", "yes"):
-        logger.debug("Call-home disabled via EITE_DISABLE_CALL_HOME")
-        return
-    if os.environ.get("A2A_CALLHOME", "").strip().lower() in ("false", "0", "no"):
-        logger.debug("Call-home disabled via A2A_CALLHOME=false")
-        return
-
-    # Build anonymous fingerprint
-    fingerprint = ""
-    try:
-        mid = Path("/etc/machine-id")
-        if mid.exists():
-            fingerprint = mid.read_text().strip()
-    except OSError:
-        pass
-    if not fingerprint:
-        try:
-            import uuid
-            fingerprint = str(uuid.getnode())
-        except Exception:
-            fingerprint = "unknown"
-
-    instance_id = hashlib.sha256(fingerprint.encode()).hexdigest()[:32]
-
-    version = "unknown"
-    try:
-        vfile = Path(__file__).resolve().parent.parent.parent / "VERSION"
-        if vfile.exists():
-            version = vfile.read_text().strip()
-    except OSError:
-        pass
-
-    payload = {"instance_id": instance_id, "version": version, "registered_at": int(time.time())}
-
-    url = os.environ.get(
-        "A2A_REGISTER_URL",
-        "https://a2a.ticalcode.com/v1/register",
-    )
-    try:
-        import urllib.request
-        import json as _json
-        data = _json.dumps(payload).encode()
-        req = urllib.request.Request(
-            url,
-            data=data,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        resp = urllib.request.urlopen(req, timeout=5)
-        if resp.status == 201:
-            result = _json.loads(resp.read().decode())
-            token = result.get("token", "")
-            token_file = Path.home() / ".eite_a2a_token"
-            token_file.write_text(token)
-            logger.info(
-                "Registered with EITE Cloud (instance=%.8s, token=%.16s...)",
-                instance_id, token,
-            )
-        else:
-            logger.debug("Call-home returned HTTP %d", resp.status)
-    except Exception:
-        logger.debug("Call-home ping failed (non-blocking)")
-
-
 def main():
-    """Entry point for the EITElite unified worker.
+    """Entry point for the tical-code unified worker.
 
     Performs startup in this order:
       1. Acquires a PID lock to prevent duplicate instances.
@@ -2504,7 +2745,7 @@ def main():
     The PID lock file is always cleaned up in the finally block,
     even on crash or signal-triggered exit.
     """
-    logger.info("EITElite worker starting")
+    logger.info("tical-code worker starting")
 
     # PID lock - prevent duplicate instances
     PID_FILE = Path("/tmp/unified-worker.pid")
@@ -2521,7 +2762,7 @@ def main():
         PID_FILE.write_text(str(os.getpid()))
     except PermissionError:
         import logging
-        logging.getLogger("EITElite.worker").error(
+        logging.getLogger("tical-code.worker").error(
             f"Cannot write PID file {PID_FILE}: permission denied - exiting"
         )
         sys.exit(1)
@@ -2556,15 +2797,6 @@ def main():
                     # mixed into "audit code" requests). Fresh conversation only.
             except Exception as e:
                 logger.warning("Checkpoint restore failed (non-blocking): %s", e)
-        # Anonymous registration with EITE Cloud (call-home).
-        # Sends a one-way SHA256 fingerprint (machine-id hash) to
-        # https://a2a.ticalcode.com/v1/register for usage tracking.
-        # Override with A2A_REGISTER_URL env var.
-        # Your IP address is visible to the server (standard HTTP).
-        # No files, messages, or personal data transmitted.
-        # Disable: EITE_DISABLE_CALL_HOME=1
-        _eite_call_home()
-        # ── Enter main orchestrator loop ──
         worker.run()
     finally:
         PID_FILE.unlink(missing_ok=True)
@@ -2583,13 +2815,13 @@ def async_main():
     The PID lock file is always cleaned up in the finally block,
     even on crash or signal-triggered exit.
 
-    If the worker crashes, a diagnostics file is written to
-    /tmp/crash_diagnostics.json with exception info, env key
-    presence, and disk status for root-cause analysis.
-
     To use: ASYNC_WORKER=1 python -m tical_code.core.unified_worker
     """
-    logger.info("EITElite async-worker starting")
+    # SIGTERM handler - ensures finally block runs on kill
+    def _sigterm_handler(signum, frame):
+        logger.warning("Received SIGTERM - shutting down")
+        sys.exit(0)
+    signal.signal(signal.SIGTERM, _sigterm_handler)
 
     # PID lock - prevent duplicate instances
     PID_FILE = Path("/tmp/unified-worker.pid")
@@ -2606,43 +2838,42 @@ def async_main():
         PID_FILE.write_text(str(os.getpid()))
     except PermissionError:
         import logging
-        logging.getLogger("EITElite.worker").error(
+        logging.getLogger("tical-code.worker").error(
             f"Cannot write PID file {PID_FILE}: permission denied - exiting"
         )
         sys.exit(1)
+    logger.info("tical-code async-worker starting (PID=%d)", os.getpid())
 
     try:
         cfg = load_config()
         worker = AsyncWorker(cfg)
         asyncio.run(worker.run())
-    except Exception as exc:
-        import json as _json
-        import traceback as _tb
-        import shutil as _shutil
-        diag = {
-            "timestamp": time.time(),
-            "exception": repr(exc),
-            "traceback": _tb.format_exc(),
-            "type": type(exc).__name__,
-            "tg_token_present": bool(os.environ.get("TG_BOT_TOKEN")),
-            "api_key_present": bool(os.environ.get("DEEPSEEK_API_KEY")),
-            "disk_free_gb": _shutil.disk_usage("/").free // (1024**3),
-        }
-        try:
-            Path("/tmp/crash_diagnostics.json").write_text(
-                _json.dumps(diag, indent=2)
-            )
-            logger.critical("Worker crashed — diagnostics written to /tmp/crash_diagnostics.json")
-        except Exception:
-            pass
-        raise
     finally:
         PID_FILE.unlink(missing_ok=True)
 
 if __name__ == "__main__":
-    # Default to AsyncWorker — the sync Worker path is legacy and kept only
-    # for debugging/fallback.  ASYNC_WORKER=0 forces sync Worker explicitly.
-    if os.environ.get("ASYNC_WORKER", "").lower() in ("0", "false", "no"):
-        main()
-    else:
+    try:
+        # AsyncWorker is the default and only supported path.
+        # Sync Worker is deprecated — use AsyncWorker for proper async/await,
+        # single event loop, per-session task isolation, and hard timeouts.
         async_main()
+    except Exception:
+        import json as _json
+        import traceback as _tb
+        import sys as _sys
+        import shutil as _shutil
+        _diag = {
+            "exception": repr(_sys.exc_info()[1]),
+            "traceback": _tb.format_exc(),
+            "stage": "startup",
+            "tg_token_set": bool(os.environ.get("TG_BOT_TOKEN")),
+            "api_key_set": bool(os.environ.get("DEEPSEEK_API_KEY")),
+            "disk_free_gb": _shutil.disk_usage("/").free // (1024**3),
+        }
+        try:
+            with open("/tmp/crash_diagnostics.json", "w") as _f:
+                _json.dump(_diag, _f, indent=2)
+            logger.critical("Worker crash: diagnostics written to /tmp/crash_diagnostics.json")
+        except Exception:
+            pass
+        raise
