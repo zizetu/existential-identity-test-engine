@@ -5,8 +5,8 @@
     "batch_size": 10
   },
   "ai_model": "mimo-v2.5-pro",
-  "ai_endpoint": "MIMO_ENDPOINT_REDACTED",
-  "ai_key": "MIMO_KEY_REDACTED",
+  "ai_endpoint": "",
+  "ai_key": "",
   "ai_temperature": 0.3,
   "modules": {
     "verification": true,
