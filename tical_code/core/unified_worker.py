@@ -805,14 +805,14 @@ class Worker:
             _metrics=getattr(self, '_metrics', None),
             error_logger=self.error_logger,
             sessions=getattr(self, 'sessions', None),
-            compactor=getattr(self, 'compactor', None),
+            context_compactor=getattr(self, 'context_compactor', None),
             verification=getattr(self, 'verification', None),
             verif_recorder=self.verif_recorder,
             constitution=getattr(self, 'constitution', None),
             truth_reporter=getattr(self, 'truth_reporter', None),
             decision_engine=getattr(self, 'decision_engine', None),
             _permission_checker=getattr(self, '_permission_checker', None),
-            doom_detector=getattr(self, 'doom_detector', None),
+            doom_detector=getattr(self, 'doom_loop', None),
             loop_detector=self.loop_detector,
             checkpoint=getattr(self, 'checkpoint', None),
             self_repair=getattr(self, 'self_repair', None),
@@ -839,6 +839,26 @@ class Worker:
         # Propagate event loop to SharedContext for run_async()
         if hasattr(self, '_loop'):
             self._ctx._loop = self._loop
+
+        # ── Runtime module wiring verification ──────────────────────────
+        # Ensure every module in the registry's "active" list has its
+        # attribute actually set on the worker and reachable via ctx.
+        # Catches variable-name mismatches like compactor/context_compactor
+        # that cause modules to silently return None at runtime.
+        try:
+            from tical_code.core.module_wiring_check import (
+                verify_worker_wiring,
+                verify_ctx_critical_attrs,
+            )
+            _wiring_errors = verify_worker_wiring(
+                self, self._active_modules, self._ctx, strict=True
+            )
+            _ctx_errors = verify_ctx_critical_attrs(self._ctx)
+        except Exception as _wiring_exc:
+            logger.critical(
+                "WIRING VERIFICATION FAILED — worker may malfunction: %s",
+                _wiring_exc,
+            )
 
         # Wire cognitive workspace into SharedContext (v0.9+)
         
@@ -1883,6 +1903,70 @@ class AsyncWorker:
                 self.logger.info("Doom loop recovery callbacks registered: 5 actions")
             except Exception as _e:
                 self.logger.warning("Failed to register doom loop recovery callbacks: %s", _e)
+
+        # ── Runtime module wiring verification ──────────────────────────
+        # Verify every module marked "active" by the registry actually has
+        # its attribute set on self and is not None.
+        # Catches: registry says active, but getattr(self, attr_name) returns None
+        # due to variable-name mismatch (e.g. compactor vs context_compactor).
+        # FATAL: worker refuses to start if miswired modules are detected.
+        try:
+            from tical_code.core.module_registry import _registry
+            _miswired = []
+            _wired_ok = 0
+            _mods = getattr(self, '_active_modules', None) or getattr(self, '_modules', None) or {}
+            for _name, _inst in _mods.items():
+                _spec = _registry.get(_name)
+                if _spec is None:
+                    continue
+                _val = getattr(self, _spec.attr_name, None)
+                if _val is None:
+                    _miswired.append(
+                        f"{_name}: self.{_spec.attr_name}=None (registry says active)"
+                    )
+                else:
+                    _wired_ok += 1
+            if _miswired:
+                _msg = (
+                    f"WIRING MISMATCH: {len(_miswired)} module(s) in registry "
+                    f"but None on self: {'; '.join(_miswired)}"
+                )
+                self.logger.critical(_msg)
+                # Write report for guardian
+                try:
+                    import json, os as _os
+                    _os.makedirs("/opt/tical-guardian", exist_ok=True)
+                    with open("/opt/tical-guardian/module_wiring.json", "w") as _f:
+                        json.dump({
+                            "healthy": False,
+                            "errors": _miswired,
+                            "modules_wired": _wired_ok,
+                            "modules_active": len(_mods),
+                        }, _f)
+                except Exception:
+                    pass
+                raise RuntimeError(_msg)
+            else:
+                self.logger.info(
+                    "Module wiring verified: %d/%d modules correctly wired",
+                    _wired_ok, len(_mods),
+                )
+                try:
+                    import json, os as _os
+                    _os.makedirs("/opt/tical-guardian", exist_ok=True)
+                    with open("/opt/tical-guardian/module_wiring.json", "w") as _f:
+                        json.dump({
+                            "healthy": True,
+                            "errors": [],
+                            "modules_wired": _wired_ok,
+                            "modules_active": len(_mods),
+                        }, _f)
+                except Exception:
+                    pass
+        except RuntimeError:
+            raise
+        except Exception as _we:
+            self.logger.warning("Module wiring verification failed: %s", _we)
 
         # Tool schemas
         self.tool_schemas = TOOL_SCHEMAS_CLEAN

@@ -789,8 +789,8 @@ def _init_capability_integrator(worker: Any, cfg: dict):
     except ImportError:
         return None
 
-    integrator = CapabilityIntegrator(worker)
-    integrator.discover(profile=cfg.get("profile", "full"))
+    integrator = CapabilityIntegrator()
+    integrator.discover()
 
     # Wire into tool_executor so capability_list / capability_call tools work
     try:

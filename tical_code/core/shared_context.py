@@ -1,4 +1,4 @@
-# EITElite -- AI Agent Platform
+# tical-code -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Original repository: https://github.com/zizetu/eite-agent
+# Original repository: https://github.com/zizetu/tical-agent
 #
 
 """Shared state context for the unified worker.
@@ -36,7 +36,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
-logger = logging.getLogger("EITElite.worker")
+logger = logging.getLogger("tical-code.worker")
 
 
 def _get_rss_mb() -> float:
@@ -65,7 +65,7 @@ class SharedContext:
 
     # ── Core identity ──────────────────────────────────────────────
     cfg: dict  # Full worker configuration dict (YAML-loaded)
-    name: str  # Agent identity name (e.g. "worker", "agent_n")
+    name: str  # Agent identity name (e.g. "eitelite", "seoul")
     workspace: str  # Filesystem root for all agent file operations
 
     # ── Channels ───────────────────────────────────────────────────
@@ -84,19 +84,23 @@ class SharedContext:
     # ── Tool execution ─────────────────────────────────────────────
     _tool_registry: Any = None  # Tool registry (name → handler mapping)
     _tool_executor: Any = None  # Tool executor (invocation + security gating)
+    _safe_tool_pool: Any = None  # Cached ThreadPoolExecutor for parallel safe-tool execution
 
     # ── Trace & observability ──────────────────────────────────────
     trace_logger: Any = None  # TraceLogger for structured JSONL tracing
     _current_trace_id: str = ""  # UUID prefix for the current turn's trace
     tracer: Any = None  # TraceRecorder for training-data capture
+    _metrics: Any = None  # MetricsCollector for tool/LLM latency tracking
 
     # ── Error handling ─────────────────────────────────────────────
     error_logger: Any = None  # ErrorLogger for structured error aggregation
 
     # ── Conversation & sessions ────────────────────────────────────
     sessions: Any = None  # SessionManager for per-user chat history
-    compactor: Any = None  # ContextCompactor for token-limit management
+    context_compactor: Any = None  # ContextCompactor for token-limit management
     _resume_conv: Optional[list] = None  # Checkpoint-resumed conversation messages
+    _waiting_for_input: dict = field(default_factory=dict)  # {chat_id: True} when waiting for user input via ask_user
+    _pending_input_questions: dict = field(default_factory=dict)  # {chat_id: {conv, session_id, ...}} pending ask_user state
 
     # ── Verification & safety ──────────────────────────────────────
     verification: Any = None  # VerificationEngine for identity-bound checks
@@ -106,12 +110,13 @@ class SharedContext:
     decision_engine: Any = None  # DecisionEngine for structured reasoning pipeline
     _permission_checker: Any = None  # PermissionChecker for 5-tier mode gating
 
-    # ── Async event loop ───────────────────────────────────────────
-    _loop: Any = None  # Reusable asyncio event loop (avoids asyncio.run leaks)
-
     # ── Loop / doom detection ──────────────────────────────────────
     doom_detector: Any = None  # DoomLoopDetector for stuck-agent protection
     loop_detector: Any = None  # Legacy loop detection for repeated actions
+    _doom_loop_recovery_change_approach: bool = False  # Set by RETRY_DIFFERENT_ARGS callback
+    _doom_loop_recovery_tool_switch: bool = False  # Set by SWITCH_TOOL callback
+    _doom_recovery_task: Optional[Any] = None  # Track asyncio recovery task for cancellation
+    _loop: Any = None  # Reusable asyncio event loop (avoids asyncio.run leaks)
 
     # ── Checkpoint & recovery ──────────────────────────────────────
     checkpoint: Any = None  # CheckpointManager for crash recovery snapshots
@@ -130,6 +135,7 @@ class SharedContext:
     memory_store: Any = None  # MemoryFTSStore for full-text search over past sessions
     _memprof: Any = None  # MemoryProfiler for RSS tracking and GC triggers
     _schedule_restart: bool = False  # Flag: True when restart is needed due to memory pressure
+    _evolution_timer: int = 0  # Last evolution consolidation timestamp (unix epoch seconds)
 
     # ── Skills ─────────────────────────────────────────────────────
     skill_extractor: Any = None  # SkillExtractor for auto-extracting workflows
@@ -143,6 +149,9 @@ class SharedContext:
     _heartbeat_file: Path = field(default_factory=Path)  # Touch file for watchdog liveness checks
     _start_time: float = 0.0  # Unix timestamp of worker process start
 
+    # ── Cognitive workspace (v0.9+) ────────────────────────────────
+    cognitive_workspace: Any = None  # Workspace instance for cognitive state (Optional)
+
     # ── Optional off-by-default modules ────────────────────────────
     usage: Any = None  # UsageTracker for API token/cost accounting
     _vigil: Any = None  # Vigil instance for periodic security patrols
@@ -150,7 +159,6 @@ class SharedContext:
     _last_patrol: float = 0.0  # Timestamp of last vigil patrol run
     sandbox: Any = None  # SandboxExecutor for isolated code execution
     reflection: Any = None  # ReflectionEngine for post-task self-analysis
-    cognitive_workspace: Any = None  # Workspace for cognitive state (Optional)
 
     _failover_mod: Any = None  # ProviderFailover for multi-model resilience
     _verify_broadcast: Any = None  # VerifyBroadcast for multi-model consensus
@@ -219,7 +227,10 @@ class SharedContext:
                 if k.startswith("task-") or k in keys[-20:]
             }
 
-
+    def force_gc(self):
+        """Force garbage collection."""
+        import gc
+        gc.collect()
     def run_async(self, coro):
         """Run an async coroutine synchronously using the worker's persistent event loop.
 
@@ -252,7 +263,3 @@ class SharedContext:
         task = loop.create_task(coro)
         return loop.run_until_complete(task)
 
-    def force_gc(self):
-        """Force garbage collection."""
-        import gc
-        gc.collect()
