@@ -69,7 +69,8 @@ INTEL_DIR = "/var/log/intrusion-recon"
 CHECKSUM_FILE = f"{GUARDIAN_DIR}/.module_checksum"
 MODULE_PATH = __file__
 
-PATROL_INTERVAL = 600          # 10 minutes
+PATROL_INTERVAL = 120          # 2 minutes
+AUTO_BLOCK_EXPIRY = 86400     # 24 hours before auto-block expires
 ALERT_COOLDOWN = 1800          # 30 minutes
 FORENSICS_RETENTION = 86400 * 7  # 7 days
 
@@ -872,6 +873,7 @@ class SecurityVigil:
         # Background patrol
         self._task: Optional[asyncio.Task] = None
         self._running = False
+        self._blocked_at: Dict[str, float] = {}  # ip -> epoch timestamp of last block
 
         # Statistics
         self._scans = 0
@@ -990,6 +992,11 @@ class SecurityVigil:
                 if r.findings:
                     findings_all.extend(r.findings)
                     self._write_alert("L2_PORT", r)
+                    # Auto-block: new public ports are suspicious
+                    for finding in r.findings:
+                        port_match = re.search(r'(?:NEW PUBLIC PORT|PORT PROCESS CHANGED):\s*(\d+)', str(finding))
+                        if port_match:
+                            self._block_port(int(port_match.group(1)), "L2_PORT")
 
                 # L3: SSH sentinel
                 r = self.ssh_sentinel.check()
@@ -1044,10 +1051,10 @@ class SecurityVigil:
             node = os.uname().nodename
             findings_text = "; ".join(str(f) for f in findings[:5])
             alert_msg = (
-                f"⚠️ [Vigil Security] {len(findings)} threat(s) auto-blocked\n"
+                f"⚠️ [Vigil Security] {len(findings)} threat(s) detected\n"
                 f"Node: {node}\n"
                 f"Findings: {findings_text}\n"
-                f"Action: instant block applied → $TICAL_GUARDIAN_DIR/emergency/"
+                f"Action: auto-response applied → $TICAL_GUARDIAN_DIR/pending_alerts/"
             )
 
             sent = False
@@ -1198,28 +1205,92 @@ class SecurityVigil:
         except Exception:
             pass
 
-    def _auto_block(self, ip: str, source: str) -> bool:
-        """Block an IP via iptables + write emergency record.
+    def _block_port(self, port: int, source: str) -> bool:
+        """Block a port via iptables (idempotent).
 
-        Called automatically by patrol loop when SSHSentinel detects
-        an active unauthorized SSH connection. Uses sudo iptables.
+        Called when PortPatrol detects a new public port.
         Returns True if block succeeded.
+        """
+        if port in (22, 80, 443, 53):
+            return False  # never block essential services
+        try:
+            # Check if already blocked
+            subprocess.run(
+                ["sudo", "iptables", "-C", "INPUT", "-p", "tcp", "--dport", str(port), "-j", "DROP"],
+                capture_output=True, timeout=5,
+            )
+            return True  # already exists
+        except Exception:
+            pass
+        try:
+            subprocess.run(
+                ["sudo", "iptables", "-I", "INPUT", "-p", "tcp", "--dport", str(port), "-j", "DROP",
+                 "-m", "comment", "--comment", f"VIGIL-PORT-{int(time.time())}"],
+                capture_output=True, timeout=5, check=True,
+            )
+            self.log.info("Auto-blocked port %d via iptables (%s)", port, source)
+            return True
+        except Exception as e:
+            self.log.error("Port block failed for %d: %s", port, e)
+            return False
+
+    def _auto_block(self, ip: str, source: str) -> bool:
+        """Block an IP via iptables (deduped, 24h expiry, mesh-safe).
+
+        Called automatically by patrol loop. Idempotent — skips
+        IPs that are already blocked, private/mesh IPs, and ones
+        blocked within the last hour (cooldown). 24h expiry.
         """
         if not ip or ip.startswith("127.") or ip.startswith("10."):
             return False
         if ip.startswith("192.168.") or ip.startswith("172.16."):
             return False
+        # Never block mesh IPs
+        mesh = self.ssh_sentinel.MESH_IPS if hasattr(self, 'ssh_sentinel') else frozenset()
+        if ip in mesh:
+            return False
+
+        now = time.time()
+        # Dedup: skip if already blocked within last hour (cooldown)
+        if ip in self._blocked_at:
+            last = self._blocked_at[ip]
+            if now - last < 3600:
+                return False  # still cooling down
+        # Expire old blocks
+        stale = [k for k, v in self._blocked_at.items() if now - v > AUTO_BLOCK_EXPIRY]
+        for k in stale:
+            del self._blocked_at[k]
+            try:
+                subprocess.run(
+                    ["sudo", "iptables", "-D", "INPUT", "-s", k, "-j", "DROP"],
+                    capture_output=True, timeout=5,
+                )
+            except Exception:
+                pass
+
         try:
-            comment = f"VIGIL-AUTO-{int(time.time())}"
+            comment = f"VIGIL-AUTO-{int(now)}"
+            subprocess.run(
+                ["sudo", "iptables", "-C", "INPUT", "-s", ip, "-j", "DROP"],
+                capture_output=True, timeout=5,
+            )
+            # Rule already exists — update timestamp only
+            self._blocked_at[ip] = now
+            return True
+        except Exception:
+            pass  # Rule doesn't exist, proceed to add
+
+        try:
             subprocess.run(
                 ["sudo", "iptables", "-I", "INPUT", "-s", ip, "-j", "DROP",
                  "-m", "comment", "--comment", comment],
                 capture_output=True, timeout=5, check=True,
             )
-            # Write emergency record for audit trail
+            self._blocked_at[ip] = now
+            # Write emergency record
             emergency_dir = os.path.join(GUARDIAN_DIR, "emergency")
             os.makedirs(emergency_dir, exist_ok=True)
-            em_file = os.path.join(emergency_dir, f"{source}_{int(time.time())}.json")
+            em_file = os.path.join(emergency_dir, f"{source}_{int(now)}.json")
             with open(em_file, "w") as f:
                 json.dump({
                     "type": "auto_block",
@@ -1227,6 +1298,7 @@ class SecurityVigil:
                     "target": ip,
                     "action": "iptables DROP (sudo)",
                     "node": os.uname().nodename,
+                    "expires_at": datetime.fromtimestamp(now + AUTO_BLOCK_EXPIRY, tz=timezone.utc).isoformat(),
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }, f, indent=2)
             self.log.info("Auto-blocked %s via sudo iptables (%s)", ip, source)
