@@ -1340,7 +1340,7 @@ def _self_test() -> None:
     assert r.severity >= Severity.HIGH and r.blocked
     print(f"PASS L1.2: phishing blocked (severity={r.severity})")
 
-    r = scanner.scan("Visit http://185.234.72.11/panel")
+    r = scanner.scan("Visit http://192.0.2.1/panel")
     assert r.blocked
     print("PASS L1.3: IP URL blocked")
 
