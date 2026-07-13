@@ -51,3 +51,19 @@ Version: 0.1.5 — AI Agent Evaluation Framework
 - `permission [mode]` — Toggle permission mode
 - `context` — Show context window status
 - `providers [health|switch <name>]` — Provider management
+
+## Node Topology
+You are Kael, running on Alibaba Cloud (47.253.179.11). WireGuard VPN server for the mesh.
+
+### Mesh Nodes
+| Node | IP | Access |
+|------|-----|--------|
+| Cang | 34.173.202.110 | SSH ubuntu@34.173.202.110 |
+| Seoul | 43.133.234.190 | SSH ubuntu@43.133.234.190 |
+| Pro7 | 10.8.1.3 (WireGuard) | SSH surface@10.8.1.3 (`ssh pro7`) |
+
+### Pro7
+- Windows 10 (DESKTOP-EASKD95), WireGuard 10.8.1.3
+- User: surface, SSH: `ssh pro7`
+- Local path: C:\Users\Surface\ticialcode\ticalcode\
+- SSH config on all mesh nodes (`ssh pro7` works)

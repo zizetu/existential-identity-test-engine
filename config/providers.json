@@ -1,45 +1,35 @@
 {
-  "_comment": "Provider registry -- add any OpenAI-compatible provider here without code changes.",
-  "_usage": "Each provider entry defines how to discover itself from env vars. Users can add/remove/reorder providers by editing this file or setting environment variables. See .env.example for available env vars.",
-  "_instructions": [
-    "Copy .env.example to .env and set your API key(s).",
-    "Supported: DEEPSEEK_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, SILICONFLOW_API_KEY, CUSTOM_LLM_API_KEY",
-    "Providers are auto-discovered from env vars and sorted by priority (lower = first used).",
-    "Edit this file to add/remove/reorder providers without code changes.",
-    "You can set any model name in the env var (e.g. SILICONFLOW_MODEL for the model to use)."
-  ],
-  "_example_new_provider": {
-    "name": "my-custom-api",
-    "family": "openai",
-    "env_key": "MY_API_KEY",
-    "env_base_url": "MY_API_BASE",
-    "default_base_url": "https://api.myprovider.com/v1/chat/completions",
-    "auth_style": "bearer",
-    "default_model": "my-model-name",
-    "available_models": [
-      "my-model-name"
-    ],
-    "protocol": "openai",
-    "priority": 10,
-    "cost": "paid"
-  },
-  "providers": {},
-  "auth_styles": {
-    "bearer": "Authentication: Bearer token",
-    "api-key": "api-key: {api_key}",
-    "none": ""
-  },
-  "failover": {
-    "per_call_timeout": 30,
-    "global_call_timeout": 120,
-    "cooldown_base_429": 15,
-    "cooldown_base_5xx": 60,
-    "cooldown_auth": 300,
-    "cooldown_timeout": 30,
-    "cooldown_cap": 120,
-    "min_interval_seconds": 1.0,
-    "retry_jitter_min": 0.5,
-    "retry_jitter_max": 1.5,
-    "family_dead_time": 30
+  "_comment": "Kael provider config — MIMO first, DeepSeek fallback",
+  "providers": {
+    "mimo-token-plan": {
+      "name": "MiMo Token Plan",
+      "family": "mimo",
+      "multi_key": true,
+      "key_count": 4,
+      "env_key_prefix": "MIMO_API_KEY_",
+      "env_endpoint_prefix": "MIMO_ENDPOINT_",
+      "env_model_prefix": "MIMO_MODEL_",
+      "default_base_url": "https://token-plan-sgp.xiaomimimo.com/v1/chat/completions",
+      "auth_style": "bearer",
+      "default_model": "mimo-v2.5-pro",
+      "available_models": ["mimo-v2.5-pro", "mimo-v2.5"],
+      "protocol": "openai",
+      "priority": 1,
+      "cost": "paid"
+    },
+    "deepseek": {
+      "name": "deepseek",
+      "family": "deepseek",
+      "multi_key": false,
+      "env_key": "DEEPSEEK_API_KEY",
+      "env_base_url": "DEEPSEEK_ENDPOINT",
+      "default_base_url": "https://api.deepseek.com/v1/chat/completions",
+      "auth_style": "bearer",
+      "default_model": "deepseek-v4-flash",
+      "protocol": "openai",
+      "priority": 99,
+      "is_fallback": true,
+      "cost": "paid"
+    }
   }
 }

@@ -1741,6 +1741,19 @@ class AsyncWorker:
                     _content = open(_fpath).read().strip()
                     if _content:
                         self.system_prompt += f"\n\n## {_label}\n{_content[:2000]}"
+
+            # Inject CLAUDE.md from project root (standard AI agent convention)
+            _claude_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+                os.path.abspath(__file__)))), "CLAUDE.md")
+            if os.path.exists(_claude_path):
+                try:
+                    _claude_content = open(_claude_path).read().strip()
+                    if _claude_content:
+                        self.system_prompt += f"\n\n[Project Context: CLAUDE.md]\n{_claude_content[:2000]}"
+                        self.logger.info("CLAUDE.md injected: %d chars", len(_claude_content))
+                except Exception:
+                    pass
+
             self.logger.info("Memory injected into system prompt")
         except Exception as e:
             self.logger.debug("Memory injection skipped: %s", e)
