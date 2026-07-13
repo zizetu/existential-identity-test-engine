@@ -1217,7 +1217,7 @@ class SecurityVigil:
             # Check if already blocked
             subprocess.run(
                 ["sudo", "iptables", "-C", "INPUT", "-p", "tcp", "--dport", str(port), "-j", "DROP"],
-                capture_output=True, timeout=5,
+                capture_output=True, timeout=5, check=True,
             )
             return True  # already exists
         except Exception:
@@ -1272,7 +1272,7 @@ class SecurityVigil:
             comment = f"VIGIL-AUTO-{int(now)}"
             subprocess.run(
                 ["sudo", "iptables", "-C", "INPUT", "-s", ip, "-j", "DROP"],
-                capture_output=True, timeout=5,
+                capture_output=True, timeout=5, check=True,
             )
             # Rule already exists — update timestamp only
             self._blocked_at[ip] = now
