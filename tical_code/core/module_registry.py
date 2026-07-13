@@ -48,6 +48,7 @@ Usage:
 """
 
 import logging
+import sys as _sys
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -148,7 +149,22 @@ def load_modules(worker: Any, cfg: dict, profile: str = "full") -> Dict[str, Any
     Returns:
         Dict of {name: instance} for successfully loaded modules.
     """
-    global _load_order
+    global _load_order, _registry
+
+    # Self-heal bare-import ghost: when tical_code/core/ is on sys.path,
+    # ``import module_registry`` creates a second module object with an
+    # empty _registry (module_defs decorated the full-path copy).  Detect
+    # and pull the real data from the canonical module.
+    if not _registry:
+        _canonical = _sys.modules.get("tical_code.core.module_registry")
+        if _canonical is not None and _canonical._registry:
+            _registry = _canonical._registry
+            _load_order = []  # force re-sort with real data
+            logger.warning(
+                "Healed bare-import ghost: %d modules from canonical registry",
+                len(_registry),
+            )
+
     if not _load_order:
         _load_order = _topological_sort()
 
