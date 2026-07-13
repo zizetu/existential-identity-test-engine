@@ -39,3 +39,8 @@ credentials*
 .tical_mod_count.json
 _test_safe_modify*
 *.db.bak*
+benchmarks/bench_data/bfcl/BFCL_v4_*.json
+benchmarks/bench_data/bfcl/possible_answer_*.json
+benchmarks/bench_data/bfcl/results/
+results/
+memory.json
