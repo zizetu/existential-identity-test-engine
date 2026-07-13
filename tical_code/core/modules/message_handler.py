@@ -141,40 +141,7 @@ _PASSWORDS_FILE = os.path.join(_EITE_DATA_DIR, "passwords.json")
 
 
 
-class IterationBudget:
-    """Thread-safe iteration budget with consume/refund mechanism."""
-    def __init__(self, max_total: int = 60, max_consecutive_failures: int = 5):
-        self.max_total = max_total
-        self.max_consecutive_failures = max_consecutive_failures
-        self._used = 0
-        self._consecutive_failures = 0
-        self._lock = __import__("threading").Lock()
-        self._start_time = __import__("time").time()
-        self._max_wall_time = 1200
-    def consume(self):
-        with self._lock:
-            if self._used >= self.max_total: return False
-            if __import__("time").time() - self._start_time > self._max_wall_time: return False
-            if self._consecutive_failures >= self.max_consecutive_failures: return False
-            self._used += 1
-            return True
-    def refund(self):
-        with self._lock:
-            if self._used > 0: self._used -= 1
-    def record_failure(self):
-        with self._lock: self._consecutive_failures += 1
-    def record_success(self):
-        with self._lock: self._consecutive_failures = 0
-    @property
-    def remaining(self):
-        with self._lock: return max(0, self.max_total - self._used)
-    @property
-    def iteration(self):
-        with self._lock: return self._used
-    @property
-    def elapsed_seconds(self):
-        return __import__("time").time() - self._start_time
-
+from tical_code.core.iteration_budget import IterationBudget
 def _load_passwords() -> dict:
     """Load password database from disk."""
     try:
@@ -803,9 +770,9 @@ def _exec_cmd(ctx: SharedContext, cmd_name: str, cmd_args: list[str],
             return f"[CMD] permission error: {e}"
 
     if cmd_name == "context":
-        if not ctx.compactor:
+        if not ctx.context_compactor:
             return "[CMD] context: ContextCompactor not available"
-        comp = ctx.compactor
+        comp = ctx.context_compactor
         lines = [
             f"Max tokens: {comp.max_tokens}",
             f"Compact threshold: {comp.compact_threshold_pct*100:.0f}% ({int(comp.max_tokens * comp.compact_threshold_pct)} tokens)",
@@ -1616,9 +1583,9 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
                 logger.info("  stripped %d orphan tool msgs from session history", _stripped_orphans)
         # Token-aware session trimming — delegated entirely to ContextCompactor
         # (the old hardcoded keep=14 block was removed; compactor handles it properly)
-        if ctx.compactor and ctx.compactor.needs_compaction(conv):
-            estimate = ctx.compactor.estimate_tokens(conv)
-            logger.info("  session trim: %d msgs, ~%d tokens (max=%d)", len(conv), estimate, ctx.compactor.max_tokens)
+        if ctx.context_compactor and ctx.context_compactor.needs_compaction(conv):
+            estimate = ctx.context_compactor.estimate_tokens(conv)
+            logger.info("  session trim: %d msgs, ~%d tokens (max=%d)", len(conv), estimate, ctx.context_compactor.max_tokens)
     # Build user message content - include media if available
     if hasattr(msg, 'media_data') and msg.media_data:
         content_parts = [{"type": "text", "text": msg.content}]
@@ -1670,48 +1637,19 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
 
     _iteration_budget = IterationBudget(max_total=10)
     _last_results: dict = {}  # Per-tool result cache for efficiency detection
-    for iteration in range(10):
-        if not _iteration_budget.consume():
-            conv.append({
-                "role": "system",
-                "content": "[BUDGET EXHAUSTED] Reply now with what you have.",
-            })
-            break
+    while _iteration_budget.consume():
         # Pre-model checkpoint...
         if ctx.checkpoint:
             try:
                 ctx.checkpoint.save(
-                    description=f"pre-model-round-{iteration}",
+                    description=f"pre-model-round-{_iteration_budget.iteration}",
                     session_messages=conv,
                     session_id=session_id,
-                    iteration=iteration,
+                    iteration=_iteration_budget.iteration,
                 )
             except Exception:
                 pass
-        # Context compression for long tool-heavy conversations
-        if iteration >= 3 and ctx.compactor and ctx.compactor.needs_compaction(conv):
-            estimate = ctx.compactor.estimate_tokens(conv)
-            logger.info("  chat compress: %d msgs, ~%d tokens (max=%d)", len(conv), estimate, ctx.compactor.max_tokens)
-            system = conv[0] if conv and conv[0].get('role') == 'system' else None
-            keep = getattr(ctx.compactor, 'keep_recent', 12)
-            new_conv = [system] if system else []
-            tail = list(conv[-keep:])
-            tool_ids_needed = set()
-            for m in tail:
-                if m.get("role") == "tool" and m.get("tool_call_id"):
-                    tool_ids_needed.add(m["tool_call_id"])
-            for m in reversed(conv[1:-keep] if system else conv[:-keep]):
-                if m.get("role") == "assistant" and m.get("tool_calls"):
-                    for tc in m.get("tool_calls", []):
-                        if tc.get("id") in tool_ids_needed:
-                            tail.insert(0, m)
-                            tool_ids_needed.discard(tc.get("id"))
-                            break
-                if not tool_ids_needed:
-                    break
-            new_conv.extend(tail)
-            conv = new_conv
-            logger.info("  compressed to %d msgs", len(conv))
+        # Context compression is handled by compact_if_needed() below
         # Proactive auto-compaction before API call (80% token budget trigger)
         # Helper: run an async coroutine synchronously with proper Task context.
         # aiohttp 3.13+ uses asyncio.timeout() internally, which requires
@@ -1722,13 +1660,13 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
             """Run an async coroutine synchronously, reusing worker's event loop."""
             return ctx.run_async(coro)
 
-        if ctx.compactor:
+        if ctx.context_compactor:
             def _llm_call_sync(msgs):
                 _r = ctx.llm.call(msgs)
                 if asyncio.iscoroutine(_r):
                     _r = _run_async_safe(_r)
                 return _r
-            conv = ctx.compactor.compact_if_needed(conv, _llm_call_sync)
+            conv = ctx.context_compactor.compact_if_needed(conv, _llm_call_sync)
         # Adapt messages for model format compatibility
         _call_conv = conv
         if ctx._msg_adapter:
@@ -1746,6 +1684,7 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
         # Retry on transient LLM errors (up to 2 retries with 1s/2s backoff)
         for _retry in range(2):
             if response.get("error") and "rate_limit" not in str(response.get("error", "")):
+                _iteration_budget.record_failure()
                 time.sleep(1 + _retry)
                 _llm_result = ctx.llm.call(_call_conv, tools=TOOL_SCHEMAS, preferred_family=_family)
                 if asyncio.iscoroutine(_llm_result):
@@ -1825,7 +1764,7 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
                         description=f"post-model-round-{iteration}",
                         session_messages=conv,
                         session_id=session_id,
-                        iteration=iteration,
+                        iteration=_iteration_budget.iteration,
                     )
                 except Exception:
                     pass
@@ -2048,7 +1987,7 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
                             session_messages=conv,
                             session_id=session_id,
                             tool_history=[{"name": name, "args": args, "result_summary": str(result)[:200]}],
-                            iteration=iteration,
+                            iteration=_iteration_budget.iteration,
                         )
                     except Exception:
                         pass
@@ -2444,6 +2383,27 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
                 from tical_code.core.tool_executor import set_skip_sanitize
                 set_skip_sanitize(False)
             return
+
+    # Budget exhausted: one final toolless grace call to summarize
+    if _iteration_budget.remaining <= 0 and _iteration_budget.iteration > 0:
+        logger.warning("[worker] budget exhausted after %d iterations — grace call", _iteration_budget.iteration)
+        try:
+            _grace_conv = list(conv)
+            _grace_conv.append({
+                "role": "system",
+                "content": "[BUDGET EXHAUSTED] You have reached the iteration limit. "
+                           "Provide a final summary of what you accomplished and what remains, then stop. "
+                           "Do NOT make any more tool calls."
+            })
+            _grace_result = ctx.llm.call(_grace_conv, tools=[])
+            if asyncio.iscoroutine(_grace_result):
+                _grace_result = ctx.run_async(_grace_result)
+            _grace_content = _grace_result.get("content", "") if isinstance(_grace_result, dict) else str(_grace_result)
+            if _grace_content:
+                conv.append({"role": "assistant", "content": _grace_content})
+                logger.info("[worker] grace summary: %d chars", len(_grace_content))
+        except Exception as e:
+            logger.warning("[worker] grace call failed: %s", e)
 
     # Exceeded max iterations -- send last reply to sender, save partial conversation
     # Restore constitution if power mode was active
