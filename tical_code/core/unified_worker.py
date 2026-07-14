@@ -2035,8 +2035,13 @@ class AsyncWorker:
     # ─────────────────────────────────────────────────────────
 
     @staticmethod
-    def _get_session_id(msg: Message) -> str:
-        """Derive a stable session ID from the message source."""
+    def _get_session_id(msg: Message | None = None) -> str:
+        """Derive a stable session ID from the message source.
+        
+        If msg is None, falls back to a generic session ID based on worker name.
+        """
+        if msg is None:
+            return "default:default"
         return f"{msg.source}:{msg.sender or msg.chat_id or 'default'}"
 
     async def run(self):
@@ -2252,7 +2257,11 @@ class AsyncWorker:
                 _sid = self.sessions.get_session_id(msg.source, str(msg.chat_id))
                 # Tight cap: 5 turns = enough for "what were we just talking about"
                 # without poisoning context with stale task reports.
-                _loaded = self.sessions.load_session(_sid, max_messages=5)
+                _loaded = self.sessions.load_session(_sid, max_messages=30)
+                if hasattr(self.sessions, 'get_summary'):
+                    _summary = self.sessions.get_summary(_sid)
+                    if _summary:
+                        _loaded.insert(0, {"role": "system", "content": f"[Session Context] {_summary}"})
                 _loaded = [m for m in _loaded if m.get("role") in ("user", "assistant")]
                 if _loaded:
                     messages = [{"role": "system", "content": self.system_prompt}] + _loaded

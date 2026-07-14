@@ -144,6 +144,8 @@ class ModelAnswer:
     content: str
     tool_calls: Optional[List[Dict]] = None
     latency_seconds: float = 0.0
+    router_trace: Optional[Any] = None
+    error: Optional[str] = None
 class RouterTrace:
     """Stub: full RouterTrace not available in light build."""
     def __init__(self):
@@ -202,10 +204,6 @@ def detect_cache_hit(response: Dict[str, Any]) -> bool:
     if usage.get("prompt_tokens", 1) == 0 and usage.get("completion_tokens", 0) > 0:
         return True
     return False
-
-    router_trace: Optional[Any] = None
-    error: Optional[str] = None
-    cost_entry: Optional[EiteCostEntry] = None
 
 
 # ------------------------------------------------------------------

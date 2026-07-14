@@ -1542,6 +1542,11 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
         ctx.skill_extractor.start_task(task_id=_msg_task_id, goal=msg.content[:200])
     # Load session history for context persistence
     history = ctx.sessions.load_session(session_id) if ctx.sessions else []
+    # Inject session summary for context restoration on restart
+    if ctx.sessions and history and hasattr(ctx.sessions, 'get_summary'):
+        _summary = ctx.sessions.get_summary(session_id)
+        if _summary:
+            history.insert(0, {"role": "system", "content": f"[Session Context] {_summary}"})
     # Session-affinity: preferred model family for this conversation
     _family = ctx._session_family.get(session_id)
     # Power mode: force DeepSeek (more obedient than MiMo to system prompts)

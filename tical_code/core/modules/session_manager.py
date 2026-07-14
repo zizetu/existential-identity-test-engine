@@ -88,6 +88,15 @@ class SessionManager:
                     metadata TEXT
                 )
             """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS session_summaries (
+                    session_id TEXT PRIMARY KEY,
+                    summary TEXT NOT NULL DEFAULT '',
+                    updated_at REAL NOT NULL,
+                    turn_count INTEGER NOT NULL DEFAULT 0,
+                    FOREIGN KEY(session_id) REFERENCES sessions(session_id)
+                )
+            """)
             self.conn.commit()
 
     def get_session_id(self, channel: str, chat_id: str) -> str:
@@ -148,7 +157,7 @@ class SessionManager:
             logger.exception("save_messages failed")
             return False
 
-    def load_session(self, session_id: str, max_messages: int = 100) -> list[dict]:
+    def load_session(self, session_id: str, max_messages: int = 30) -> list[dict]:
         try:
             with self.lock:
                 cur = self.conn.cursor()
@@ -169,35 +178,26 @@ class SessionManager:
                     if tc_id:
                         loaded_tool_ids.add(tc_id)
 
-            # Keep last 8 tool messages to preserve context of what the model
-            # actually did - dropping them all causes amnesia about tool actions.
-            # Truncate verbose tool outputs (>2000 chars) to avoid context bloat.
-            MAX_TOOL_MSGS = 15
-            tool_count = 0
             out: list[dict] = []
             for row in rows:
                 if row["role"] == "tool":
-                    if tool_count < MAX_TOOL_MSGS:
-                        tool_count += 1
-                        content = row["content"]
-                        if len(content) > 2000:
-                            content = content[:2000] + "\n[truncated]"
-                        tool_msg = {"role": "tool", "content": content}
-                        # Restore tool_call_id from metadata - required by API
-                        try:
-                            meta = json.loads(row["metadata"] or "{}")
-                        except Exception:
-                            meta = {}
-                        tc_id = meta.get("tool_call_id", "")
-                        if tc_id:
-                            tool_msg["tool_call_id"] = tc_id
-                        out.append(tool_msg)
+                    content = row["content"]
+                    if len(content) > 2000:
+                        content = content[:2000] + "\n[truncated]"
+                    tool_msg = {"role": "tool", "content": content}
+                    # Restore tool_call_id from metadata - required by API
+                    try:
+                        meta = json.loads(row["metadata"] or "{}")
+                    except Exception:
+                        meta = {}
+                    tc_id = meta.get("tool_call_id", "")
+                    if tc_id:
+                        tool_msg["tool_call_id"] = tc_id
+                    out.append(tool_msg)
                     continue
                 if row["role"] not in ("user", "assistant"):
                     continue
                 msg: dict[str, Any] = {"role": row["role"], "content": row["content"]}
-                # Only inject tool_calls that have matching tool results in
-                # the loaded set - avoids API errors from orphaned tool_calls
                 if row["role"] == "assistant":
                     try:
                         meta = json.loads(row["metadata"] or "{}")
@@ -205,14 +205,63 @@ class SessionManager:
                         meta = {}
                     tool_calls = meta.get("tool_calls", [])
                     if tool_calls:
-                        matched_calls = [tc for tc in tool_calls if tc.get("id", "") in loaded_tool_ids]
-                        if matched_calls:
-                            msg["tool_calls"] = matched_calls
+                        # Include ALL tool_calls with placeholder results for orphans
+                        fixed_calls = []
+                        for tc in tool_calls:
+                            tc_id = tc.get("id", "")
+                            if tc_id in loaded_tool_ids:
+                                fixed_calls.append(tc)
+                            else:
+                                # Orphan tool_call: inject placeholder result to avoid API 400
+                                fixed_calls.append(tc)
+                                out.append({
+                                    "role": "tool",
+                                    "content": "[result from prior turn - not in loaded window]",
+                                    "tool_call_id": tc_id,
+                                })
+                        if fixed_calls:
+                            msg["tool_calls"] = fixed_calls
                 out.append(msg)
             return out
         except Exception:
             logger.exception("load_session failed")
             return []
+
+    def save_summary(self, session_id: str, summary: str) -> bool:
+        """Save or update a session summary for context persistence on restart."""
+        try:
+            now = time.time()
+            with self.lock:
+                cur = self.conn.cursor()
+                # Get current turn count from messages table
+                cur.execute("SELECT COUNT(*) as cnt FROM messages WHERE session_id = ?", (session_id,))
+                turn_count = cur.fetchone()["cnt"]
+                cur.execute(
+                    "INSERT INTO session_summaries (session_id, summary, updated_at, turn_count) "
+                    "VALUES (?, ?, ?, ?) "
+                    "ON CONFLICT(session_id) DO UPDATE SET "
+                    "summary=excluded.summary, updated_at=excluded.updated_at, turn_count=excluded.turn_count",
+                    (session_id, summary, now, turn_count),
+                )
+                self.conn.commit()
+            return True
+        except Exception:
+            logger.exception("save_summary failed")
+            return False
+
+    def get_summary(self, session_id: str) -> str | None:
+        """Retrieve session summary for context injection on restart."""
+        try:
+            with self.lock:
+                cur = self.conn.cursor()
+                cur.execute("SELECT summary FROM session_summaries WHERE session_id = ?", (session_id,))
+                row = cur.fetchone()
+                if row:
+                    return row["summary"]
+            return None
+        except Exception:
+            logger.exception("get_summary failed")
+            return None
 
     def archive_old(self, days: int = 7) -> int:
         try:
@@ -262,7 +311,7 @@ class SessionManager:
 
     def cleanup(self, max_age_days: int = 3, max_db_size_mb: int = 50) -> dict:
         """Auto-cleanup: archive old sessions and trim oversized DBs.
-        
+
         Called from worker loop periodically (e.g. every 100 messages).
         Returns stats dict.
         """
@@ -270,11 +319,11 @@ class SessionManager:
         try:
             # Archive sessions older than max_age_days
             stats["archived"] = self.archive_old(days=max_age_days)
-            
+
             # Check DB size
             db_size = self.db_path.stat().st_size / (1024 * 1024)
             stats["db_size_mb"] = round(db_size, 1)
-            
+
             if db_size > max_db_size_mb:
                 # Aggressive: delete archived tables and VACUUM
                 with self.lock:
