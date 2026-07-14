@@ -328,6 +328,7 @@ class Worker:
         """
         self.cfg = cfg
         self.name = cfg['name']
+        import logging; self.logger = logging.getLogger(f"tical-code.worker.{self.name}")
         self.workspace = cfg["workspace"]
         self._data_dir = under_tical_home("")
 

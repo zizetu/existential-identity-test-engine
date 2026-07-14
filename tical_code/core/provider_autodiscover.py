@@ -37,9 +37,10 @@ _KNOWN_PROVIDERS: List[Dict] = [
         "family": "deepseek",
         "env_key": "DEEPSEEK_API_KEY",
         "env_base_url": "DEEPSEEK_ENDPOINT",
+        "env_model": "DEEPSEEK_MODEL",
         "default_base_url": "https://api.deepseek.com/v1/chat/completions",
         "auth_style": "bearer",
-        "default_model": "deepseek-chat",
+        "default_model": "deepseek-v4-flash",
         "protocol": "openai",
         "priority": 1,
         "cost": "paid",
@@ -118,7 +119,13 @@ def auto_discover() -> List[Dict]:
     for pdef in _KNOWN_PROVIDERS:
         key = _resolve_env(pdef.get("env_key"))
         if key:
-            discovered.append(dict(pdef))
+            entry = dict(pdef)
+            env_model = pdef.get('env_model')
+            if env_model:
+                model_val = os.environ.get(env_model, '')
+                if model_val:
+                    entry['default_model'] = model_val
+            discovered.append(entry)
             logger.info(
                 "Auto-discovered provider '%s' via %s",
                 pdef["name"],

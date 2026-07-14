@@ -987,12 +987,14 @@ class SecurityVigil:
                 if r.findings:
                     findings_all.extend(r.findings)
                     self._write_alert("L5_INTEGRITY", r)
+                    self.log.warning("L5_INTEGRITY: %s", r.findings)
 
                 # L2: Port patrol
                 r = self.port_patrol.check()
                 if r.findings:
                     findings_all.extend(r.findings)
                     self._write_alert("L2_PORT", r)
+                    self.log.warning("L2_PORT: %s", r.findings)
                     # Auto-block: new public ports are suspicious
                     for finding in r.findings:
                         port_match = re.search(r'(?:NEW PUBLIC PORT|PORT PROCESS CHANGED):\s*(\d+)', str(finding))
@@ -1004,6 +1006,7 @@ class SecurityVigil:
                 if r.findings:
                     findings_all.extend(r.findings)
                     self._write_alert("L3_SSH", r)
+                    self.log.warning("L3_SSH: %s", r.findings)
                     # Auto-block: UNKNOWN SSH connections are active intruders
                     for finding in r.findings:
                         ip_match = re.search(r'(\d+\.\d+\.\d+\.\d+)', str(finding))
@@ -1015,12 +1018,14 @@ class SecurityVigil:
                 if r.findings:
                     findings_all.extend(r.findings)
                     self._write_alert("L4_FS", r)
+                    self.log.warning("L4_FS: %s", r.findings)
 
                 # L4.5: SSH brute-force detection
                 r = self.bruteforce.check()
                 if r.findings:
                     findings_all.extend(r.findings)
                     self._write_alert("L4_BF", r)
+                    self.log.warning("L4_BF: %s", r.findings)
 
                 if findings_all:
                     self._alerts += 1
