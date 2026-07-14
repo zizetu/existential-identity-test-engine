@@ -38,6 +38,7 @@ Bypass resistance:
 """
 
 import os
+import platform
 import re
 import json
 import time
@@ -1048,7 +1049,7 @@ class SecurityVigil:
         and cached at ~/.guardian_chat_id (see unified_worker.py line 1312).
         """
         try:
-            node = os.uname().nodename
+            node = os.uname().nodename if hasattr(os, 'uname') else platform.node()
             findings_text = "; ".join(str(f) for f in findings[:5])
             alert_msg = (
                 f"⚠️ [Vigil Security] {len(findings)} threat(s) detected\n"
@@ -1297,7 +1298,7 @@ class SecurityVigil:
                     "source": source,
                     "target": ip,
                     "action": "iptables DROP (sudo)",
-                    "node": os.uname().nodename,
+                    "node": os.uname().nodename if hasattr(os, 'uname') else platform.node(),
                     "expires_at": datetime.fromtimestamp(now + AUTO_BLOCK_EXPIRY, tz=timezone.utc).isoformat(),
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }, f, indent=2)
