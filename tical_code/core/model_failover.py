@@ -104,7 +104,7 @@ def _load_failover_config() -> dict:
         resolved = os.path.abspath(path_str)
         if os.path.exists(resolved):
             try:
-                with open(resolved) as f:
+                with open(resolved, encoding="utf-8") as f:
                     cfg = json.load(f)
                 failover = cfg.get("failover", {})
                 if failover:
@@ -1111,7 +1111,8 @@ class ModelFailover:
 
     async def call(self, messages: List[Dict], tools: Optional[List] = None,
              max_tokens: int = 6000, temperature: float = 0.3,
-             preferred_family: Optional[str] = None) -> FailoverResult:
+             preferred_family: Optional[str] = None,
+             prefix: Optional[str] = None) -> FailoverResult:
         """Call LLM with session-affinity LRU selection and automatic failover.
 
         Implements a multi-phase retry strategy with circuit-breaker health
@@ -1143,6 +1144,17 @@ class ModelFailover:
             A FailoverResult with content, tool_calls, provider metadata, and
             retry count. On total failure, content is an error message string.
         """
+        # Inject tool-mask prefill into the message list (copy to avoid mutation)
+        if prefix:
+            messages = list(messages)
+            if messages and messages[0].get("role") == "system":
+                _sys = dict(messages[0])
+                _base = _sys.get("content") or ""
+                _sys["content"] = f"{_base}\n\n{prefix}" if _base else prefix
+                messages[0] = _sys
+            else:
+                messages = [{"role": "system", "content": prefix}] + messages
+
         retries = 0
         tried: set = set()
         _call_start = time.time()  # wall-clock start for global timeout

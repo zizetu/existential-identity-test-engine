@@ -1,0 +1,2 @@
+[console_scripts]
+tical = tical_code.cli.commands:main
