@@ -1,7 +1,7 @@
 # EMERGENCY FAST_ACK 2026-07-09c: typing ack + no-tool short replies + queue hygiene
 # EMERGENCY LOAD_SESSION 2026-07-09: reload SQLite history on new in-memory sessions
 # EMERGENCY 2026-07-09: throttle progress spam; longer hard timeout; pair with MemoryBoot.get_memory
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -18,7 +18,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 # [ANCHOR] STRATEGIC CONTEXT — Read STRATEGY.md before making changes.
-# This is the main worker entry for tical-agent (lite edition, in development).
+# This is the main worker entry for EITE-agent (lite edition, in development).
 #
 # Sister project: eite-agent (full EITE edition, zizetu/eite-agent) — DO NOT MIX CODE.
 # Security audit completed 2026-07-03 in sync with eite-agent.
@@ -29,7 +29,7 @@ from .paths import under_tical_home
 
 # provenance:tic-al-agent
 """
-tical-code unified worker - main orchestrator loop.
+EITElite unified worker - main orchestrator loop.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 WORKER LIFECYCLE (the core loop, executed inside Worker.run())
@@ -206,7 +206,7 @@ try:
 except ImportError:
     MessageAdapter = None
 
-logger = logging.getLogger("tical-code.worker")
+logger = logging.getLogger("EITElite.worker")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -266,7 +266,7 @@ MAX_TOOL_ITERATIONS = 50  # Safety fuse -- model stops when work is done
 # ─────────────────────────────────────────────────────────────
 
 class Worker:
-    """Central orchestrator for the tical-code AI worker.
+    """Central orchestrator for the EITElite AI worker.
 
     The Worker is the top-level runtime: it wires every subsystem
     together and runs the main poll→dispatch→reply loop indefinitely.
@@ -328,7 +328,7 @@ class Worker:
         """
         self.cfg = cfg
         self.name = cfg['name']
-        import logging; self.logger = logging.getLogger(f"tical-code.worker.{self.name}")
+        import logging; self.logger = logging.getLogger(f"EITElite.worker.{self.name}")
         self.workspace = cfg["workspace"]
         self._data_dir = under_tical_home("")
 
@@ -871,7 +871,7 @@ class Worker:
                 from pathlib import Path as _Path
                 _ws_persist = _Path(os.environ.get("WORKSPACE_DIR", "/tmp")) / ".cognitive"
                 self.cognitive_workspace = Workspace(
-                    node_id=os.environ.get("NODE_ID", "seoul-1"),
+                    node_id=os.environ.get("NODE_ID", "agent-1"),
                     persist_path=_ws_persist,
                     enabled=True,
                 )
@@ -1609,7 +1609,7 @@ class AsyncWorker:
         self.cfg = cfg
         self.name = cfg["name"]
         self.workspace = cfg["workspace"]
-        self.logger = logging.getLogger(f"tical-code.async_worker.{self.name}")
+        self.logger = logging.getLogger(f"EITElite.async_worker.{self.name}")
 
         # SustainedTaskManager - persistent task queue with auto-recovery
         if SustainedTaskManager is not None:
@@ -1628,7 +1628,7 @@ class AsyncWorker:
         # SelfEvolveEngine - error pattern tracking and usage insights
         if SelfEvolveEngine is not None:
             self._self_evolve = SelfEvolveEngine(
-                db_path=os.path.expanduser("~/.tical-code/self_evolve.db")
+                db_path=os.path.expanduser("~/.EITElite/self_evolve.db")
             )
             # LIVE WIRE INJECT 2026-07-13
             try:
@@ -2901,7 +2901,7 @@ class AsyncWorker:
         }
 
 def main():
-    """Entry point for the tical-code unified worker.
+    """Entry point for the EITElite unified worker.
 
     Performs startup in this order:
       1. Acquires a PID lock to prevent duplicate instances.
@@ -2914,7 +2914,7 @@ def main():
     The PID lock file is always cleaned up in the finally block,
     even on crash or signal-triggered exit.
     """
-    logger.info("tical-code worker starting")
+    logger.info("EITElite worker starting")
 
     # PID lock - prevent duplicate instances
     PID_FILE = Path("/tmp/unified-worker.pid")
@@ -2931,7 +2931,7 @@ def main():
         PID_FILE.write_text(str(os.getpid()))
     except PermissionError:
         import logging
-        logging.getLogger("tical-code.worker").error(
+        logging.getLogger("EITElite.worker").error(
             f"Cannot write PID file {PID_FILE}: permission denied - exiting"
         )
         sys.exit(1)
@@ -3007,11 +3007,11 @@ def async_main():
         PID_FILE.write_text(str(os.getpid()))
     except PermissionError:
         import logging
-        logging.getLogger("tical-code.worker").error(
+        logging.getLogger("EITElite.worker").error(
             f"Cannot write PID file {PID_FILE}: permission denied - exiting"
         )
         sys.exit(1)
-    logger.info("tical-code async-worker starting (PID=%d)", os.getpid())
+    logger.info("EITElite async-worker starting (PID=%d)", os.getpid())
 
     try:
         cfg = load_config()

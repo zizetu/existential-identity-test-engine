@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -14,10 +14,10 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Original repository: https://github.com/zizetu/tical-agent
+# Original repository: https://github.com/zizetu/EITE-agent
 #
 
-"""Tool schemas for tical-code agent — OpenAI function-calling definitions.
+"""Tool schemas for EITElite agent — OpenAI function-calling definitions.
 
 Extracted from tool_executor.py to reduce module size (~550 lines → 20 lines).
 Import path: from tical_code.core.tool_schemas import TOOL_SCHEMAS, TOOL_SCHEMAS_CLEAN

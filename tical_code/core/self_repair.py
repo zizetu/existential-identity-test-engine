@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Original repository: https://github.com/zizetu/eite-agent
+# Original repository: https://github.com/zizetu/existential-identity-test-engine
 #
 
 """
@@ -1421,10 +1421,10 @@ class SelfRepairEngine:
         """
         # 1. convert-toabsolute-path
         abs_path = os.path.realpath(file_path)
-        # 2. Check extra-allowed paths first (ticalcode, .tical-code, etc.)
+        # 2. Check extra-allowed paths first (ticalcode, .EITElite, etc.)
         # LIVE 2026-07-10: sync with tool_executor._EXTRA_ALLOWED_PATH_PREFIXES
         _extra_allowed = [
-            os.path.abspath(os.path.expanduser("~/.tical-code")),
+            os.path.abspath(os.path.expanduser("~/.EITElite")),
             os.path.abspath(os.path.expanduser("~/ticalcode")),
             "/tmp",
         ]

@@ -93,7 +93,7 @@ An AI system that autonomously operates X (Twitter) accounts to build authority,
 
 ## File Locations
 ```
-/home/YOUR_USER/tical_workers/oracle-v02/
+/home/YOUR_USER/tical_workers/node-v02/
 ├── x_config.json          # primary account credentials
 ├── x2_config.json         # secondary account credentials
 ├── x_continuous_agent.py  # Learning daemon

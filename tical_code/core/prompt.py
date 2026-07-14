@@ -1,6 +1,6 @@
 # EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
-# Original repository: https://github.com/zizetu/eite-agent
+# Original repository: https://github.com/zizetu/existential-identity-test-engine
 #
 # Licensed under AGPLv3. See LICENSE for details.
 #

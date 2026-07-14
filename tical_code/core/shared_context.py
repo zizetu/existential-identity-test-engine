@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Original repository: https://github.com/zizetu/tical-agent
+# Original repository: https://github.com/zizetu/EITE-agent
 #
 
 """Shared state context for the unified worker.
@@ -36,7 +36,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
-logger = logging.getLogger("tical-code.worker")
+logger = logging.getLogger("EITElite.worker")
 
 
 def _get_rss_mb() -> float:
@@ -65,7 +65,7 @@ class SharedContext:
 
     # ── Core identity ──────────────────────────────────────────────
     cfg: dict  # Full worker configuration dict (YAML-loaded)
-    name: str  # Agent identity name (e.g. "eitelite", "seoul")
+    name: str  # Agent identity name
     workspace: str  # Filesystem root for all agent file operations
 
     # ── Channels ───────────────────────────────────────────────────

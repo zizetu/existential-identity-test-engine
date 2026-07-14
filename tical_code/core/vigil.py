@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -7,7 +7,7 @@
 # (at your option) any later version.
 
 """
-Security Vigil — autonomous intrusion detection for tical-code agents.
+Security Vigil — autonomous intrusion detection for EITElite agents.
 
 Design principles (Kerckhoffs's principle: assume attacker reads source):
     1. Zero-config: activates on module load, no user action required.
@@ -53,7 +53,7 @@ from dataclasses import dataclass, field, fields
 from datetime import datetime, timezone
 from .paths import get_guardian_dir
 
-logger = logging.getLogger("tical-code.vigil")
+logger = logging.getLogger("EITElite.vigil")
 
 # ---------------------------------------------------------------------------
 # Constants — paths, permissions, thresholds
@@ -845,7 +845,7 @@ class _NoopInstructionQueue:
 # ---------------------------------------------------------------------------
 
 class SecurityVigil:
-    """Autonomous security coordinator for tical-code agents.
+    """Autonomous security coordinator for EITElite agents.
 
     Loaded via @register in module_defs.py. Activates on worker init.
     Runs L1-L5+L4.5 checks on patrol cycle. No user config required.
@@ -1350,7 +1350,7 @@ def _self_test() -> None:
     assert r.blocked
     print("PASS L1.3: IP URL blocked")
 
-    r = scanner.scan("See https://github.com/zizetu/tical-agent")
+    r = scanner.scan("See https://github.com/zizetu/EITE-agent")
     assert r.severity == Severity.CLEAN
     print("PASS L1.4: safe URL passes")
 

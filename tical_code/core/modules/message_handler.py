@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Original repository: https://github.com/zizetu/eite-agent
+# Original repository: https://github.com/zizetu/existential-identity-test-engine
 #
 
 """Message handler module — LLM + tools per-message turn processing.
@@ -74,7 +74,7 @@ import unicodedata
 import datetime as _dt
 from typing import Any, Optional
 
-# ── tical-code internal imports ──────────────────────────────────────
+# ── EITElite internal imports ──────────────────────────────────────
 from tical_code.core.shared_context import SharedContext, _get_rss_mb
 from tical_code.core.trace import TraceLogger, TraceEvent
 from tical_code.core.channel import Message, Response
@@ -121,7 +121,7 @@ except ImportError:
     SkillAuditRunner = None
     _SKILL_AUDIT_AVAILABLE = False
 
-logger = logging.getLogger("tical-code.message_handler")
+logger = logging.getLogger("EITElite.message_handler")
 
 # ── EITE Data Directory ──────────────────────────────────────────
 # All persistent data lives under this base directory (passwords, logs,
@@ -414,7 +414,7 @@ def _privacy_scan_response(text: str) -> str:
 # Security model:
 #   CMD_LEVEL_MASTER (0) — full access, including ``exec`` (arbitrary
 #       bash).  Restricted to senders listed in MASTER_IDS.
-#   CMD_LEVEL_ADMIN (1)  — AI admin (seoul worker).  Can deploy,
+#   CMD_LEVEL_ADMIN (1)  — AI admin. Can deploy,
 #       switch_model, status, report.
 #   CMD_LEVEL_WORKER (2) — self-manage only: ping, help, escalate,
 #       restart, log.  Workers can only target themselves.
@@ -427,7 +427,7 @@ def _privacy_scan_response(text: str) -> str:
 WORKER_IDS = set(os.environ.get("WORKER_IDS", "default-worker").split(","))
 
 CMD_LEVEL_MASTER = 0  # master -- full access
-CMD_LEVEL_ADMIN  = 1  # AI admin (seoul)
+CMD_LEVEL_ADMIN  = 1  # AI admin
 CMD_LEVEL_WORKER = 2  # Worker -- self-manage only
 
 # Master IDs: load from env MASTER_IDS (comma-separated) or use safe default
@@ -488,7 +488,7 @@ def _cmd_get_level(ctx: SharedContext, sender: str, msg: Message) -> int:
        ``MASTER_IDS`` (case-insensitive), they receive CMD_LEVEL_MASTER.
 
     3. **Worker IDs** — senders in ``WORKER_IDS`` map to ADMIN
-       (``seoul``) or WORKER (all others).
+       (``admin``) or WORKER (all others).
 
     4. **Telegram / Weixin sources** — default to WORKER as a fallback.
 
@@ -514,7 +514,7 @@ def _cmd_get_level(ctx: SharedContext, sender: str, msg: Message) -> int:
     if sender.lower() in {m.lower() for m in MASTER_IDS}:
         return CMD_LEVEL_MASTER
     if sender in WORKER_IDS:
-        if sender == "seoul":
+        if sender == "admin":
             return CMD_LEVEL_ADMIN
         return CMD_LEVEL_WORKER
     if msg.source in ("telegram", "weixin"):
@@ -570,7 +570,7 @@ def _exec_cmd(ctx: SharedContext, cmd_name: str, cmd_args: list[str],
     * **switch_model** — changes the active AI model via
       ``ModelFailover`` or direct ``set_model()``; supports ``list``
       sub-command.
-    * **escalate** — sends an escalation notice to the ``seoul`` worker
+    * **escalate** — sends an escalation notice to the admin worker
       via ``chat_send``.
     * **exec** — runs an arbitrary bash command through the ``bash``
       tool (requires MASTER level, enforced by ``_handle_cmd``).
@@ -840,10 +840,10 @@ def _exec_cmd(ctx: SharedContext, cmd_name: str, cmd_args: list[str],
         _reason = " ".join(cmd_args) or "no details"
         try:
             execute("chat_send", {
-                "target": "seoul",
+                "target": "admin",
                 "content": f"[ESCALATION from {ctx.name}] {_reason}",
             }, base_dir=ctx.workspace)
-            return f"[CMD] escalated to seoul: {_reason[:100]}"
+            return f"[CMD] escalated to admin: {_reason[:100]}"
         except Exception as e:
             return f"[CMD] escalate error: {e}"
 

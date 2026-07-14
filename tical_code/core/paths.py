@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -13,7 +13,7 @@ lives under a single home directory resolved as:
 
   1. ``TICAL_HOME`` environment variable (preferred)
   2. ``EITE_DATA_DIR`` environment variable (legacy alias)
-  3. ``$HOME/.tical-code`` (default when neither env is set)
+  3. ``$HOME/.EITElite`` (default when neither env is set)
 
 Use :func:`get_tical_home`, :func:`under_tical_home`, and
 :func:`expand_data_path` instead of hardcoding the default data-home path.
@@ -25,7 +25,7 @@ import os
 from pathlib import Path
 from typing import Union
 
-_LEGACY_DIRNAME = ".tical-code"
+_LEGACY_DIRNAME = ".EITElite"
 
 
 def get_tical_home() -> Path:
@@ -58,7 +58,7 @@ def expand_data_path(path: Union[str, Path]) -> str:
     """Expand user/env and rewrite legacy default data-home to TICAL_HOME.
 
     Accepts absolute paths, home-relative paths, and the literal legacy
-    prefix ``$HOME/.tical-code``.  When the path points at (or under) the
+    prefix ``$HOME/.EITElite``.  When the path points at (or under) the
     legacy default directory but ``TICAL_HOME`` is set, the path is
     rewritten to the configured home.
     """

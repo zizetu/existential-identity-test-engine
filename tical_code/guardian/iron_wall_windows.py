@@ -1,6 +1,6 @@
 """
 Iron Wall Security Detection Engine — Windows Edition
-Adapted from tical-code guardian/iron_wall.py for Windows 10/11.
+Adapted from EITElite guardian/iron_wall.py for Windows 10/11.
 
 Detects:
   - Unauthorized SSH connections

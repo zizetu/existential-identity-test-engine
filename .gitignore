@@ -1,46 +1,12 @@
-# Secrets
-.env
-*.key
-*_key
-*secret*
-*a2a_tokens*
-*a2a_registrations*
-
-# Python cache
 __pycache__/
 *.pyc
 *.pyo
-*.rej
-
-# Local dev files
-*.log
-sessions.db
 *.db
-.pytest_cache/
-.mypy_cache/
-*.bak
+*.db-*
+worker.log
+*.pid
+.env
 .venv/
-*.db-shm
-*.db-wal
-.tical-checkpoints/
-config/worker-configs/
-eite_agent.egg-info/
-.bak
-guardian_trace.jsonl
-*.bak.*
-
-# Security patterns
-secrets*
-config.local.*
-
-credentials*
-*.pem
-
-.tical_mod_count.json
-_test_safe_modify*
-*.db.bak*
-benchmarks/bench_data/bfcl/BFCL_v4_*.json
-benchmarks/bench_data/bfcl/possible_answer_*.json
-benchmarks/bench_data/bfcl/results/
-results/
-memory.json
+.hermes/
+.state/
+.secrets/

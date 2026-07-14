@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Original repository: https://github.com/zizetu/tical-agent
+# Original repository: https://github.com/zizetu/EITE-agent
 #
 
 """Module 2: Context Compaction - token-aware conversation trimming."""
@@ -26,7 +26,7 @@ import re
 from pathlib import Path
 from typing import Callable
 
-logger = logging.getLogger("tical-code.context_compactor")
+logger = logging.getLogger("EITElite.context_compactor")
 
 class ContextCompactor:
     """Token-aware conversation compactor that prunes, summarizes, or truncates message history.

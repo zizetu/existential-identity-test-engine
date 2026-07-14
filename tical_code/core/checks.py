@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -14,12 +14,12 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Original repository: https://github.com/zizetu/tical-agent
+# Original repository: https://github.com/zizetu/EITE-agent
 #
 
 """
 SELF-CHECK ENGINE - Programmatic equivalent of self_check.sh.
-Runs security, code quality, and integrity checks on the tical-code repository.
+Runs security, code quality, and integrity checks on the EITElite repository.
 
 No shell script dependency. Uses only Python stdlib.
 """

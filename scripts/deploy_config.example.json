@@ -1,9 +1,0 @@
-{
-  "ssh_key": "~/.ssh/id_deploy",
-  "vps": {
-    "node1": {"ip": "YOUR_NODE_IP", "user": "ubuntu", "workdir": "${HOME}/eite-agent"},
-    "node2": {"ip": "YOUR_NODE_IP", "user": "ubuntu", "workdir": "${HOME}/eite-agent"},
-    "node3": {"ip": "YOUR_NODE_IP", "user": "ubuntu", "workdir": "${HOME}/eite-agent"},
-    "node4": {"ip": "YOUR_NODE_IP", "user": "ubuntu", "workdir": "${HOME}/eite-agent"}
-  }
-}

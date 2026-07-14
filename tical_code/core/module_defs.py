@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Original repository: https://github.com/zizetu/tical-agent
+# Original repository: https://github.com/zizetu/EITE-agent
 #
 
 """
@@ -68,7 +68,7 @@ from typing import Any
 
 from tical_code.core.module_registry import register
 
-logger = logging.getLogger("tical-code.modules")
+logger = logging.getLogger("EITElite.modules")
 
 
 # =============================================================================
@@ -222,7 +222,7 @@ def _init_security_baseline(worker: Any, cfg: dict):
 
 
 # =============================================================================
-# Full-profile modules (tical-code only - heavy features)
+# Full-profile modules (EITElite only - heavy features)
 # =============================================================================
 
 @register(
@@ -397,7 +397,7 @@ def _init_memory_store(worker: Any, cfg: dict):
         from tical_code.core.memory_store import MemoryFTSStore
     except ImportError:
         return None
-    mem_dir = str(Path.home() / ".tical-code" / "memory")
+    mem_dir = str(Path.home() / ".EITElite" / "memory")
     return MemoryFTSStore(memory_dir=mem_dir)
 
 
@@ -573,7 +573,7 @@ def _init_cron_scheduler(worker: Any, cfg: dict):
         task_type="shell",
         task_params={
             "cmd": (
-                "find ~/.tical-code/logs/ -name '*.log' -size +50M "
+                "find ~/.EITElite/logs/ -name '*.log' -size +50M "
                 "-exec truncate -s 0 {} + 2>/dev/null; "
                 "echo 'Log cleanup complete'"
             ),
@@ -938,7 +938,7 @@ def _init_sustained_task(worker: Any, cfg: dict):
         from tical_code.core.modules.sustained_task import SustainedTaskManager
     except ImportError:
         return None
-    db_path = cfg.get("sustained_task_db", "~/.tical-code/sustained_tasks.db")
+    db_path = cfg.get("sustained_task_db", "~/.EITElite/sustained_tasks.db")
     mgr = SustainedTaskManager(db_path=db_path)
     logger.info("sustained_task: initialized at %s", db_path)
     return mgr
@@ -965,7 +965,7 @@ def _init_self_evolve(worker: Any, cfg: dict):
         from tical_code.core.modules.self_evolve import SelfEvolveEngine
     except ImportError:
         return None
-    db_path = cfg.get("self_evolve_db", os.path.expanduser("~/.tical-code/self_evolve.db"))
+    db_path = cfg.get("self_evolve_db", os.path.expanduser("~/.EITElite/self_evolve.db"))
     engine = SelfEvolveEngine(db_path=db_path)
     logger.info("self_evolve: initialized")
     return engine

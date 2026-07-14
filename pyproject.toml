@@ -11,7 +11,7 @@ description = "AI Agent Evaluation Framework -- structured benchmarking, scenari
 readme = "README.md"
 license = {text = "AGPL-3.0-only"}
 authors = [
-    {name = "tical-code Team", email = "team@tical-code.dev"}
+    {name = "EITElite Team", email = "team@EITElite.dev"}
 ]
 keywords = ["ai", "agent", "deployment", "ssh", "automation", "verification"]
 classifiers = [

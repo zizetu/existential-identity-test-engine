@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-logger = logging.getLogger("tical-code.wiring_check")
+logger = logging.getLogger("EITElite.wiring_check")
 
 # Where the worker writes its module wiring report on startup
 _WIRING_REPORT_PATH = "/opt/tical-guardian/module_wiring.json"

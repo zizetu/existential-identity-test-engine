@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Original repository: https://github.com/zizetu/eite-agent
+# Original repository: https://github.com/zizetu/existential-identity-test-engine
 #
 
 """
@@ -31,7 +31,7 @@ Five core rules:
 
 Author: Tical (Zize Tu)
 Version: see tical_code.__version__
-Spec: https://github.com/zizetu/eite-agent/blob/main/docs/truthful-reporting-spec.md
+Spec: https://github.com/zizetu/existential-identity-test-engine/blob/main/docs/truthful-reporting-spec.md
 """
 
 import asyncio

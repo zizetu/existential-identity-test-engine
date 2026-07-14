@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -6,7 +6,7 @@
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# Original repository: https://github.com/zizetu/tical-agent
+# Original repository: https://github.com/zizetu/EITE-agent
 
 """
 EITE Constitutional Kernel — Immutable-axiom-bound identity anchor with projection guard.
@@ -52,7 +52,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
-logger = logging.getLogger("tical-code.eite")
+logger = logging.getLogger("EITElite.eite")
 
 # =============================================================================
 # Constants
@@ -668,7 +668,7 @@ def build_eite_kernel(workspace: str, dim: int = 384) -> EITEKernel:
     """Build an EITE kernel with the 5 constitutional axioms and persistence.
 
     Args:
-        workspace: Root workspace path (e.g. /home/ubuntu/tical-agent).
+        workspace: Root workspace path (e.g. /home/user/EITE-agent).
                    State is persisted to <workspace>/.tical/eite_state.json.
         dim: Anchor dimension. 64 for fast startup, 384 for compatibility
              with sentence-transformers embeddings.

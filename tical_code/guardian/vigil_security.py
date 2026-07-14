@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -6,7 +6,7 @@
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# Original repository: https://github.com/zizetu/tical-agent
+# Original repository: https://github.com/zizetu/EITE-agent
 
 """
 Vigil Security Responder -- deterministic blocking + LLM-based triage.
@@ -49,7 +49,7 @@ from tical_code.guardian.iron_wall import (
 )
 from tical_code.core.paths import get_guardian_dir
 
-logger = logging.getLogger("tical-code.vigil-security")
+logger = logging.getLogger("EITElite.vigil-security")
 
 # ── Configuration ─────────────────────────────────────────────────────────
 

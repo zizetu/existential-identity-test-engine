@@ -1,4 +1,4 @@
-# tical-code -- AI Agent Platform
+# EITElite -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -6,7 +6,7 @@
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# Original repository: https://github.com/zizetu/tical-agent
+# Original repository: https://github.com/zizetu/EITE-agent
 
 """
 Iron Wall Security Detection Engine -- Python rewrite of security-watchdog.sh.
@@ -189,7 +189,7 @@ def ensure_baseline() -> Path:
         baseline = _build_baseline()
         baseline_file.write_text(json.dumps(baseline, indent=2, default=str))
         import logging
-        logging.getLogger("tical-code.iron-wall").info(
+        logging.getLogger("EITElite.iron-wall").info(
             "Baseline created: %d SSH keys, %d listening ports",
             len(baseline.get("ssh_keys", [])),
             len(baseline.get("listening_ports", [])),

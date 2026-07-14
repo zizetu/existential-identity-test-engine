@@ -44,7 +44,7 @@ Designed for resource-constrained environments.
 """,
     long_description_content_type="text/markdown",
     author="zizetu",
-    url="https://github.com/zizetu/eite-agent",
+    url="https://github.com/zizetu/existential-identity-test-engine",
     
     packages=find_packages(exclude=["tests", "tests.*", "docs"]),
     package_data={
