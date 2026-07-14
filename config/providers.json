@@ -2,47 +2,6 @@
     "_comment": "Provider registry — add any OpenAI-compatible provider here without code changes.",
     "_usage": "Each provider entry defines how to discover itself from env vars. The provider_registry reads this file at startup.",
     "providers": {
-        "siliconflow": {
-            "name": "SiliconFlow",
-            "family": "openai",
-            "multi_key": false,
-            "env_key": "SILICONFLOW_API_KEY",
-            "env_base_url": "SILICONFLOW_ENDPOINT",
-            "default_base_url": "https://api.siliconflow.cn/v1/chat/completions",
-            "auth_style": "bearer",
-            "default_model": "zai-org/GLM-5.2",
-            "available_models": ["zai-org/GLM-5.2", "Qwen/Qwen3-235B-A22B-Instruct"],
-            "protocol": "openai",
-            "priority": 1,
-            "cost": "paid"
-        },
-        "deepseek": {
-            "name": "deepseek",
-            "family": "deepseek",
-            "multi_key": false,
-            "env_key": "DEEPSEEK_API_KEY",
-            "env_base_url": "DEEPSEEK_ENDPOINT",
-            "default_base_url": "https://api.deepseek.com/v1/chat/completions",
-            "auth_style": "bearer",
-            "default_model": "deepseek-v4-flash",
-            "protocol": "openai",
-            "priority": 99,
-            "is_fallback": true,
-            "cost": "paid"
-        },
-        "openrouter": {
-            "name": "OpenRouter",
-            "family": "openrouter",
-            "multi_key": false,
-            "env_key": "OPENROUTER_API_KEY",
-            "env_base_url": "OPENROUTER_ENDPOINT",
-            "default_base_url": "https://openrouter.ai/api/v1/chat/completions",
-            "auth_style": "bearer",
-            "default_model": "anthropic/claude-sonnet-4",
-            "protocol": "openai",
-            "priority": 10,
-            "cost": "paid"
-        },
         "mimo-token-plan": {
             "name": "MiMo Token Plan",
             "family": "mimo",
@@ -59,19 +18,34 @@
             "priority": 1,
             "cost": "paid"
         },
-        "ollama-local": {
-            "name": "Ollama (local)",
+        "siliconflow": {
+            "name": "SiliconFlow",
             "family": "openai",
             "multi_key": false,
-            "env_key": "OLLAMA_API_KEY",
-            "env_base_url": "OLLAMA_ENDPOINT",
-            "default_base_url": "http://localhost:11434/v1/chat/completions",
+            "env_key": "SILICONFLOW_API_KEY",
+            "env_base_url": "SILICONFLOW_ENDPOINT",
+            "default_base_url": "https://api.siliconflow.cn/v1/chat/completions",
             "auth_style": "bearer",
-            "default_model": "qwen2.5",
+            "default_model": "moonshotai/Kimi-K2.7-Code",
+            "available_models": ["moonshotai/Kimi-K2.7-Code", "Qwen/Qwen3-235B-A22B-Instruct"],
             "protocol": "openai",
-            "priority": 100,
+            "priority": 10,
+            "cost": "paid"
+        },
+        "deepseek": {
+            "name": "DeepSeek",
+            "family": "deepseek",
+            "multi_key": false,
+            "env_key": "DEEPSEEK_API_KEY",
+            "env_base_url": "DEEPSEEK_ENDPOINT",
+            "default_base_url": "https://api.deepseek.com/v1/chat/completions",
+            "auth_style": "bearer",
+            "default_model": "deepseek-v4-flash",
+            "available_models": ["deepseek-v4-flash", "deepseek-v4-pro"],
+            "protocol": "openai",
+            "priority": 99,
             "is_fallback": true,
-            "cost": "free"
+            "cost": "paid"
         }
     }
 }
