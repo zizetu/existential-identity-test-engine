@@ -16,9 +16,7 @@
 #
 # Original repository: https://github.com/zizetu/existential-identity-test-engine
 #
-
-# provenance:ticalasi-zzt-2026
-"""
+"""Guardian judge - the shared arbiter of the Vigil immune system.
 Guardian judge - the shared arbiter of the Vigil immune system.
 
 The VigilJudge is the central decision-making component that evaluates

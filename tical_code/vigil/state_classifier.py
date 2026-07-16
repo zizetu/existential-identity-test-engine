@@ -16,9 +16,7 @@
 #
 # Original repository: https://github.com/zizetu/existential-identity-test-engine
 #
-
-# provenance:ticalasi-zzt-2026
-"""
+"""State Classifier - Shared Vigil alert classifier.
 Human state classifier for the Vigil guardian layer.
 
 This module maps raw CombinedSignals (interaction + physio) into classified

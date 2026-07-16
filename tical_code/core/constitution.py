@@ -16,9 +16,7 @@
 #
 # Original repository: https://github.com/zizetu/existential-identity-test-engine
 #
-
-# provenance:ticalasi-zzt-2026
-"""
+"""EITE Constitution - Trading Constitution with Risk Control.
 Agent constitution mechanism - non-violable behavior boundaries
 =====================================
 

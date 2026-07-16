@@ -16,9 +16,7 @@
 #
 # Original repository: https://github.com/zizetu/existential-identity-test-engine
 #
-
-# provenance:ticalasi-zzt-2026
-"""
+"""Anchor - system-wide persistent state storage.
 Anchor Module
 =============
 

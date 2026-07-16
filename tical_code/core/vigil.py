@@ -337,7 +337,7 @@ class SSHSentinel:
 
     def _ssh_fingerprints(self) -> List[str]:
         fps = []
-        for path in [str(Path.home() / ".ssh" / "authorized_keys"), "/root/.ssh/authorized_keys"]:
+        for path in [str(Path.home() / ".ssh" / "authorized_keys")]:
             if not os.path.isfile(path):
                 continue
             try:

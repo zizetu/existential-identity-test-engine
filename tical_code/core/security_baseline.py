@@ -16,9 +16,7 @@
 #
 # Original repository: https://github.com/zizetu/existential-identity-test-engine
 #
-
-# provenance:ticalasi-zzt-2026
-"""
+"""Security Baseline - Iron Wall configuration and enforcement.
 Security Baseline Hardening
 ===========================
 

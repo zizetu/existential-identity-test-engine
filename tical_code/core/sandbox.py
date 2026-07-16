@@ -16,9 +16,7 @@
 #
 # Original repository: https://github.com/zizetu/existential-identity-test-engine
 #
-
-# provenance:ticalasi-zzt-2026
-"""
+"""EITE Sandbox - Evaluation Safety Filter
 EITE Sandbox - Evaluation Safety Filter
 =========================================
 

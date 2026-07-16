@@ -1,4 +1,4 @@
-# EITElite -- AI Agent Platform
+# tical-code -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Original repository: https://github.com/zizetu/EITE-agent
+# Original repository: https://github.com/zizetu/tical-agent
 #
 
 """
@@ -68,7 +68,7 @@ from typing import Any
 
 from tical_code.core.module_registry import register
 
-logger = logging.getLogger("EITElite.modules")
+logger = logging.getLogger("tical-code.modules")
 
 
 # =============================================================================
@@ -222,7 +222,7 @@ def _init_security_baseline(worker: Any, cfg: dict):
 
 
 # =============================================================================
-# Full-profile modules (EITElite only - heavy features)
+# Full-profile modules (tical-code only - heavy features)
 # =============================================================================
 
 @register(
@@ -397,8 +397,53 @@ def _init_memory_store(worker: Any, cfg: dict):
         from tical_code.core.memory_store import MemoryFTSStore
     except ImportError:
         return None
-    mem_dir = str(Path.home() / ".EITElite" / "memory")
+    mem_dir = str(Path.home() / ".tical-code" / "memory")
     return MemoryFTSStore(memory_dir=mem_dir)
+
+
+@register(
+    name="hunk_tracker",
+    config_key="hunk_tracker",
+    default_enabled=True,
+    description=(
+        "File version history: every write/patch is tracked as a unified diff hunk. "
+        "You CAN view history with hunk_history, rollback to any prior version with "
+        "hunk_rollback, and see diff_since a given turn. Git-aware: auto-baselines "
+        "against HEAD for git-tracked files."
+    ),
+    profile="light",
+)
+def _init_hunk_tracker(worker: Any, cfg: dict):
+    try:
+        from tical_code.core.hunk_tracker import register_hunk_tools
+        register_hunk_tools()
+        return True
+    except Exception:
+        return None
+
+
+@register(
+    name="path_security",
+    config_key="path_security",
+    default_enabled=True,
+    description=(
+        "Path security layer: blocks operations on system-critical paths "
+        "(/etc/, /sys/, .git/config, etc.) via configurable glob deny patterns. "
+        "Every file read/write/patch is checked. Deny hits are audited to SQLite. "
+        "Runs automatically - no manual invocation needed."
+    ),
+    profile="light",
+)
+def _init_path_security(worker: Any, cfg: dict):
+    try:
+        from tical_code.core.path_security import get_path_security
+        get_path_security()  # init singleton with config
+        from tical_code.core.tool_executor import set_path_security
+        set_path_security(get_path_security())
+        return True
+    except Exception:
+        return None
+
 
 
 @register(
@@ -573,7 +618,7 @@ def _init_cron_scheduler(worker: Any, cfg: dict):
         task_type="shell",
         task_params={
             "cmd": (
-                "find ~/.EITElite/logs/ -name '*.log' -size +50M "
+                "find ~/.tical-code/logs/ -name '*.log' -size +50M "
                 "-exec truncate -s 0 {} + 2>/dev/null; "
                 "echo 'Log cleanup complete'"
             ),
@@ -938,7 +983,7 @@ def _init_sustained_task(worker: Any, cfg: dict):
         from tical_code.core.modules.sustained_task import SustainedTaskManager
     except ImportError:
         return None
-    db_path = cfg.get("sustained_task_db", "~/.EITElite/sustained_tasks.db")
+    db_path = cfg.get("sustained_task_db", "~/.tical-code/sustained_tasks.db")
     mgr = SustainedTaskManager(db_path=db_path)
     logger.info("sustained_task: initialized at %s", db_path)
     return mgr
@@ -965,7 +1010,7 @@ def _init_self_evolve(worker: Any, cfg: dict):
         from tical_code.core.modules.self_evolve import SelfEvolveEngine
     except ImportError:
         return None
-    db_path = cfg.get("self_evolve_db", os.path.expanduser("~/.EITElite/self_evolve.db"))
+    db_path = cfg.get("self_evolve_db", os.path.expanduser("~/.tical-code/self_evolve.db"))
     engine = SelfEvolveEngine(db_path=db_path)
     logger.info("self_evolve: initialized")
     return engine

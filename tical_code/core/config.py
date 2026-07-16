@@ -16,9 +16,7 @@
 #
 # Original repository: https://github.com/zizetu/existential-identity-test-engine
 #
-
-# provenance:ticalasi-zzt-2026
-"""Unified config loader - single source of truth for all modules.
+"""Config Management for EITE.
 
 Search order for config.json:
   1. TICOBOT_DIR/config.json

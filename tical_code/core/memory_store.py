@@ -201,7 +201,7 @@ class MemoryFTSStore:
     Usage:
         store = MemoryFTSStore(memory_dir="/path/to/memory")
         count = store.build_index()
-        results = store.search("Kael personality", limit=5)
+        results = store.search("Worker-A personality", limit=5)
         store.close()
     """
 

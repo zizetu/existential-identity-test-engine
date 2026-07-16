@@ -1,0 +1,19 @@
+{
+  "path_deny": [
+    "/etc/**",
+    "/sys/**",
+    "/proc/**",
+    "/dev/**",
+    "~/.ssh/**",
+    "**/.git/config",
+    "**/__pycache__/**",
+    "C:/Windows/**",
+    "C:\\Windows\\**",
+    "**/ntuser.dat"
+  ],
+  "path_allow": [],
+  "tool_allow": {
+    "git": ["**/.git/*"],
+    "bash": ["/proc/*", "/sys/*"]
+  }
+}

@@ -72,7 +72,7 @@ SUSPICIOUS_TMP_GLOBS = [
 ]
 
 MALICIOUS_TASK_WHITELIST = [
-    r'Pro7Tunnel',  # legitimate SSH tunnel task
+    r'NodeCTunnel',  # legitimate SSH tunnel task
 ]
 
 MALICIOUS_TASK_PATTERNS = [

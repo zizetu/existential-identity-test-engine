@@ -3,8 +3,6 @@
 # Licensed under AGPLv3
 # Original repository: https://github.com/zizetu/existential-identity-test-engine
 #
-# provenance:ticalasi-zzt-2026
-
 """
 Worker Framework for eite-agent.
 

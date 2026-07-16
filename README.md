@@ -103,7 +103,7 @@ Threat Detected → LLM Decision Engine → INSTANT_BLOCK
 
 ### Coverage
 
-Every worker node (Seoul, Cang, Kael) runs the full Vigil Security + Iron Wall stack, each scanning its own local threats. SSH anomalies, port changes, reverse shells, and filesystem tampering are detected and autonomously blocked within seconds.
+Every worker node (Node-A, Node-B, Node-C) runs the full Vigil Security + Iron Wall stack, each scanning its own local threats.
 
 ```bash
 systemctl status vigil.service    # Primary Python+LLM scanner

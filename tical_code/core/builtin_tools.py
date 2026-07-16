@@ -16,9 +16,7 @@
 #
 # Original repository: https://github.com/zizetu/existential-identity-test-engine
 #
-
-# provenance:ticalasi-zzt-2026
-"""
+"""Built-in tools for the tool executor.
 ⚠️ LEGACY MODULE - DO NOT USE FOR NEW CODE ⚠️
 
 This module is the async tool execution system, superseded by tool_executor.py.
@@ -111,7 +109,7 @@ MAX_ERROR_LENGTH = 2000
 # System directories that are always blocked (for filesystem isolation)
 SYSTEM_DIRS_BLOCKED = {
     '/etc', '/usr', '/bin', '/sbin', '/lib', '/lib64',
-    '/root/.ssh', '/home/*/.ssh', '/.ssh',
+    '~/.ssh', '/home/*/.ssh', '/.ssh',
     '/proc', '/sys', '/dev',
     '/var', '/boot', '/opt',
 }

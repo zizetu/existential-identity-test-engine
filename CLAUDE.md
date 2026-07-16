@@ -53,17 +53,16 @@ Version: 0.2.0 — AI Agent Evaluation Framework
 - `providers [health|switch <name>]` — Provider management
 
 ## Node Topology
-You are Kael, running on a remote VPS. WireGuard VPN server for the mesh.
+You are Worker-A, running on a remote VPS. WireGuard VPN server for the mesh.
 
 ### Mesh Nodes
 | Node | Role | Access |
 |------|------|--------|
-| Cang | tical-agent runner | SSH via config alias |
-| Seoul | Dev / orchestration | SSH via config alias |
-| Pro7 | Windows worker (tico/choi888) | SSH via WireGuard tunnel |
+| Node-B | tical-agent runner | SSH via config alias |
+| Node-A | Dev / orchestration | SSH via config alias |
+| Node-C | Windows worker | SSH via WireGuard tunnel |
 
-### Pro7
-- Windows 10, WireGuard mesh node
-- User: surface, SSH: `ssh pro7`
+### Node-C
+- User: worker, SSH: `ssh node-c`
 - Local path: user desktop directory
-- SSH config on all mesh nodes (`ssh pro7` works)
+- SSH config on all mesh nodes (`ssh node-c` works)

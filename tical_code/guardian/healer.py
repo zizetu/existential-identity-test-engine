@@ -16,8 +16,6 @@
 #
 # Original repository: https://github.com/zizetu/existential-identity-test-engine
 #
-
-# provenance:ticalasi-zzt-2026
 """Self-Heal Engine - Guardian Daemon Auto-Recovery Module.
 
 Maps check failures to automated fix actions with safety: dry-run before

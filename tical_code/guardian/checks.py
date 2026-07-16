@@ -309,9 +309,9 @@ def check_ip_exposure() -> Tuple[bool, str]:
         r'^(?:127\.|10\.|192\.168\.|169\.254\.|'
         r'172\.(?:1[6-9]|2[0-9]|3[0-1])\.)'
     )
-    # Known Cloudflare CDN IPs we skip
-    cloudflare_ips = {
-        '172.67.196.250', '104.21.34.42', '172.67.157.152', '104.21.33.18',
+    # Known CDN IPs we skip
+    known_cdn_ips = {
+        '203.0.113.1', '203.0.113.2',
     }
 
     hits: List[str] = []
@@ -329,7 +329,7 @@ def check_ip_exposure() -> Tuple[bool, str]:
                 ip = m.group()
                 if rfc_reserved.match(ip):
                     continue
-                if ip in cloudflare_ips:
+                if ip in known_cdn_ips:
                     continue
                 hits.append(f"{md_file.relative_to(_REPO)}:{lineno}: {ip}")
 

@@ -16,8 +16,6 @@
 #
 # Original repository: https://github.com/zizetu/existential-identity-test-engine
 #
-
-# provenance:ticalasi-zzt-2026
 """Permission checker with 5-tier mode system for tool execution gating.
 
 Modeled after MiMo Code's PermissionChecker. Provides centralized,

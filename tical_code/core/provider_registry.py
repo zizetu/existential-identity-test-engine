@@ -16,9 +16,7 @@
 #
 # Original repository: https://github.com/zizetu/existential-identity-test-engine
 #
-
-# provenance:ticalasi-zzt-2026
-"""Provider Registry - load model cluster configs from git-tracked JSON files."""
+"""Provider Registry - Git-managed LLM provider configuration.
 
 import json
 import logging

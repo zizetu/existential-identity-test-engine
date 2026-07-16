@@ -35,5 +35,5 @@ benchmarks, cli, vigil
 
 ## Deployment
 
-- Oracle and Test VPS run EITElite
-- Kael and Taiwan VPS run EITElite full
+- Two worker VPS instances run EITElite
+- All full instances run EITElite full

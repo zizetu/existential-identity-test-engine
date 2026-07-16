@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Original repository: https://github.com/zizetu/existential-identity-test-engine
+# Original repository: https://github.com/zizetu/eite-agent
 #
 
 """
@@ -155,6 +155,8 @@ def load_modules(worker: Any, cfg: dict, profile: str = "full") -> Dict[str, Any
     # ``import module_registry`` creates a second module object with an
     # empty _registry (module_defs decorated the full-path copy).  Detect
     # and pull the real data from the canonical module.
+    # Also ensure module_defs has been imported so all @register decorators
+    # have populated the registry.
     if not _registry:
         _canonical = _sys.modules.get("tical_code.core.module_registry")
         if _canonical is not None and _canonical._registry:
@@ -164,6 +166,20 @@ def load_modules(worker: Any, cfg: dict, profile: str = "full") -> Dict[str, Any
                 "Healed bare-import ghost: %d modules from canonical registry",
                 len(_registry),
             )
+        else:
+            try:
+                import tical_code.core.module_defs as _md  # noqa: F401
+            except Exception as _exc:
+                logger.warning("Failed to import module_defs during load_modules: %s", _exc)
+            # Re-check canonical registry after module_defs import
+            _canonical = _sys.modules.get("tical_code.core.module_registry")
+            if _canonical is not None and _canonical._registry:
+                _registry = _canonical._registry
+                _load_order = []
+                logger.warning(
+                    "Healed empty registry via module_defs import: %d modules",
+                    len(_registry),
+                )
 
     if not _load_order:
         _load_order = _topological_sort()

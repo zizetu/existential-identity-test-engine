@@ -16,9 +16,7 @@
 #
 # Original repository: https://github.com/zizetu/existential-identity-test-engine
 #
-
-# provenance:ticalasi-zzt-2026
-"""
+"""Structured Decision Engine with Protocol Interfaces.
 EITE Decision Engine - Evaluation Decision Logic
 ==================================================
 

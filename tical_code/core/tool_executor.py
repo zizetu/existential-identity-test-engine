@@ -376,12 +376,12 @@ def _bash_safety_check(command: str) -> Optional[str]:
         if not is_admin and any(f" {p}" in command or command.startswith(p)
                                for p in ["cd /etc", "ls /etc", "cd /var",
                                          "cat /etc/shadow", "cat /etc/passwd",
-                                         "cat /root/.ssh/", "cat /root/.bashrc",
-                                         "cat /root/.bash_history", "cat /root/.config/",
-                                         "ls /root/.ssh/", "ls /root/.config/"]):
+                                         "cat ~/.ssh/", "cat ~/.bashrc",
+                                         "cat ~/.bash_history", "cat ~/.config/",
+                                         "ls ~/.ssh/", "ls ~/.config/"]):
             return f"Outside workspace, system directory access denied"
-        # Also block bare "cat /root" (no subpath) - directory listing on root home
-        if not is_admin and re.search(r'\bcat\s+/root\s*$', command):
+        # Also block bare "cat ~" (no subpath) - directory listing on home
+        if not is_admin and re.search(r'\bcat\s+~\s*$', command):
             return f"Outside workspace, system directory access denied"
     # Workspace restriction - blocks unsafe write/read operations
     unsafe_ops = [

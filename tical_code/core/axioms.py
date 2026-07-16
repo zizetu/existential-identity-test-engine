@@ -42,7 +42,7 @@ Evaluation pollution prevention design:
 - AXM-005: information-conservation - information does not vanish without cause
 - AXM-006: causality - every effect has a cause, causeless effects are untrustworthy
 
-Author: Kael
+Author: EITE
 """
 
 # DESIGNED-NOT-DEAD: Core axioms for EITE evaluation decision_engine. Logic foundation layer.

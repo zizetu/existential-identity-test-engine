@@ -16,9 +16,7 @@
 #
 # Original repository: https://github.com/zizetu/existential-identity-test-engine
 #
-
-# provenance:ticalasi-zzt-2026
-"""Model Failover - session-affinity LRU selection with circuit-breaker health states.
+"""Model Failover - session-affinity LRU selection
 
 Usage:
     from model_failover import ModelFailover

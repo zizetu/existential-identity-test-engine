@@ -1,7 +1,7 @@
 # EMERGENCY FAST_ACK 2026-07-09c: typing ack + no-tool short replies + queue hygiene
 # EMERGENCY LOAD_SESSION 2026-07-09: reload SQLite history on new in-memory sessions
 # EMERGENCY 2026-07-09: throttle progress spam; longer hard timeout; pair with MemoryBoot.get_memory
-# EITElite -- AI Agent Platform
+# tical-code -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -18,7 +18,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 # [ANCHOR] STRATEGIC CONTEXT — Read STRATEGY.md before making changes.
-# This is the main worker entry for EITE-agent (lite edition, in development).
+# This is the main worker entry for tical-agent (lite edition, in development).
 #
 # Sister project: eite-agent (full EITE edition, zizetu/eite-agent) — DO NOT MIX CODE.
 # Security audit completed 2026-07-03 in sync with eite-agent.
@@ -29,7 +29,7 @@ from .paths import under_tical_home
 
 # provenance:tic-al-agent
 """
-EITElite unified worker - main orchestrator loop.
+tical-code unified worker - main orchestrator loop.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 WORKER LIFECYCLE (the core loop, executed inside Worker.run())
@@ -206,7 +206,7 @@ try:
 except ImportError:
     MessageAdapter = None
 
-logger = logging.getLogger("EITElite.worker")
+logger = logging.getLogger("tical-code.worker")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -266,7 +266,7 @@ MAX_TOOL_ITERATIONS = 50  # Safety fuse -- model stops when work is done
 # ─────────────────────────────────────────────────────────────
 
 class Worker:
-    """Central orchestrator for the EITElite AI worker.
+    """Central orchestrator for the tical-code AI worker.
 
     The Worker is the top-level runtime: it wires every subsystem
     together and runs the main poll→dispatch→reply loop indefinitely.
@@ -328,7 +328,7 @@ class Worker:
         """
         self.cfg = cfg
         self.name = cfg['name']
-        import logging; self.logger = logging.getLogger(f"EITElite.worker.{self.name}")
+        import logging; self.logger = logging.getLogger(f"tical-code.worker.{self.name}")
         self.workspace = cfg["workspace"]
         self._data_dir = under_tical_home("")
 
@@ -516,6 +516,7 @@ class Worker:
         # SustainedTaskManager - persistent task queue with auto-recovery
         if SustainedTaskManager is not None:
             self._sustained_task_mgr = SustainedTaskManager()
+            self._auto_resume_task_id = None
             # LIVE WIRE INJECT 2026-07-09f
             try:
                 from tical_code.core.tool_executor import set_sustained_task_manager
@@ -871,7 +872,7 @@ class Worker:
                 from pathlib import Path as _Path
                 _ws_persist = _Path(os.environ.get("WORKSPACE_DIR", "/tmp")) / ".cognitive"
                 self.cognitive_workspace = Workspace(
-                    node_id=os.environ.get("NODE_ID", "agent-1"),
+                    node_id=os.environ.get("NODE_ID", "node-1"),
                     persist_path=_ws_persist,
                     enabled=True,
                 )
@@ -1609,7 +1610,7 @@ class AsyncWorker:
         self.cfg = cfg
         self.name = cfg["name"]
         self.workspace = cfg["workspace"]
-        self.logger = logging.getLogger(f"EITElite.async_worker.{self.name}")
+        self.logger = logging.getLogger(f"tical-code.async_worker.{self.name}")
 
         # SustainedTaskManager - persistent task queue with auto-recovery
         if SustainedTaskManager is not None:
@@ -1628,7 +1629,7 @@ class AsyncWorker:
         # SelfEvolveEngine - error pattern tracking and usage insights
         if SelfEvolveEngine is not None:
             self._self_evolve = SelfEvolveEngine(
-                db_path=os.path.expanduser("~/.EITElite/self_evolve.db")
+                db_path=os.path.expanduser("~/.tical-code/self_evolve.db")
             )
             # LIVE WIRE INJECT 2026-07-13
             try:
@@ -2065,6 +2066,10 @@ class AsyncWorker:
                         "Recovered %d pending tasks from previous run",
                         len(recovered),
                     )
+                    self._auto_resume_task_id = recovered[0].task_id
+                    self.logger.info(
+                        "Auto-resume task: %s", self._auto_resume_task_id,
+                    )
             except Exception as exc:
                 self.logger.warning("Task recovery failed: %s", exc)
 
@@ -2099,6 +2104,14 @@ class AsyncWorker:
                     await self._cleanup_sessions()
                     # Detect and kill stuck session tasks (processing hung >threshold)
                     await self._kill_stuck_sessions()
+
+                # Cron scheduler tick - execute due periodic jobs
+                _cron = getattr(self, 'cron', None)
+                if _cron is not None:
+                    try:
+                        await _cron.tick()
+                    except Exception as e:
+                        self.logger.warning("Cron tick error: %s", e)
 
                 await asyncio.sleep(1)
 
@@ -2609,6 +2622,16 @@ class AsyncWorker:
                         if len(r) > len(best_proof):
                             best_proof = r
                 content = f"[shell]\n{best_proof[:3000]}" if best_proof else f"[ops: {', '.join(tool_names_used[:6])}]"
+            # Truth check before reporting
+            if getattr(self, 'truth_reporter', None) and self.truth_reporter:
+                try:
+                    _vresult = self.truth_reporter.verify_before_report(
+                        operation="reply"
+                    )
+                except Exception:
+                    _vresult = None
+                if isinstance(_vresult, str) and len(_vresult) > len(content):
+                    content = _vresult
             channel.send(Response(
                 content=content,
                 target=msg.sender, source=msg.source, chat_id=msg.chat_id,
@@ -2640,6 +2663,16 @@ class AsyncWorker:
                 formatted = format_final_reply(content)
             except Exception:
                 formatted = content
+            # Truth check before reporting
+            if getattr(self, 'truth_reporter', None) and self.truth_reporter:
+                try:
+                    _vresult = self.truth_reporter.verify_before_report(
+                        operation="reply"
+                    )
+                except Exception:
+                    _vresult = None
+                if isinstance(_vresult, str) and len(_vresult) > len(formatted):
+                    formatted = _vresult
             channel.send(Response(
                 content=formatted,
                 target=msg.sender, source=msg.source, chat_id=msg.chat_id,
@@ -2901,7 +2934,7 @@ class AsyncWorker:
         }
 
 def main():
-    """Entry point for the EITElite unified worker.
+    """Entry point for the tical-code unified worker.
 
     Performs startup in this order:
       1. Acquires a PID lock to prevent duplicate instances.
@@ -2914,7 +2947,7 @@ def main():
     The PID lock file is always cleaned up in the finally block,
     even on crash or signal-triggered exit.
     """
-    logger.info("EITElite worker starting")
+    logger.info("tical-code worker starting")
 
     # PID lock - prevent duplicate instances
     PID_FILE = Path("/tmp/unified-worker.pid")
@@ -2931,7 +2964,7 @@ def main():
         PID_FILE.write_text(str(os.getpid()))
     except PermissionError:
         import logging
-        logging.getLogger("EITElite.worker").error(
+        logging.getLogger("tical-code.worker").error(
             f"Cannot write PID file {PID_FILE}: permission denied - exiting"
         )
         sys.exit(1)
@@ -2962,7 +2995,7 @@ def main():
                     worker.checkpoint.restore(cp_id, confirm=True)
                     # NOTE: Conversation messages are NOT restored from checkpoint.
                     # Loading old messages pollutes the new context and causes
-                    # the AI to reply about stale topics (e.g. Pro7 tunnel debug
+                    # the AI to reply about stale topics (e.g. Node-C tunnel debug
                     # mixed into "audit code" requests). Fresh conversation only.
             except Exception as e:
                 logger.warning("Checkpoint restore failed (non-blocking): %s", e)
@@ -3007,11 +3040,11 @@ def async_main():
         PID_FILE.write_text(str(os.getpid()))
     except PermissionError:
         import logging
-        logging.getLogger("EITElite.worker").error(
+        logging.getLogger("tical-code.worker").error(
             f"Cannot write PID file {PID_FILE}: permission denied - exiting"
         )
         sys.exit(1)
-    logger.info("EITElite async-worker starting (PID=%d)", os.getpid())
+    logger.info("tical-code async-worker starting (PID=%d)", os.getpid())
 
     try:
         cfg = load_config()
