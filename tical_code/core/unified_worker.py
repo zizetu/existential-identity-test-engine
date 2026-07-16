@@ -814,7 +814,7 @@ class Worker:
             truth_reporter=getattr(self, 'truth_reporter', None),
             decision_engine=getattr(self, 'decision_engine', None),
             _permission_checker=getattr(self, '_permission_checker', None),
-            doom_detector=getattr(self, 'doom_loop', None),
+            doom_detector=getattr(self, 'doom_detector', None),
             loop_detector=self.loop_detector,
             checkpoint=getattr(self, 'checkpoint', None),
             self_repair=getattr(self, 'self_repair', None),
@@ -1355,11 +1355,29 @@ class Worker:
                     except Exception as e:
                         logger.warning("Health scan error at msg #%d: %s", _msg_count, e)
 
+            # Periodic session persistence (every 10 iterations)
+            if hasattr(self, '_save_counter'):
+                self._save_counter += 1
+            else:
+                self._save_counter = 0
+            if self._save_counter % 10 == 0:
+                try:
+                    if hasattr(self, 'session_manager') and self.session_manager:
+                        self.session_manager.conn.commit()
+                except Exception:
+                    pass
+
             # Check for pending task continuation
             # Memory-triggered restart (check SharedContext, where it is set)
             if getattr(self._ctx, '_schedule_restart', False):
                 logger.warning("[memory] restarting due to RSS limit")
                 self._ctx._schedule_restart = False
+                # Crash-safe: persist session before restart
+                try:
+                    if hasattr(self, 'session_manager') and self.session_manager:
+                        self.session_manager.conn.commit()
+                except Exception:
+                    pass
                 # Save checkpoint before restart (Fix P0-7)
                 if self.checkpoint:
                     try:
@@ -2075,6 +2093,21 @@ class AsyncWorker:
 
         cleanup_counter = 0
 
+        # Auto-resume recovered task if one was found
+        if self._auto_resume_task_id:
+            try:
+                _task = await self._sustained_task_mgr.run_task(
+                    self._auto_resume_task_id
+                )
+                self.logger.info(
+                    "Auto-resumed task: %s — %s",
+                    _task.task_id, getattr(_task, 'description', ''),
+                )
+            except Exception as _e:
+                self.logger.warning("Auto-resume failed: %s", _e)
+            finally:
+                self._auto_resume_task_id = None
+
         while True:
             try:
                 # Phase 1 - Poll all channels concurrently
@@ -2098,6 +2131,17 @@ class AsyncWorker:
                     for msg in result:
                         session_id = self._get_session_id(msg)
                         await self._dispatch_to_session(session_id, channel, msg)
+
+                # Periodic self-repair health check (every 50 iterations)
+                if not hasattr(self, '_health_counter'):
+                    self._health_counter = 0
+                self._health_counter += 1
+                if self._health_counter % 50 == 0:
+                    try:
+                        if hasattr(self, 'self_repair') and self.self_repair:
+                            self.self_repair.check_health()
+                    except Exception:
+                        pass
 
                 # Phase 2 - Periodic housekeeping
                 if cleanup_counter % 60 == 0:

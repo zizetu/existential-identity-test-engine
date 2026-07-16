@@ -1996,6 +1996,18 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
                 if not _tool_failed:
                     consecutive_blocks = 0
 
+                # Self-evolve recording for successful or failed tool executions
+                if ctx.truth_reporter:
+                    try:
+                        if hasattr(ctx, 'self_evolve') and ctx.self_evolve:
+                            _success = result.get("exit_code", 0) == 0 if isinstance(result, dict) else True
+                            if _success:
+                                ctx.self_evolve.record_success({"category": "tool", "description": name})
+                            else:
+                                ctx.self_evolve.record_error(name, str(result.get("error", "unknown")))
+                    except Exception:
+                        pass
+
                 # Save post-tool checkpoint
                 if ctx.checkpoint:
                     try:
