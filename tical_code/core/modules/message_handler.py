@@ -462,7 +462,7 @@ CMD_PERMISSIONS = {
 # Rotate via env var. Generate: python3 -c "import secrets; print(secrets.token_hex(32))"
 _CMD_AUTH_SECRET = os.environ.get("CMD_AUTH_SECRET", "")
 if not _CMD_AUTH_SECRET:
-    logger.warning("[CMD] CMD_AUTH_SECRET not set — all [CMD] messages accepted without HMAC authentication")
+    logger.info("[CMD] CMD_AUTH_SECRET not set — all [CMD] messages accepted without HMAC authentication. Set CMD_AUTH_SECRET in environment for production.")
 
 
 # ────────────────────────────────────────────────────────────────────

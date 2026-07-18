@@ -32,7 +32,7 @@ EITE (Existential Identity Test Engine)
   +-- Worker (deployment)         -- Production agent worker with failover
   |     +-- ModelFailover         -- Multi-provider LLM routing with circuit-breaker
   |     +-- switch_model          -- Runtime model switching without restart
-  |     +-- Sandbox               -- Sandboxed tool execution with permission controls
+  |     +-- Sandbox               -- Output content safety filter
   |     +-- Vigil                 -- Real-time safety monitoring and interruption
   |
   +-- Anchor (verification)       -- Cryptographic task-computation verification
