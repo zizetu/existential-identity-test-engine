@@ -71,8 +71,8 @@ setup(
     description="AI Agent Evaluation Framework",
     long_description=read_file("README.md"),
     long_description_content_type="text/markdown",
-    author="EITElite Team",
-    author_email="",
+    author="zizetu",
+    author_email="zizetu@ticalasi.com",
     url="https://github.com/zizetu/existential-identity-test-engine",
     
     packages=find_packages(exclude=["tests", "tests.*", "docs"]),

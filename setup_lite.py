@@ -44,6 +44,7 @@ Designed for resource-constrained environments.
 """,
     long_description_content_type="text/markdown",
     author="zizetu",
+    author_email="zizetu@ticalasi.com",
     url="https://github.com/zizetu/existential-identity-test-engine",
     
     packages=find_packages(exclude=["tests", "tests.*", "docs"]),

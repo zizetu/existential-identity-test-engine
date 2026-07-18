@@ -461,11 +461,23 @@ class TicalChatChannel(Channel):
 
     def _send(self, response: Response) -> bool:
         try:
-            payload = json.dumps({
+            # Echo message_id when present so ticalcode reply waiters can
+            # fulfill the exact user turn (not just first pending agent waiter).
+            msg_id = ""
+            try:
+                raw = getattr(response, "raw", None) or {}
+                if isinstance(raw, dict):
+                    msg_id = raw.get("message_id") or raw.get("msg_id") or ""
+            except Exception:
+                msg_id = ""
+            body = {
                 "sender": self._identity,
-                "target": response.target,
+                "target": response.target or "web-user",
                 "content": response.content,
-            }).encode()
+            }
+            if msg_id:
+                body["message_id"] = msg_id
+            payload = json.dumps(body).encode()
             req = urllib.request.Request(
                 f"{self._url}/v1/messages", data=payload,
                 headers={

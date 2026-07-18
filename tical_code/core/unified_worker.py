@@ -2771,13 +2771,12 @@ class AsyncWorker:
         except Exception:
             pass
 
-
-            channel.send(Response(
-                content=formatted,
-                target=msg.sender,
-                source=msg.source,
-                chat_id=msg.chat_id,
-            ))
+        channel.send(Response(
+            content=formatted,
+            target=msg.sender,
+            source=msg.source,
+            chat_id=msg.chat_id,
+        ))
 
         messages.append({"role": "assistant", "content": content})
         session["messages"] = messages
