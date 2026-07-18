@@ -40,6 +40,20 @@ Architecture:
 
 Author: EITE Team
 """
+
+TOOL_CATEGORY_READ = "read"
+TOOL_CATEGORY_WRITE = "write"
+
+from enum import Enum
+
+class ToolIterationState(Enum):
+    """Tracks tool execution iteration status."""
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    TIMEOUT = "timeout"
+
 import json
 import logging
 import re

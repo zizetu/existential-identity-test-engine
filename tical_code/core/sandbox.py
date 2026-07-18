@@ -264,3 +264,34 @@ def reset_sanitizer() -> None:
     """Reset the global sanitizer instance for testing."""
     global _global_sanitizer
     _global_sanitizer = None
+
+
+class SandboxConfig:
+    """Stub for workflow compatibility."""
+    def __init__(self):
+        self.timeout = 30
+        self.memory_limit = 512
+
+class SandboxResult:
+    """Stub for workflow compatibility."""
+    def __init__(self, success=True, output='', error=''):
+        self.success = success
+        self.output = output
+        self.error = error
+
+class SandboxExecutor:
+    """Stub for workflow compatibility. Full sandbox not yet implemented."""
+    def __init__(self):
+        self.config = SandboxConfig()
+
+    async def execute(self, code: str, timeout: int = 30) -> SandboxResult:
+        """Execute code in sandbox (stub - returns error)."""
+        return SandboxResult(success=False, output='', error='Sandbox not implemented')
+
+    async def execute_with_input(self, code: str, input_data: str = '') -> SandboxResult:
+        """Execute with input (stub)."""
+        return SandboxResult(success=False, output='', error='Sandbox not implemented')
+
+def get_sandbox():
+    """Get or create sandbox instance."""
+    return SandboxExecutor()

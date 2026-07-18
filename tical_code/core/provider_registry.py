@@ -16,7 +16,7 @@
 #
 # Original repository: https://github.com/zizetu/existential-identity-test-engine
 #
-"""Provider Registry - Git-managed LLM provider configuration.
+"""Provider Registry - Git-managed LLM provider configuration."""
 
 import json
 import logging
