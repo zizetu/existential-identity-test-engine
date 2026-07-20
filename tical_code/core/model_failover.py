@@ -539,7 +539,7 @@ class ModelFailover:
     # ------------------------------------------------------------------
 
     async def _call_single(self, provider: Provider, messages: List[Dict],
-                     tools: Optional[List] = None, max_tokens: int = 6000,
+                     tools: Optional[List] = None, max_tokens: int = 8000,
                      temperature: float = 0.3) -> FailoverResult:
         """Make one API call to a single provider with provider-specific handling.
 
@@ -1108,7 +1108,7 @@ class ModelFailover:
     # ------------------------------------------------------------------
 
     async def call(self, messages: List[Dict], tools: Optional[List] = None,
-             max_tokens: int = 6000, temperature: float = 0.3,
+             max_tokens: int = 8000, temperature: float = 0.3,
              preferred_family: Optional[str] = None,
              prefix: Optional[str] = None) -> FailoverResult:
         """Call LLM with session-affinity LRU selection and automatic failover.
@@ -1423,7 +1423,7 @@ class ModelFailover:
     # ------------------------------------------------------------------
 
     async def call_stream(self, messages: List[Dict], tools: Optional[List] = None,
-                          max_tokens: int = 6000, temperature: float = 0.3,
+                          max_tokens: int = 8000, temperature: float = 0.3,
                           preferred_family: Optional[str] = None):
         """Call LLM with streaming response and automatic failover.
 
