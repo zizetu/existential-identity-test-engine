@@ -1925,6 +1925,30 @@ class AsyncWorker:
             except Exception as _e:
                 self.logger.warning("Failed to register doom loop recovery callbacks: %s", _e)
 
+        # ── Permission checker — tool execution gating (P1) ─────────────
+        # Initialized for AsyncWorker so it can participate in tool block/audit decisions.
+        # Dangerous tools are denied by default; ALLOW_DANGEROUS_TOOLS env var adds them to allowed_tools.
+        self._permission_checker = None
+        try:
+            _perm_cfg = cfg.get("permissions", {}) if isinstance(cfg, dict) else {}
+            self._permission_checker = PermissionChecker.from_dict(_perm_cfg)
+            _dangerous_defaults = {"bash", "shell", "exec", "subprocess", "terminal", "restart"}
+            _allowed_raw = os.getenv("ALLOW_DANGEROUS_TOOLS", "")
+            _allowed_set = {s.strip() for s in _allowed_raw.split(",") if s.strip()}
+            for _t in _dangerous_defaults:
+                if _t not in _allowed_set:
+                    self._permission_checker.denied_tools.add(_t)
+                else:
+                    self._permission_checker.allowed_tools.add(_t)
+            self.logger.info(
+                "PermissionChecker ready: mode=%s allowed=%d denied=%d",
+                self._permission_checker.mode_value,
+                len(self._permission_checker.allowed_tools),
+                len(self._permission_checker.denied_tools),
+            )
+        except Exception as e:
+            self.logger.warning("PermissionChecker init failed: %s", e)
+
         # ── Runtime module wiring verification ──────────────────────────
         # Verify every module marked "active" by the registry actually has
         # its attribute set on self and is not None.
@@ -2477,16 +2501,30 @@ class AsyncWorker:
         while response.get("tool_calls") and tool_iterations < MAX_TOOL_ITERATIONS:
             tool_iterations += 1
 
-            # P0 SECURITY: tool guard — deny dangerous tools unless explicitly allowed
-            DANGEROUS_TOOLS = {"bash", "shell", "exec", "subprocess", "terminal", "restart"}
-            ALLOWED_TOOLS_OVERRIDE = os.getenv("ALLOW_DANGEROUS_TOOLS", "").split(",") if os.getenv("ALLOW_DANGEROUS_TOOLS") else []
+            # P1 SECURITY: tool guard via PermissionChecker with audit mode.
+            # Dangerous tools are blocked unless explicitly allowed via ALLOW_DANGEROUS_TOOLS env var,
+            # or the PermissionChecker's rules (mode=bypassPermissions, allowed_tools, etc.).
+            # Set DANGEROUS_TOOLS_AUDIT=1 to log blocks without enforcing them.
+            _audit_only = os.getenv("DANGEROUS_TOOLS_AUDIT", "") == "1"
             _filtered = []
             for _tc in response["tool_calls"]:
                 _fn = _tc.get("function", {})
                 _tname = _fn.get("name", "") or _tc.get("name", "")
-                if _tname in DANGEROUS_TOOLS and _tname not in ALLOWED_TOOLS_OVERRIDE:
-                    self.logger.warning(f"[TOOL_GUARD] blocked dangerous tool: {_tname} (set ALLOW_DANGEROUS_TOOLS to whitelist)")
-                    continue
+                _checker = getattr(self, '_permission_checker', None)
+                if _checker is not None:
+                    _allowed, _reason = _checker.can_use_tool(_tname)
+                    if not _allowed:
+                        if _audit_only:
+                            self.logger.warning(
+                                "[TOOL_GUARD:AUDIT] would block %s: %s (audit mode — not enforced)",
+                                _tname, _reason,
+                            )
+                        else:
+                            self.logger.warning(
+                                "[TOOL_GUARD] blocked tool: %s (reason: %s; set ALLOW_DANGEROUS_TOOLS to whitelist)",
+                                _tname, _reason,
+                            )
+                            continue
                 _filtered.append(_tc)
             response["tool_calls"] = _filtered
 
