@@ -1078,7 +1078,7 @@ class Worker:
 
         # ── FORCE_SUMMARIZE: trigger aggressive context compaction ──
         async def _force_summarize(result):
-            compactor = getattr(self, 'compactor', None)
+            compactor = getattr(self, 'context_compactor', None)
             if compactor is None:
                 logger.warning("[doom_loop] recovery: FORCE_SUMMARIZE requested but no compactor")
                 return False

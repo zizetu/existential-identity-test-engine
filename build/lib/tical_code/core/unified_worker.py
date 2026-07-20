@@ -727,7 +727,7 @@ class Worker:
             tracer=getattr(self, 'tracer', None),
             error_logger=self.error_logger,
             sessions=getattr(self, 'sessions', None),
-            compactor=getattr(self, 'compactor', None),
+            context_compactor=getattr(self, 'context_compactor', None),
             verification=getattr(self, 'verification', None),
             verif_recorder=self.verif_recorder,
             constitution=getattr(self, 'constitution', None),
@@ -931,7 +931,7 @@ class Worker:
 
         # ── FORCE_SUMMARIZE: trigger aggressive context compaction ──
         async def _force_summarize(result):
-            compactor = getattr(self, 'compactor', None)
+            compactor = getattr(self, 'context_compactor', None)
             if compactor is None:
                 logger.warning("[doom_loop] recovery: FORCE_SUMMARIZE requested but no compactor")
                 return False

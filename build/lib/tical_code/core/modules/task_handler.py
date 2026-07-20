@@ -371,7 +371,7 @@ def run_task(ctx: SharedContext, task) -> None:
     session_id = f"task-{state.task_id}"
 
     # Initialize context compactor for long conversations (replaces ContextManager)
-    cmgr = ctx.compactor if ContextCompactor is not None and ctx.compactor is not None else None
+    cmgr = ctx.context_compactor if ContextCompactor is not None and ctx.context_compactor is not None else None
     if cmgr is not None:
         logger.info("Task %s: compactor active (max %d tokens)",
                     state.task_id, cmgr.max_tokens)
