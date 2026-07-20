@@ -1929,6 +1929,7 @@ class AsyncWorker:
         # Initialized for AsyncWorker so it can participate in tool block/audit decisions.
         # Dangerous tools are denied by default; ALLOW_DANGEROUS_TOOLS env var adds them to allowed_tools.
         self._permission_checker = None
+        self._auto_resume_task_id = None  # default: no pending auto-resume
         try:
             _perm_cfg = cfg.get("permissions", {}) if isinstance(cfg, dict) else {}
             self._permission_checker = PermissionChecker.from_dict(_perm_cfg)
