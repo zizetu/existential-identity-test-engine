@@ -2791,7 +2791,7 @@ class AsyncWorker:
             try:
                 _ft = (formatted or "").strip()
                 _stall = (
-                    _ft.count("```") >= 4
+                    _ft.count("```") >= 12
                     or "\u5148\u6838\u5bf9" in _ft
                 )
                 if _stall:
