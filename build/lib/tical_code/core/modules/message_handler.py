@@ -1,4 +1,4 @@
-# EITElite -- AI Agent Platform
+# tical-code -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -17,7 +17,6 @@
 # Original repository: https://github.com/zizetu/eite-agent
 #
 
-# provenance:ticalasi-zzt-2026
 """Message handler module — LLM + tools per-message turn processing.
 
 Handles every inbound user message through the full processing pipeline:
@@ -75,7 +74,7 @@ import unicodedata
 import datetime as _dt
 from typing import Any, Optional
 
-# ── EITElite internal imports ──────────────────────────────────────
+# ── tical-code internal imports ──────────────────────────────────────
 from tical_code.core.shared_context import SharedContext, _get_rss_mb
 from tical_code.core.trace import TraceLogger, TraceEvent
 from tical_code.core.channel import Message, Response
@@ -86,12 +85,21 @@ from tical_code.core.response_formatter import format_result
 from tical_code.core.prompt import build_power_mode_suffix, strip_and_inject_power_mode
 from tical_code.core.permission_checker import PermissionChecker, PermissionMode
 from tical_code.core.decision_engine import ModelStatus
+from tical_code.core.iteration_budget import IterationBudget
+from tical_code.core.paths import under_tical_home
 
 # Conditional imports — may be None on light installs
 try:
     from tical_code.core.model_failover import ModelFailover
 except ImportError:
     ModelFailover = None
+
+try:
+    from .tool_mask import get_mask_manager as _get_tool_mask_mgr
+    _TOOL_MASK_AVAILABLE = True
+except ImportError:
+    _TOOL_MASK_AVAILABLE = False
+
 
 try:
     from tical_code.core.task_state import (
@@ -120,14 +128,14 @@ except ImportError:
     SkillAuditRunner = None
     _SKILL_AUDIT_AVAILABLE = False
 
-logger = logging.getLogger("EITElite.message_handler")
+logger = logging.getLogger("tical-code.message_handler")
 
 # ── EITE Data Directory ──────────────────────────────────────────
 # All persistent data lives under this base directory (passwords, logs,
 # memory, sessions, checkpoints).  Override via EITE_DATA_DIR env var
 # or change the default below for non-standard deployments.
 _EITE_DATA_DIR = os.path.expanduser(
-    os.environ.get("EITE_DATA_DIR", "~/.EITElite")
+    os.environ.get("EITE_DATA_DIR") or os.environ.get("TICAL_HOME") or under_tical_home()
 )
 
 # ── Per-User Password System ──────────────────────────────────────
@@ -140,40 +148,7 @@ _PASSWORDS_FILE = os.path.join(_EITE_DATA_DIR, "passwords.json")
 
 
 
-class IterationBudget:
-    """Thread-safe iteration budget with consume/refund mechanism."""
-    def __init__(self, max_total: int = 60, max_consecutive_failures: int = 5):
-        self.max_total = max_total
-        self.max_consecutive_failures = max_consecutive_failures
-        self._used = 0
-        self._consecutive_failures = 0
-        self._lock = __import__("threading").Lock()
-        self._start_time = __import__("time").time()
-        self._max_wall_time = 600
-    def consume(self):
-        with self._lock:
-            if self._used >= self.max_total: return False
-            if __import__("time").time() - self._start_time > self._max_wall_time: return False
-            if self._consecutive_failures >= self.max_consecutive_failures: return False
-            self._used += 1
-            return True
-    def refund(self):
-        with self._lock:
-            if self._used > 0: self._used -= 1
-    def record_failure(self):
-        with self._lock: self._consecutive_failures += 1
-    def record_success(self):
-        with self._lock: self._consecutive_failures = 0
-    @property
-    def remaining(self):
-        with self._lock: return max(0, self.max_total - self._used)
-    @property
-    def iteration(self):
-        with self._lock: return self._used
-    @property
-    def elapsed_seconds(self):
-        return __import__("time").time() - self._start_time
-
+from tical_code.core.iteration_budget import IterationBudget
 def _load_passwords() -> dict:
     """Load password database from disk."""
     try:
@@ -446,7 +421,7 @@ def _privacy_scan_response(text: str) -> str:
 # Security model:
 #   CMD_LEVEL_MASTER (0) — full access, including ``exec`` (arbitrary
 #       bash).  Restricted to senders listed in MASTER_IDS.
-#   CMD_LEVEL_ADMIN (1)  — AI admin (primary worker).  Can deploy,
+#   CMD_LEVEL_ADMIN (1)  — AI admin (seoul worker).  Can deploy,
 #       switch_model, status, report.
 #   CMD_LEVEL_WORKER (2) — self-manage only: ping, help, escalate,
 #       restart, log.  Workers can only target themselves.
@@ -459,7 +434,7 @@ def _privacy_scan_response(text: str) -> str:
 WORKER_IDS = set(os.environ.get("WORKER_IDS", "default-worker").split(","))
 
 CMD_LEVEL_MASTER = 0  # master -- full access
-CMD_LEVEL_ADMIN  = 1  # AI admin (primary worker)
+CMD_LEVEL_ADMIN  = 1  # AI admin (seoul)
 CMD_LEVEL_WORKER = 2  # Worker -- self-manage only
 
 # Master IDs: load from env MASTER_IDS (comma-separated) or use safe default
@@ -546,7 +521,7 @@ def _cmd_get_level(ctx: SharedContext, sender: str, msg: Message) -> int:
     if sender.lower() in {m.lower() for m in MASTER_IDS}:
         return CMD_LEVEL_MASTER
     if sender in WORKER_IDS:
-        if sender == os.environ.get("WORKER_NAME", "agent"):
+        if sender == "seoul":
             return CMD_LEVEL_ADMIN
         return CMD_LEVEL_WORKER
     if msg.source in ("telegram", "weixin"):
@@ -802,9 +777,9 @@ def _exec_cmd(ctx: SharedContext, cmd_name: str, cmd_args: list[str],
             return f"[CMD] permission error: {e}"
 
     if cmd_name == "context":
-        if not ctx.compactor:
+        if not ctx.context_compactor:
             return "[CMD] context: ContextCompactor not available"
-        comp = ctx.compactor
+        comp = ctx.context_compactor
         lines = [
             f"Max tokens: {comp.max_tokens}",
             f"Compact threshold: {comp.compact_threshold_pct*100:.0f}% ({int(comp.max_tokens * comp.compact_threshold_pct)} tokens)",
@@ -872,10 +847,10 @@ def _exec_cmd(ctx: SharedContext, cmd_name: str, cmd_args: list[str],
         _reason = " ".join(cmd_args) or "no details"
         try:
             execute("chat_send", {
-                "target": os.environ.get("WORKER_NAME", "agent"),
+                "target": "seoul",
                 "content": f"[ESCALATION from {ctx.name}] {_reason}",
             }, base_dir=ctx.workspace)
-            return f"[CMD] escalated to {os.environ.get('WORKER_NAME', 'agent')}: {_reason[:100]}"
+            return f"[CMD] escalated to seoul: {_reason[:100]}"
         except Exception as e:
             return f"[CMD] escalate error: {e}"
 
@@ -1574,6 +1549,11 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
         ctx.skill_extractor.start_task(task_id=_msg_task_id, goal=msg.content[:200])
     # Load session history for context persistence
     history = ctx.sessions.load_session(session_id) if ctx.sessions else []
+    # Inject session summary for context restoration on restart
+    if ctx.sessions and history and hasattr(ctx.sessions, 'get_summary'):
+        _summary = ctx.sessions.get_summary(session_id)
+        if _summary:
+            history.insert(0, {"role": "system", "content": f"[Session Context] {_summary}"})
     # Session-affinity: preferred model family for this conversation
     _family = ctx._session_family.get(session_id)
     # Power mode: force DeepSeek (more obedient than MiMo to system prompts)
@@ -1615,9 +1595,9 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
                 logger.info("  stripped %d orphan tool msgs from session history", _stripped_orphans)
         # Token-aware session trimming — delegated entirely to ContextCompactor
         # (the old hardcoded keep=14 block was removed; compactor handles it properly)
-        if ctx.compactor and ctx.compactor.needs_compaction(conv):
-            estimate = ctx.compactor.estimate_tokens(conv)
-            logger.info("  session trim: %d msgs, ~%d tokens (max=%d)", len(conv), estimate, ctx.compactor.max_tokens)
+        if ctx.context_compactor and ctx.context_compactor.needs_compaction(conv):
+            estimate = ctx.context_compactor.estimate_tokens(conv)
+            logger.info("  session trim: %d msgs, ~%d tokens (max=%d)", len(conv), estimate, ctx.context_compactor.max_tokens)
     # Build user message content - include media if available
     if hasattr(msg, 'media_data') and msg.media_data:
         content_parts = [{"type": "text", "text": msg.content}]
@@ -1642,44 +1622,47 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
         conv.append({"role": "user", "content": msg.content})
     _new_start = len(conv) - 1  # track where new messages begin
 
-    max_iterations = 20  # Raised for sustained autonomous work
+    # Phase 1: Molecular chain interception (auto-route complex requests through molecule engine)
+    # CRITICAL: Guard against re-interception loops from chain output being re-processed.
+    # Only intercept on the first iteration (iteration=0) and skip if the message
+    # contains a `__MOLECULE_INTERCEPT__` sentinel (injected by a prior chain run).
+    _mol_intercept_result = None
+    _mol_engine = getattr(ctx, '_molecule_engine', None)
+    _should_intercept = (
+        _mol_engine is not None
+        and len(msg.content) > 5
+        and "__MOLECULE_INTERCEPT__" not in msg.content
+    )
+    if _should_intercept:
+        try:
+            _mol_intercept_result = _mol_engine.intercept(msg.content)
+        except Exception as e:
+            logger.debug("Molecule intercept skipped: %s", e)
+    if _mol_intercept_result is not None:
+        conv.append({
+            "role": "system",
+            "content": "[MOLECULE] " + _mol_intercept_result.final_output
+            + "\n\n__MOLECULE_INTERCEPT__"
+        })
+        logger.info("Molecule chain %s intercepted: injected result into conv",
+                    _mol_intercept_result.molecule_name)
+
+    _iteration_budget = IterationBudget(max_total=10)
     _last_results: dict = {}  # Per-tool result cache for efficiency detection
-    for iteration in range(max_iterations):
+    while _iteration_budget.consume():
+        iteration = _iteration_budget.iteration  # FIX: undefined after for→while refactor (v0.7.x regression)
         # Pre-model checkpoint...
         if ctx.checkpoint:
             try:
                 ctx.checkpoint.save(
-                    description=f"pre-model-round-{iteration}",
+                    description=f"pre-model-round-{_iteration_budget.iteration}",
                     session_messages=conv,
                     session_id=session_id,
-                    iteration=iteration,
+                    iteration=_iteration_budget.iteration,
                 )
             except Exception:
                 pass
-        # Context compression for long tool-heavy conversations
-        if iteration >= 3 and ctx.compactor and ctx.compactor.needs_compaction(conv):
-            estimate = ctx.compactor.estimate_tokens(conv)
-            logger.info("  chat compress: %d msgs, ~%d tokens (max=%d)", len(conv), estimate, ctx.compactor.max_tokens)
-            system = conv[0] if conv and conv[0].get('role') == 'system' else None
-            keep = getattr(ctx.compactor, 'keep_recent', 12)
-            new_conv = [system] if system else []
-            tail = list(conv[-keep:])
-            tool_ids_needed = set()
-            for m in tail:
-                if m.get("role") == "tool" and m.get("tool_call_id"):
-                    tool_ids_needed.add(m["tool_call_id"])
-            for m in reversed(conv[1:-keep] if system else conv[:-keep]):
-                if m.get("role") == "assistant" and m.get("tool_calls"):
-                    for tc in m.get("tool_calls", []):
-                        if tc.get("id") in tool_ids_needed:
-                            tail.insert(0, m)
-                            tool_ids_needed.discard(tc.get("id"))
-                            break
-                if not tool_ids_needed:
-                    break
-            new_conv.extend(tail)
-            conv = new_conv
-            logger.info("  compressed to %d msgs", len(conv))
+        # Context compression is handled by compact_if_needed() below
         # Proactive auto-compaction before API call (80% token budget trigger)
         # Helper: run an async coroutine synchronously with proper Task context.
         # aiohttp 3.13+ uses asyncio.timeout() internally, which requires
@@ -1690,13 +1673,13 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
             """Run an async coroutine synchronously, reusing worker's event loop."""
             return ctx.run_async(coro)
 
-        if ctx.compactor:
+        if ctx.context_compactor:
             def _llm_call_sync(msgs):
                 _r = ctx.llm.call(msgs)
                 if asyncio.iscoroutine(_r):
                     _r = _run_async_safe(_r)
                 return _r
-            conv = ctx.compactor.compact_if_needed(conv, _llm_call_sync)
+            conv = ctx.context_compactor.compact_if_needed(conv, _llm_call_sync)
         # Adapt messages for model format compatibility
         _call_conv = conv
         if ctx._msg_adapter:
@@ -1705,22 +1688,38 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
                 _call_conv = ctx._msg_adapter.adapt(_call_conv, model_family=_family_name)
             except Exception:
                 pass
+        # Tool-mask prefill: constrain available tool names to reduce schema noise
+        _prefill = (
+            _get_tool_mask_mgr().get_prefix_for_state(None)
+            if _TOOL_MASK_AVAILABLE
+            else None
+        )
         # Trace: record LLM call timing
         _trace_t0 = time.time()
-        _llm_result = ctx.llm.call(_call_conv, tools=TOOL_SCHEMAS, preferred_family=_family)
+        _llm_result = ctx.llm.call(
+            _call_conv, tools=TOOL_SCHEMAS, preferred_family=_family, prefix=_prefill
+        )
         if asyncio.iscoroutine(_llm_result):
             _llm_result = _run_async_safe(_llm_result)
         response = _llm_result
         # Retry on transient LLM errors (up to 2 retries with 1s/2s backoff)
         for _retry in range(2):
             if response.get("error") and "rate_limit" not in str(response.get("error", "")):
+                _iteration_budget.record_failure()
                 time.sleep(1 + _retry)
-                _llm_result = ctx.llm.call(_call_conv, tools=TOOL_SCHEMAS, preferred_family=_family)
+                _llm_result = ctx.llm.call(
+                    _call_conv, tools=TOOL_SCHEMAS, preferred_family=_family, prefix=_prefill
+                )
                 if asyncio.iscoroutine(_llm_result):
                     _llm_result = _run_async_safe(_llm_result)
                 response = _llm_result
             else:
                 break
+        # Record LLM latency in metrics collector
+        if ctx._metrics is not None:
+            _llm_elapsed = time.time() - _trace_t0
+            _model_name = getattr(response, 'model', None) or getattr(ctx.llm, '_last_model', 'unknown')
+            ctx._metrics.record_llm_call(str(_model_name), _llm_elapsed)
         # Record session-affinity family on first call
         if _family is None and hasattr(response, 'provider_family') and response.provider_family:
             _family = response.provider_family
@@ -1788,7 +1787,7 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
                         description=f"post-model-round-{iteration}",
                         session_messages=conv,
                         session_id=session_id,
-                        iteration=iteration,
+                        iteration=_iteration_budget.iteration,
                     )
                 except Exception:
                     pass
@@ -2003,6 +2002,18 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
                 if not _tool_failed:
                     consecutive_blocks = 0
 
+                # Self-evolve recording for successful or failed tool executions
+                if ctx.truth_reporter:
+                    try:
+                        if hasattr(ctx, 'self_evolve') and ctx.self_evolve:
+                            _success = result.get("exit_code", 0) == 0 if isinstance(result, dict) else True
+                            if _success:
+                                ctx.self_evolve.record_success({"category": "tool", "description": name})
+                            else:
+                                ctx.self_evolve.record_error(name, str(result.get("error", "unknown")))
+                    except Exception:
+                        pass
+
                 # Save post-tool checkpoint
                 if ctx.checkpoint:
                     try:
@@ -2011,7 +2022,7 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
                             session_messages=conv,
                             session_id=session_id,
                             tool_history=[{"name": name, "args": args, "result_summary": str(result)[:200]}],
-                            iteration=iteration,
+                            iteration=_iteration_budget.iteration,
                         )
                     except Exception:
                         pass
@@ -2033,6 +2044,8 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
                                         ctx.run_async(ctx.doom_detector.execute_recovery(doom_result))
                                     except Exception:
                                         pass
+                                # Force break the tool iteration loop — don't let agent spiral
+                                break
                             elif doom_result.level == DoomLoopLevel.WARNING:
                                 conv.append({
                                     "role": "system",
@@ -2140,14 +2153,14 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
                     "content": f"[CIRCUIT BREAKER] {consecutive_blocks} consecutive tool calls were blocked. Your tools cannot complete this task. Reply to the user immediately explaining what went wrong and what they should do instead. Do NOT make any more tool calls.",
                 })
 
-            # Iteration guard -- escalate warnings then force-stop
-            if iteration >= 12:
+            # Iteration guard -- escalate warnings then force-stop per docstring
+            if iteration >= 6:
                 conv.append({
                     "role": "system",
                     "content": f"STOP calling tools. You have used {iteration + 1} rounds. Reply now with what you have.",
                 })
-                # Force break at iteration 20
-                if iteration >= 20:
+                # Force break at iteration 8 (docstring: "forced break at iteration 8")
+                if iteration >= 8:
                     # Collect blocked-tool summary for a meaningful fallback message
                     blocked_names = []
                     for m in conv:
@@ -2213,6 +2226,34 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
                             ctx.verif_recorder.record_violation(v.rule, v.category, v.claim, v.detail, v.severity)
                     if phase3.action in ("block", "retry", "rewrite"):
                         logger.warning("Reply verification: %s", phase3.corrections)
+                    # ENFORCE: on critical/high violations about fabrication or missing evidence,
+                    # do NOT send the fake reply. Instead, append a forced retry instruction.
+                    if phase3.action == "block":
+                        # Critical fabrication - replace reply with error
+                        reply = "[VERIFICATION BLOCKED] Reply claims work not actually done. Force retry."
+                        if channel:
+                            channel.send(Response(
+                                content=reply,
+                                target=msg.sender if msg else "",
+                                source="system",
+                                chat_id=msg.chat_id if msg else "",
+                            ))
+                        logger.error("BLOCKED fabricated reply: %s", phase3.violations)
+                        return
+                    elif phase3.action == "retry":
+                        # High severity - inject evidence requirement and retry
+                        evidence_msg = (
+                            "\n\n[SYSTEM: Reply claims work but no matching tool evidence found. "
+                            "You MUST include actual shell output, file content, or tool results "
+                            "to prove the work was done. Say NOTHING that cannot be backed by "
+                            "a tool call you just made.]"
+                        )
+                        # Add to conversation and re-call LLM (will loop back naturally)
+                        reply += evidence_msg
+                        # Set flag so the tool_iteration loop can re-process
+                        iteration -= 1  # allow one more iteration
+                elif phase3.action == "allow":
+                    pass  # pass for the record
             # Check for continuation hint -- only if explicit "I still need to"
             if "I still need to" in reply:
                 next_task = reply.split("I still need to", 1)[-1].strip()
@@ -2261,6 +2302,32 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
             if ctx._vigil:
                 ctx._vigil.signal_collector.record_response(len(reply))
             logger.info("  reply: %s", reply[:80])
+
+            # Autonomous continuation decision
+            # If task seems incomplete, queue continuation for next loop tick
+            _should_continue = False
+            _continuation_reason = ""
+            _reply_lower = reply.lower()
+            # Heuristic 1: LLM explicitly says it needs to continue
+            if any(phrase in _reply_lower for phrase in
+                   ["i still need to", "still working on", "need to continue",
+                    "incomplete", "partial result", "not yet complete"]):
+                _should_continue = True
+                _continuation_reason = "explicit_continuation_hint"
+            # Heuristic 2: Complex task with many tool calls but short reply
+            elif tool_count > 5 and len(reply) < 500:
+                _should_continue = True
+                _continuation_reason = f"complex_task_incomplete(tools={tool_count},reply_len={len(reply)})"
+            # Heuristic 3: Budget exhaustion or forced reply
+            elif iteration >= 8:
+                _should_continue = True
+                _continuation_reason = f"budget_exhaustion(iteration={iteration})"
+            if _should_continue and ctx._pending_task_file is not None:
+                # Extract continuation goal from reply or generate from context
+                _cont_goal = reply[:200] if len(reply) > 50 else f"Continue task: {reply}"
+                from tical_code.core.modules.task_handler import save_pending
+                save_pending(ctx, _cont_goal, iteration)
+                logger.info("[auto-continue] queued: %s", _continuation_reason)
 
             # Save completion snapshot
             if save_snapshot is not None:
@@ -2352,6 +2419,27 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
                 set_skip_sanitize(False)
             return
 
+    # Budget exhausted: one final toolless grace call to summarize
+    if _iteration_budget.remaining <= 0 and _iteration_budget.iteration > 0:
+        logger.warning("[worker] budget exhausted after %d iterations — grace call", _iteration_budget.iteration)
+        try:
+            _grace_conv = list(conv)
+            _grace_conv.append({
+                "role": "system",
+                "content": "[BUDGET EXHAUSTED] You have reached the iteration limit. "
+                           "Provide a final summary of what you accomplished and what remains, then stop. "
+                           "Do NOT make any more tool calls."
+            })
+            _grace_result = ctx.llm.call(_grace_conv, tools=[])
+            if asyncio.iscoroutine(_grace_result):
+                _grace_result = ctx.run_async(_grace_result)
+            _grace_content = _grace_result.get("content", "") if isinstance(_grace_result, dict) else str(_grace_result)
+            if _grace_content:
+                conv.append({"role": "assistant", "content": _grace_content})
+                logger.info("[worker] grace summary: %d chars", len(_grace_content))
+        except Exception as e:
+            logger.warning("[worker] grace call failed: %s", e)
+
     # Exceeded max iterations -- send last reply to sender, save partial conversation
     # Restore constitution if power mode was active
     if _saved_constitution is not None:
@@ -2423,4 +2511,4 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
         )
         if last_assistant and "I still need to" in last_assistant:
             from tical_code.core.modules.task_handler import save_pending
-            save_pending(ctx, last_assistant, max_iterations)
+            save_pending(ctx, last_assistant, _iteration_budget.max)  # FIX: max_iterations undefined

@@ -103,6 +103,7 @@ import threading
 import time
 import traceback
 from pathlib import Path
+from typing import Optional
 
 # Add parent dir to path for imports (append avoids shadowing stdlib)
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
@@ -512,11 +513,11 @@ class Worker:
         # Pending task file for cross-poll continuation
         self._pending_task_file = Path(cfg.get("workspace", ".")) / ".pending_task.json"
         self._pending_task = self._load_pending()
+        self._auto_resume_task_id = None
 
         # SustainedTaskManager - persistent task queue with auto-recovery
         if SustainedTaskManager is not None:
             self._sustained_task_mgr = SustainedTaskManager()
-            self._auto_resume_task_id = None
             # LIVE WIRE INJECT 2026-07-09f
             try:
                 from tical_code.core.tool_executor import set_sustained_task_manager
@@ -845,7 +846,7 @@ class Worker:
         # ── Runtime module wiring verification ──────────────────────────
         # Ensure every module in the registry's "active" list has its
         # attribute actually set on the worker and reachable via ctx.
-        # Catches variable-name mismatches like compactor/context_compactor
+        # Catches variable-name mismatches like context_compactor/context_compactor
         # that cause modules to silently return None at runtime.
         try:
             from tical_code.core.module_wiring_check import (
@@ -872,7 +873,7 @@ class Worker:
                 from pathlib import Path as _Path
                 _ws_persist = _Path(os.environ.get("WORKSPACE_DIR", "/tmp")) / ".cognitive"
                 self.cognitive_workspace = Workspace(
-                    node_id=os.environ.get("NODE_ID", "node-1"),
+                    node_id=os.environ.get("NODE_ID", "seoul-1"),
                     persist_path=_ws_persist,
                     enabled=True,
                 )
@@ -1078,14 +1079,14 @@ class Worker:
 
         # ── FORCE_SUMMARIZE: trigger aggressive context compaction ──
         async def _force_summarize(result):
-            compactor = getattr(self, 'context_compactor', None)
-            if compactor is None:
-                logger.warning("[doom_loop] recovery: FORCE_SUMMARIZE requested but no compactor")
+            context_compactor = getattr(self, 'context_compactor', None)
+            if context_compactor is None:
+                logger.warning("[doom_loop] recovery: FORCE_SUMMARIZE requested but no context_compactor")
                 return False
             try:
                 # Set the force-compact flag so the next compact_if_needed()
                 # call runs compaction regardless of token threshold.
-                compactor._force_compact_pending = True
+                context_compactor._force_compact_pending = True
                 logger.info("[doom_loop] recovery: FORCE_SUMMARIZE - set force-compact flag")
                 return True
             except Exception as e:
@@ -1832,7 +1833,7 @@ class AsyncWorker:
         # failover_from_env(cfg) with wrong args.
         self.failover = self.llm
 
-        # Context compactor
+        # Context context_compactor
         self.context_compactor = None
         if ContextCompactor is not None:
             try:
@@ -1905,7 +1906,7 @@ class AsyncWorker:
                 async def _force_summarize(result):
                     _comp = getattr(self, 'context_compactor', None)
                     if _comp is None:
-                        self.logger.warning("[doom_loop] recovery: FORCE_SUMMARIZE — no compactor")
+                        self.logger.warning("[doom_loop] recovery: FORCE_SUMMARIZE — no context_compactor")
                         return False
                     try:
                         _comp._force_compact_pending = True
@@ -1928,7 +1929,7 @@ class AsyncWorker:
         # Verify every module marked "active" by the registry actually has
         # its attribute set on self and is not None.
         # Catches: registry says active, but getattr(self, attr_name) returns None
-        # due to variable-name mismatch (e.g. compactor vs context_compactor).
+        # due to variable-name mismatch (e.g. context_compactor vs context_compactor).
         # FATAL: worker refuses to start if miswired modules are detected.
         try:
             from tical_code.core.module_registry import _registry
@@ -2053,14 +2054,10 @@ class AsyncWorker:
     # Session Routing
     # ─────────────────────────────────────────────────────────
 
-    @staticmethod
-    def _get_session_id(msg: Message | None = None) -> str:
-        """Derive a stable session ID from the message source.
-        
-        If msg is None, falls back to a generic session ID based on worker name.
-        """
+    def _get_session_id(self, msg: Optional[Message] = None) -> str:
+        """Derive a stable session ID from the message source, or return worker name if no message."""
         if msg is None:
-            return "default:default"
+            return self.name
         return f"{msg.source}:{msg.sender or msg.chat_id or 'default'}"
 
     async def run(self):
@@ -2084,14 +2081,19 @@ class AsyncWorker:
                         "Recovered %d pending tasks from previous run",
                         len(recovered),
                     )
-                    self._auto_resume_task_id = recovered[0].task_id
-                    self.logger.info(
-                        "Auto-resume task: %s", self._auto_resume_task_id,
-                    )
+                    # Auto-re-enter: queue first recovered task for execution
+                    try:
+                        _first = recovered[0]
+                        # Set flag so next channel message triggers task continuation
+                        self._auto_resume_task_id = _first.task_id
+                        self.logger.info(
+                            "Auto-resume queued for task %s: %s",
+                            _first.task_id, _first.description[:80],
+                        )
+                    except Exception as _re:
+                        self.logger.warning("Auto-resume setup failed: %s", _re)
             except Exception as exc:
                 self.logger.warning("Task recovery failed: %s", exc)
-
-        cleanup_counter = 0
 
         # Auto-resume recovered task if one was found
         if self._auto_resume_task_id:
@@ -2107,6 +2109,8 @@ class AsyncWorker:
                 self.logger.warning("Auto-resume failed: %s", _e)
             finally:
                 self._auto_resume_task_id = None
+
+        cleanup_counter = 0
 
         while True:
             try:
@@ -2148,14 +2152,6 @@ class AsyncWorker:
                     await self._cleanup_sessions()
                     # Detect and kill stuck session tasks (processing hung >threshold)
                     await self._kill_stuck_sessions()
-
-                # Cron scheduler tick - execute due periodic jobs
-                _cron = getattr(self, 'cron', None)
-                if _cron is not None:
-                    try:
-                        await _cron.tick()
-                    except Exception as e:
-                        self.logger.warning("Cron tick error: %s", e)
 
                 await asyncio.sleep(1)
 
@@ -2291,6 +2287,15 @@ class AsyncWorker:
         handles tool call iterations (up to MAX_TOOL_ITERATIONS),
         formats the final response, and sends it back via the channel.
         """
+        # SECURITY: enforce sender allowlist (env ALLOWED_SENDERS, comma-separated)
+        _allowed_senders = os.getenv("ALLOWED_SENDERS", "").strip()
+        if _allowed_senders:
+            _allowed_set = {s.strip() for s in _allowed_senders.split(",") if s.strip()}
+            _sender = getattr(msg, "sender", "")
+            if _sender and _sender not in _allowed_set:
+                logger.warning(f"SECURITY: blocked unauthorized sender '{_sender}' (not in ALLOWED_SENDERS)")
+                return
+
         entry, created = self.session_manager.get_or_create(session_id, factory=dict)
         session = entry["data"]
 
@@ -2306,20 +2311,17 @@ class AsyncWorker:
         # EMERGENCY LOAD_SESSION 2026-07-09:
         # We always save to SQLite but never reloaded — restart = total amnesia.
         # Load durable history when this in-memory session has no turns yet.
-        # REFACTOR 2026-07-12: bounded session resume (was 200, now 5).
-        # Load recent turns for continuity without dumping stale task context.
-        # Facts live in agent_memory.json, not in session history.
+        # REFACTOR 2026-07-14: expanded to 30 messages + session summary for
+        # robust context persistence across restarts.
         if (not messages or (len(messages) == 1 and messages[0].get("role") == "system")) and getattr(self, "sessions", None):
             try:
                 _sid = self.sessions.get_session_id(msg.source, str(msg.chat_id))
-                # Tight cap: 5 turns = enough for "what were we just talking about"
-                # without poisoning context with stale task reports.
                 _loaded = self.sessions.load_session(_sid, max_messages=30)
+                # Inject session summary for context restoration
                 if hasattr(self.sessions, 'get_summary'):
                     _summary = self.sessions.get_summary(_sid)
                     if _summary:
                         _loaded.insert(0, {"role": "system", "content": f"[Session Context] {_summary}"})
-                _loaded = [m for m in _loaded if m.get("role") in ("user", "assistant")]
                 if _loaded:
                     messages = [{"role": "system", "content": self.system_prompt}] + _loaded
                     session["messages"] = messages
@@ -2386,7 +2388,8 @@ class AsyncWorker:
                 if _ctx:
                     _enrichments.append(_ctx)
             except Exception:
-                pass  # silent degrade
+                logger.error("[VIGIL] check_message FAILED — blocking message for safety (fail-closed)")
+                return msg  # fail-closed: block message if security scanner is unavailable
 
         if _enrichments:
             messages[0]["content"] = (
@@ -2666,18 +2669,16 @@ class AsyncWorker:
                         if len(r) > len(best_proof):
                             best_proof = r
                 content = f"[shell]\n{best_proof[:3000]}" if best_proof else f"[ops: {', '.join(tool_names_used[:6])}]"
-            # Truth check before reporting
+            # Truth reporter verification before sending response
+            _verified = content
             if getattr(self, 'truth_reporter', None) and self.truth_reporter:
                 try:
-                    _vresult = self.truth_reporter.verify_before_report(
-                        operation="reply"
-                    )
+                    if not self.truth_reporter.verify_before_report(operation="reply"):
+                        self.logger.warning("[TruthReporter] Summary reply verification failed")
                 except Exception:
-                    _vresult = None
-                if isinstance(_vresult, str) and len(_vresult) > len(content):
-                    content = _vresult
+                    pass
             channel.send(Response(
-                content=content,
+                content=_verified,
                 target=msg.sender, source=msg.source, chat_id=msg.chat_id,
             ))
             messages.append({"role": "assistant", "content": content})
@@ -2701,31 +2702,6 @@ class AsyncWorker:
 
             return
         if content.strip():
-            # Send final response to user
-            try:
-                from tical_code.core.response_formatter import format_final_reply
-                formatted = format_final_reply(content)
-            except Exception:
-                formatted = content
-            # Truth check before reporting
-            if getattr(self, 'truth_reporter', None) and self.truth_reporter:
-                try:
-                    _vresult = self.truth_reporter.verify_before_report(
-                        operation="reply"
-                    )
-                except Exception:
-                    _vresult = None
-                if isinstance(_vresult, str) and len(_vresult) > len(formatted):
-                    formatted = _vresult
-            channel.send(Response(
-                content=formatted,
-                target=msg.sender, source=msg.source, chat_id=msg.chat_id,
-            ))
-            # REFACTOR 2026-07-12: memory_save is user-triggered, not auto.
-            # Auto-saving last_context created feedback loops with stale task reports.
-            return
-
-        if content.strip():
             try:
                 formatted = format_final_reply(content)
             except Exception:
@@ -2741,6 +2717,14 @@ class AsyncWorker:
                     formatted = "Empty or fence-spam blocked. Send a concrete order."
             except Exception:
                 pass
+
+            # Truth reporter verification before sending
+            if getattr(self, 'truth_reporter', None) and self.truth_reporter:
+                try:
+                    if not self.truth_reporter.verify_before_report(operation="reply"):
+                        self.logger.warning("[TruthReporter] Reply verification failed — sending anyway")
+                except Exception:
+                    pass
 
             # LIVE 2026-07-09f: self-evolve success record
             try:
@@ -2765,9 +2749,16 @@ class AsyncWorker:
                 _explicit_continue = True
             if _explicit_continue and self._sustained_task_mgr:
                 import asyncio as _aio2
-                _pending = self._sustained_task_mgr.list_active()
-                if _pending:
-                    self.logger.info("Task continuation requested - %d pending tasks", len(_pending))
+                _pending = getattr(self._sustained_task_mgr, 'list_active', None)
+                if _pending is None:
+                    # SustainedTaskManager uses list_tasks() not list_active()
+                    _tasks = _aio2.run(self._sustained_task_mgr.list_tasks(
+                        state=None, limit=20
+                    ))
+                else:
+                    _tasks = _pending()
+                if _tasks:
+                    self.logger.info("Task continuation requested - %d pending tasks", len(_tasks))
         except Exception:
             pass
 
@@ -3038,7 +3029,7 @@ def main():
                     worker.checkpoint.restore(cp_id, confirm=True)
                     # NOTE: Conversation messages are NOT restored from checkpoint.
                     # Loading old messages pollutes the new context and causes
-                    # the AI to reply about stale topics (e.g. Node-C tunnel debug
+                    # the AI to reply about stale topics (e.g. Pro7 tunnel debug
                     # mixed into "audit code" requests). Fresh conversation only.
             except Exception as e:
                 logger.warning("Checkpoint restore failed (non-blocking): %s", e)
