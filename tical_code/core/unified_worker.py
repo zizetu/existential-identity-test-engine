@@ -2505,14 +2505,22 @@ class AsyncWorker:
             # Dangerous tools are blocked unless explicitly allowed via ALLOW_DANGEROUS_TOOLS env var,
             # or the PermissionChecker's rules (mode=bypassPermissions, allowed_tools, etc.).
             # Set DANGEROUS_TOOLS_AUDIT=1 to log blocks without enforcing them.
+            # Fallback: if PermissionChecker failed to init, use hardcoded set as last-resort guard.
             _audit_only = os.getenv("DANGEROUS_TOOLS_AUDIT", "") == "1"
+            _checker = getattr(self, '_permission_checker', None)
             _filtered = []
+            _DANGEROUS_DEFAULTS = {"bash", "shell", "exec", "subprocess", "terminal", "restart"}
+            _ALLOWED_OVERRIDE = os.getenv("ALLOW_DANGEROUS_TOOLS", "")
+            _ALLOWED_SET = {s.strip() for s in _ALLOWED_OVERRIDE.split(",") if s.strip()}
             for _tc in response["tool_calls"]:
                 _fn = _tc.get("function", {})
                 _tname = _fn.get("name", "") or _tc.get("name", "")
-                _checker = getattr(self, '_permission_checker', None)
                 if _checker is not None:
-                    _allowed, _reason = _checker.can_use_tool(_tname)
+                    try:
+                        _allowed, _reason = _checker.can_use_tool(_tname)
+                    except Exception as _pe:
+                        self.logger.error("[TOOL_GUARD] PermissionChecker error for %s: %s — denying", _tname, _pe)
+                        _allowed, _reason = False, f"PermissionChecker error: {_pe}"
                     if not _allowed:
                         if _audit_only:
                             self.logger.warning(
@@ -2523,6 +2531,20 @@ class AsyncWorker:
                             self.logger.warning(
                                 "[TOOL_GUARD] blocked tool: %s (reason: %s; set ALLOW_DANGEROUS_TOOLS to whitelist)",
                                 _tname, _reason,
+                            )
+                            continue
+                else:
+                    # Fallback: PermissionChecker unavailable — use hardcoded guard
+                    if _tname in _DANGEROUS_DEFAULTS and _tname not in _ALLOWED_SET:
+                        if _audit_only:
+                            self.logger.warning(
+                                "[TOOL_GUARD:AUDIT:FALLBACK] would block %s (PermissionChecker unavailable; audit mode)",
+                                _tname,
+                            )
+                        else:
+                            self.logger.warning(
+                                "[TOOL_GUARD:FALLBACK] blocked tool: %s (PermissionChecker unavailable; set ALLOW_DANGEROUS_TOOLS to whitelist)",
+                                _tname,
                             )
                             continue
                 _filtered.append(_tc)
