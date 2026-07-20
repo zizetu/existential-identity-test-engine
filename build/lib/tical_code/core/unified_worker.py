@@ -2288,9 +2288,15 @@ class AsyncWorker:
         formats the final response, and sends it back via the channel.
         """
         # SECURITY: enforce sender allowlist (env ALLOWED_SENDERS, comma-separated)
-        _allowed_senders = os.getenv("ALLOWED_SENDERS", "").strip()
-        if _allowed_senders:
-            _allowed_set = {s.strip() for s in _allowed_senders.split(",") if s.strip()}
+        # Default: fail-closed — if not configured, reject all external messages
+        _allowed_raw = os.getenv("ALLOWED_SENDERS", "")
+        if _allowed_raw == "":
+            _sender = getattr(msg, "sender", "")
+            if _sender and _sender not in ("system", "worker"):
+                logger.warning(f"SECURITY: ALLOWED_SENDERS not configured, blocking sender '{_sender}'")
+                return
+        else:
+            _allowed_set = {s.strip() for s in _allowed_raw.split(",") if s.strip()}
             _sender = getattr(msg, "sender", "")
             if _sender and _sender not in _allowed_set:
                 logger.warning(f"SECURITY: blocked unauthorized sender '{_sender}' (not in ALLOWED_SENDERS)")
@@ -2470,6 +2476,20 @@ class AsyncWorker:
             response["tool_calls"] = existing + _gateway_tc
         while response.get("tool_calls") and tool_iterations < MAX_TOOL_ITERATIONS:
             tool_iterations += 1
+
+            # P0 SECURITY: tool guard — deny dangerous tools unless explicitly allowed
+            DANGEROUS_TOOLS = {"bash", "shell", "exec", "subprocess", "terminal", "restart"}
+            ALLOWED_TOOLS_OVERRIDE = os.getenv("ALLOW_DANGEROUS_TOOLS", "").split(",") if os.getenv("ALLOW_DANGEROUS_TOOLS") else []
+            _filtered = []
+            for _tc in response["tool_calls"]:
+                _fn = _tc.get("function", {})
+                _tname = _fn.get("name", "") or _tc.get("name", "")
+                if _tname in DANGEROUS_TOOLS and _tname not in ALLOWED_TOOLS_OVERRIDE:
+                    self.logger.warning(f"[TOOL_GUARD] blocked dangerous tool: {_tname} (set ALLOW_DANGEROUS_TOOLS to whitelist)")
+                    continue
+                _filtered.append(_tc)
+            response["tool_calls"] = _filtered
+
             # LIVE WIRE QUEUE PREEMPT 2026-07-09f
             try:
                 _q = self._session_queues.get(session_id)
