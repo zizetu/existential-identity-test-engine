@@ -1235,6 +1235,47 @@ class Worker:
         """
         logger.info(f"Worker {self.name} entering main loop")
 
+        # ── Delivery Ledger: redeliver any pending obligations from prior crashes ──
+        try:
+            from tical_code.core.delivery_ledger import load_pending, abandon_expired
+
+            abandon_expired()
+            pending = load_pending()
+            if pending:
+                logger.info(
+                    "Delivery ledger: %d pending obligation(s) from prior run(s) — will redeliver",
+                    len(pending),
+                )
+                for obl in pending:
+                    logger.info(
+                        "  Pending: chat=%s id=%s attempts=%d",
+                        obl["chat_id"], obl["obligation_id"][:12], obl["attempts"],
+                    )
+            else:
+                logger.debug("Delivery ledger: no pending obligations")
+        except Exception as e:
+            logger.warning("Delivery ledger startup check failed: %s", e)
+
+        # ── Delivery Ledger: health check ──
+        try:
+            from tical_code.core.delivery_ledger import ledger_health
+
+            health = ledger_health()
+            if health["ok"]:
+                logger.debug(
+                    "Delivery ledger healthy: db=%s size=%d pending=%d delivered=%d",
+                    health["db_path"],
+                    health.get("size_bytes", 0),
+                    health.get("pending", 0),
+                    health.get("delivered", 0),
+                )
+            else:
+                logger.warning(
+                    "Delivery ledger unhealthy: %s", health.get("error", "unknown")
+                )
+        except Exception as e:
+            logger.debug("Delivery ledger health check unavailable: %s", e)
+
         # ─────────────────────────────────────────────────
         # Loop tracking (for crash forensics / signal handlers)
         # ─────────────────────────────────────────────────

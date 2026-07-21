@@ -79,7 +79,8 @@ from tical_code.core.shared_context import SharedContext, _get_rss_mb
 from tical_code.core.trace import TraceLogger, TraceEvent
 from tical_code.core.channel import Message, Response
 from tical_code.core.doom_loop import DoomLoopDetector, DoomLoopConfig, LoopLevel as DoomLoopLevel
-from tical_code.core.tool_executor import execute, TOOL_SCHEMAS, is_concurrency_safe
+from tical_code.core.tool_executor import execute, is_concurrency_safe
+from tical_code.core.tool_schemas import TOOL_SCHEMAS, build_tool_set, load_rare_tools
 from tical_code.core.clarify import ClarifyAnswer, ClarifyStatus, ClarifyStrategy, format_clarify_questions
 from tical_code.core.response_formatter import format_result
 from tical_code.core.prompt import build_power_mode_suffix, strip_and_inject_power_mode
@@ -129,6 +130,50 @@ except ImportError:
     _SKILL_AUDIT_AVAILABLE = False
 
 logger = logging.getLogger("tical-code.message_handler")
+
+# ── Session cache ──────────────────────────────────────────────────
+# Avoids re-reading session history from SQLite on consecutive messages
+# within the same session and a short time window.
+_SESSION_CACHE_MAX = 100
+_SESSION_CACHE_TTL = 3.0  # seconds
+_session_cache: dict = {}  # session_id → (timestamp, history_list)
+
+
+# Per-session set of loaded rare tool names (for tool tier loading)
+_session_rare_tools: dict = {}  # session_id -> set[str]
+
+
+def _activate_rare_tool(session_id: str, tool_name: str) -> bool:
+    """Activate a rare/admin tool for the given session.
+
+    Returns True if the tool was found in the rare library and activated.
+    """
+    from tical_code.core.tool_schemas import load_rare_tools
+    if load_rare_tools([tool_name]):
+        loaded = _session_rare_tools.setdefault(session_id, set())
+        loaded.add(tool_name)
+        return True
+    return False
+
+
+def _load_session_cached(sessions, session_id: str) -> list:
+    """Load session history with a short-lived cache to reduce SQLite reads.
+
+    Cache holds at most _SESSION_CACHE_MAX entries with a TTL of
+    _SESSION_CACHE_TTL seconds.  Cache is cleared when full to prevent
+    memory growth.
+    """
+    if not sessions:
+        return []
+    now = time.time()
+    cached = _session_cache.get(session_id)
+    if cached and (now - cached[0]) < _SESSION_CACHE_TTL:
+        return cached[1]
+    history = sessions.load_session(session_id)
+    _session_cache[session_id] = (now, history)
+    if len(_session_cache) > _SESSION_CACHE_MAX:
+        _session_cache.clear()
+    return history
 
 # ── EITE Data Directory ──────────────────────────────────────────
 # All persistent data lives under this base directory (passwords, logs,
@@ -1548,7 +1593,7 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
         _msg_task_id = f"msg-{msg.source}-{int(time.time())}"
         ctx.skill_extractor.start_task(task_id=_msg_task_id, goal=msg.content[:200])
     # Load session history for context persistence
-    history = ctx.sessions.load_session(session_id) if ctx.sessions else []
+    history = _load_session_cached(ctx.sessions, session_id)
     # Inject session summary for context restoration on restart
     if ctx.sessions and history and hasattr(ctx.sessions, 'get_summary'):
         _summary = ctx.sessions.get_summary(session_id)
@@ -1696,8 +1741,9 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
         )
         # Trace: record LLM call timing
         _trace_t0 = time.time()
+        _active_tools = build_tool_set(_session_rare_tools.get(session_id))
         _llm_result = ctx.llm.call(
-            _call_conv, tools=TOOL_SCHEMAS, preferred_family=_family, prefix=_prefill
+            _call_conv, tools=_active_tools, preferred_family=_family, prefix=_prefill
         )
         if asyncio.iscoroutine(_llm_result):
             _llm_result = _run_async_safe(_llm_result)
@@ -1707,8 +1753,9 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
             if response.get("error") and "rate_limit" not in str(response.get("error", "")):
                 _iteration_budget.record_failure()
                 time.sleep(1 + _retry)
+                _active_tools = build_tool_set(_session_rare_tools.get(session_id))
                 _llm_result = ctx.llm.call(
-                    _call_conv, tools=TOOL_SCHEMAS, preferred_family=_family, prefix=_prefill
+                    _call_conv, tools=_active_tools, preferred_family=_family, prefix=_prefill
                 )
                 if asyncio.iscoroutine(_llm_result):
                     _llm_result = _run_async_safe(_llm_result)
@@ -1921,6 +1968,15 @@ def handle_message(ctx: SharedContext, channel, msg: Message) -> None:
                     info = _execute_tool_core(tc, ctx, iteration)
 
                 result = info.get("result") or {}
+
+                # ── capability_call interceptor: activate requested rare tool ──
+                if name == "capability_call" and not info.get("blocked"):
+                    _req_name = args.get("name", "") if isinstance(args, dict) else ""
+                    if _req_name and _activate_rare_tool(session_id, _req_name):
+                        logger.info(
+                            "Rare tool '%s' activated for session %s via capability_call",
+                            _req_name, session_id,
+                        )
 
                 # Handle blocked tools (pre-execution blocks + execution errors)
                 if info.get("blocked"):

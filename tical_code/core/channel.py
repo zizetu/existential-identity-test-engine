@@ -1,4 +1,4 @@
-# EITElite -- AI Agent Platform
+# tical-code -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -14,24 +14,15 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Original repository: https://github.com/zizetu/existential-identity-test-engine
+# Original repository: https://github.com/zizetu/tical-agent
 #
 
-"""channel layer - message send/receive abstraction.
-
-Channel hierarchy:
-  Channel (abstract base)
-   ├── TelegramChannel   – polls Telegram Bot API (TG_BOT_TOKEN env)
-   └── TicalChatChannel  – polls tical-chat HTTP API (TICAL_CHAT_URL + TICAL_CHAT_KEY env)
-
-To add a custom channel: subclass Channel, implement poll() + send(),
-then wire it into unified_worker.py's channel init block.
-All credentials are read from environment variables at runtime.
-"""
+"""channel layer - message send/receive abstraction."""
 
 import os
 import json
 import logging
+import time
 import urllib.request, urllib.error
 import ssl
 import tempfile
@@ -41,32 +32,31 @@ import io
 import re
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 from tical_code.core.security_baseline import _check_ssrf
+from tical_code.core.delivery_ledger import create_obligation, mark_delivered, mark_failed
 
-_UA = "eite-agent/0.1.5 (Cloudflare bypass)"
-logger = logging.getLogger("EITElite.channel")
+_UA = "tical-agent/0.9.0"
+logger = logging.getLogger("tical-code.channel")
 
 
 def _ssrf_guard(url_or_req, private_ok=False):
     """SSRF check before urlopen. Raises ValueError if blocked.
 
-    localhost / 127.0.0.1 / ::1 are always exempt (internal services).
-    When private_ok=True, private/RFC1918 addresses are allowed (opt-in).
+    localhost / 127.0.0.1 / ::1 are always exempt (internal services like TicalChat).
     """
     url = url_or_req if isinstance(url_or_req, str) else url_or_req.full_url
-    # LIVE 2026-07-09p: localhost exemption for internal services
+    # LIVE 2026-07-09p: localhost exemption for internal services (TicalChat :8001)
     try:
-        from urllib.parse import urlparse as _urlparse
-        _parsed = _urlparse(url)
+        _parsed = urlparse(url)
         _host = (_parsed.hostname or "").lower()
         if _host in ("localhost", "127.0.0.1", "::1"):
             return  # localhost always allowed
     except Exception:
         pass
-    if private_ok:
-        return
-    _check_ssrf(url)  # raises ValueError on failure, returns None on success
+    _check_ssrf(url) if not private_ok else None  # raises ValueError on failure, returns None on success
+
 
 class Message:
     """Unified message format."""
@@ -194,6 +184,24 @@ class TelegramChannel(Channel):
     def _download_media(self, msg: dict) -> list:
         """Download photo/document from Telegram, return [{"type":"image","mime":"...","data":"base64..."}]"""
         import base64, urllib.request
+        import io
+        MAX_DOWNLOAD_SIZE = 20 * 1024 * 1024  # 20 MB
+        
+        def _read_with_limit(url: str, timeout: int = 30) -> bytes:
+            """Read URL content with 20MB size limit using chunked reads."""
+            chunks = []
+            total = 0
+            with urllib.request.urlopen(url, timeout=timeout) as resp:
+                while True:
+                    chunk = resp.read(65536)
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    if total > MAX_DOWNLOAD_SIZE:
+                        raise ValueError(f"Download size exceeds {MAX_DOWNLOAD_SIZE} bytes from {url[:60]}")
+                    chunks.append(chunk)
+            return b"".join(chunks)
+        
         media_list = []
         try:
             # Photo: take largest size (last in array)
@@ -206,8 +214,8 @@ class TelegramChannel(Channel):
                 file_path = file_info.get("result", {}).get("file_path", "")
                 if file_path:
                     _ssrf_guard(f"{self._telegram_file_api}/{file_path}")
-                    img_data = urllib.request.urlopen(
-                        f"{self._telegram_file_api}/{file_path}", timeout=15).read()
+                    img_data = _read_with_limit(
+                        f"{self._telegram_file_api}/{file_path}", timeout=15)
                     b64 = base64.b64encode(img_data).decode()
                     mime = "image/jpeg"
                     if file_path.endswith(".png"): mime = "image/png"
@@ -226,8 +234,8 @@ class TelegramChannel(Channel):
                 file_path = file_info.get("result", {}).get("file_path", "")
                 if file_path:
                     _ssrf_guard(f"{self._telegram_file_api}/{file_path}")
-                    ogg_data = urllib.request.urlopen(
-                        f"{self._telegram_file_api}/{file_path}", timeout=30).read()
+                    ogg_data = _read_with_limit(
+                        f"{self._telegram_file_api}/{file_path}", timeout=30)
                     with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as f:
                         f.write(ogg_data)
                         tmp_path = f.name
@@ -249,8 +257,8 @@ class TelegramChannel(Channel):
                 file_path = file_info.get("result", {}).get("file_path", "")
                 if file_path:
                     _ssrf_guard(f"{self._telegram_file_api}/{file_path}")
-                    audio_data = urllib.request.urlopen(
-                        f"{self._telegram_file_api}/{file_path}", timeout=30).read()
+                    audio_data = _read_with_limit(
+                        f"{self._telegram_file_api}/{file_path}", timeout=30)
                     with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as f:
                         f.write(audio_data)
                         tmp_path = f.name
@@ -273,8 +281,8 @@ class TelegramChannel(Channel):
                 if file_path:
                     fname = file_path.lower()
                     _ssrf_guard(f"{self._telegram_file_api}/{file_path}")
-                    doc_data = urllib.request.urlopen(
-                        f"{self._telegram_file_api}/{file_path}", timeout=30).read()
+                    doc_data = _read_with_limit(
+                        f"{self._telegram_file_api}/{file_path}", timeout=30)
                     if doc_data:
                         if fname.endswith((".txt", ".md", ".csv", ".json", ".xml", ".yaml", ".yml", ".log", ".py", ".js", ".html", ".css", ".sh")):
                             text = doc_data.decode("utf-8", errors="replace")
@@ -301,6 +309,38 @@ class TelegramChannel(Channel):
             logger.warning(f"tg_media_download error: {e}")
         return media_list
 
+
+    def _extract_rich_message_text(self, msg: dict) -> str:
+        """Extract plain text from Telegram Premium rich_message.blocks."""
+        blocks = msg.get("rich_message", {}).get("blocks", [])
+        if not blocks:
+            return ""
+        lines = []
+        for block in blocks:
+            tp = block.get("type")
+            if tp in ("paragraph", "heading"):
+                t = block.get("text", "")
+                if isinstance(t, list):
+                    parts = []
+                    for seg in t:
+                        if isinstance(seg, dict):
+                            parts.append(seg.get("text", ""))
+                        else:
+                            parts.append(str(seg))
+                    t = "".join(parts)
+                lines.append(str(t))
+            elif tp == "table":
+                for row in block.get("cells", []):
+                    cells = []
+                    for cell in row:
+                        if isinstance(cell, dict):
+                            cell_text = cell.get("text", "")
+                            if isinstance(cell_text, dict):
+                                cell_text = cell_text.get("text", "")
+                            cells.append(str(cell_text))
+                    lines.append(" | ".join(cells))
+        return "\n".join(lines)
+
     def poll(self) -> list[Message]:
         import urllib.request
         try:
@@ -308,6 +348,10 @@ class TelegramChannel(Channel):
             _ssrf_guard(url)
             with urllib.request.urlopen(url, timeout=10) as resp:
                 data = json.loads(resp.read())
+            if not data.get("ok"):
+                logger.error("Telegram getUpdates failed: %s %s",
+                           data.get("error_code"), data.get("description", "")[:100])
+                return []
             msgs = []
             for u in data.get("result", []):
                 self._last_update = u["update_id"]
@@ -315,8 +359,54 @@ class TelegramChannel(Channel):
                 chat_id = str(msg.get("chat", {}).get("id", ""))
                 if not chat_id:
                     continue
-                text = msg.get("text") or msg.get("caption") or ""
+                text = msg.get("text") or msg.get("caption") or self._extract_rich_message_text(msg) or ""
                 text = text.strip()
+                # DEBUG: log raw message structure for forwarded messages
+                if msg.get("forward_from") or msg.get("forward_sender_name"):
+                    logger.warning("FORWARDED MSG RAW: %s", json.dumps(msg, indent=2, default=str)[:3000])
+                # Handle forwarded messages: prepend forward attribution
+                if msg.get("forward_from") or msg.get("forward_sender_name"):
+                    fwd_name = "unknown"
+                    fwd = msg.get("forward_from")
+                    if fwd:
+                        fwd_name = fwd.get("first_name", "") + " " + fwd.get("last_name", "")
+                        fwd_name = fwd_name.strip() or fwd.get("username", "unknown")
+                    elif msg.get("forward_sender_name"):
+                        fwd_name = msg["forward_sender_name"]
+                    if text:
+                        text = f"[Forwarded from {fwd_name}]: {text}"
+                    else:
+                        # Forwarded media with no text — download and describe
+                        fwd_media = self._download_media(msg)
+                        if fwd_media:
+                            types_desc = []
+                            for md in fwd_media:
+                                if md["type"] == "image": types_desc.append("image")
+                                elif md["type"] == "document": types_desc.append(md.get("filename", "file"))
+                                elif md["type"] == "document_text": types_desc.append("document (text extracted)")
+                                elif md["type"] == "binary_saved": types_desc.append(md.get("filename", "file") + " (saved)")
+                                elif md["type"] == "transcript": types_desc.append("voice message")
+                                else: types_desc.append("media")
+                            text = f"[Forwarded media from {fwd_name}]: {', '.join(types_desc)}"
+                            if fwd_media:
+                                import json as _json
+                                text += " " + _json.dumps(fwd_media)
+                        else:
+                            text = f"[Forwarded message from {fwd_name} — content unavailable, ask user to resend as text]"
+                # Handle replied-to messages: include original context
+                if msg.get("reply_to_message"):
+                    orig = msg["reply_to_message"]
+                    orig_text = orig.get("text") or orig.get("caption") or ""
+                    if orig_text and text:
+                        text = f"(In reply to: {orig_text[:200]})\n{text}"
+                # Handle entities (mentions, hashtags, URLs) — add as note if text is empty
+                if not text and msg.get("entities"):
+                    text = "[Message with formatting only]"
+                # Handle empty messages with only media
+                if not text and (msg.get("photo") or msg.get("voice") or
+                                 msg.get("audio") or msg.get("document") or
+                                 msg.get("video") or msg.get("sticker")):
+                    text = "[Media message]"
                 # Download media for supported types (photo only for now)
                 media_data = self._download_media(msg) if (msg.get("photo") or msg.get("voice") or msg.get("audio") or msg.get("document")) else []
                 # Build media annotation for text
@@ -358,7 +448,7 @@ class TelegramChannel(Channel):
             req = urllib.request.Request(
                 f"{self._api}/sendChatAction", data=data,
                 headers={"Content-Type": "application/json"}, method="POST")
-            _ssrf_guard(req)
+            _ssrf_guard(req, private_ok=True)
             with urllib.request.urlopen(req, timeout=3):
                 return True
         except Exception as e:
@@ -366,34 +456,48 @@ class TelegramChannel(Channel):
             return False
 
     def send(self, response: Response) -> bool:
-        # Sanitize outbound: never ship fence-spam / garbage dumps to Telegram
+        # LIVE 2026-07-09j: never ship fence-spam / garbage CSS dumps to Telegram
         try:
             from tical_code.core.response_formatter import sanitize_outbound_reply
             if response is not None and getattr(response, "content", None):
                 response.content = sanitize_outbound_reply(response.content)
         except Exception:
             pass
+        content = (response.content or "")[:4000]
+        chat_id = response.chat_id or ""
+        obligation_id = ""
+        if chat_id and content:
+            obligation_id = create_obligation(chat_id, content)
         try:
-            data = json.dumps({"chat_id": response.chat_id,
-                               "text": response.content[:4000]}).encode()
+            data = json.dumps({"chat_id": chat_id,
+                               "text": content}).encode()
             req = urllib.request.Request(
                 f"{self._api}/sendMessage", data=data,
                 headers={"Content-Type": "application/json"}, method="POST")
-            _ssrf_guard(req)
+            _ssrf_guard(req, private_ok=True)
             with urllib.request.urlopen(req, timeout=5) as resp:
                 body = json.loads(resp.read())
                 if not body.get("ok"):
-                    logger.warning(f"tg_send api_error: {body.get('description','?')} chat_id={response.chat_id}")
+                    if obligation_id:
+                        mark_failed(obligation_id,
+                                     body.get("description", "api_error"))
+                    logger.warning(
+                        f"tg_send api_error: {body.get('description','?')} chat_id={chat_id}"
+                    )
                     return False
+                if obligation_id:
+                    mark_delivered(obligation_id)
                 return True
         except Exception as e:
-            logger.warning(f"tg_send error: {e} chat_id={response.chat_id}")
+            if obligation_id:
+                mark_failed(obligation_id, str(e)[:200])
+            logger.warning(f"tg_send error: {e} chat_id={chat_id}")
             return False
 
 
 class TicalChatChannel(Channel):
     def __init__(self, base_url: str = "http://localhost:8080",
-                 identity: str = os.environ.get("WORKER_NAME", "agent"), shared_key: str = os.environ.get("TICAL_CHAT_KEY", ""),
+                 identity: str = "worker", shared_key: str = os.environ.get("TICAL_CHAT_KEY", ""),
                  api_key: str = None):
         if api_key is not None:
             shared_key = api_key
@@ -405,12 +509,12 @@ class TicalChatChannel(Channel):
 
     def poll(self) -> list[Message]:
         try:
-            url = f"{self._url}/v1/messages?since={self._since}&limit=5"
+            url = f"{self._url}/v1/messages?since={self._since}&limit=5&target={self._identity}"
             req = urllib.request.Request(
                 url, headers={"X-AI-Identity": self._identity,
                               "X-AI-Key": self._key,
                               "User-Agent": _UA})
-            _ssrf_guard(req)
+            _ssrf_guard(req, private_ok=True)
             with urllib.request.urlopen(req, timeout=10) as resp:
                 data = json.loads(resp.read())
             msgs = []
@@ -431,21 +535,32 @@ class TicalChatChannel(Channel):
                     source="tical-chat",
                     raw=m))
             return msgs
-        except urllib.error.URLError as e:
-            code = getattr(e, 'code', 0) or 0
-            if code in (401, 403):
-                now_m = int(time.time()) // 300
-                if getattr(self, '_chat_poll_auth_ts', -1) != now_m:
-                    self._chat_poll_auth_ts = now_m
-                    logger.error(f"chat_poll auth error (HTTP {code}): {e}")
-            else:
-                logger.debug(f"chat_poll URLError: {e}")
-            return []
         except (ConnectionError, ConnectionRefusedError, TimeoutError) as e:
             logger.error(f"chat_poll error: {e}")
             return []
+        except urllib.error.URLError as e:
+            status_code = getattr(e, 'code', None)
+            if status_code in (401, 403):
+                now = time.time()
+                last = getattr(self, '_chat_poll_auth_log_ts', 0)
+                if now - last >= 300:
+                    self._chat_poll_auth_log_ts = now
+                    logger.error(f"chat_poll auth failed (HTTP {status_code}): {e}")
+            else:
+                logger.error(f"chat_poll error: {e}")
+            return []
         except Exception as e:
-            logger.error(f"chat_poll error: {e}")
+            status_code = getattr(e, 'status_code', None)
+            if status_code is None and hasattr(e, 'response'):
+                status_code = getattr(e.response, 'status_code', None)
+            if status_code in (401, 403):
+                now = time.time()
+                last = getattr(self, '_chat_poll_auth_log_ts', 0)
+                if now - last >= 300:
+                    self._chat_poll_auth_log_ts = now
+                    logger.error(f"chat_poll auth failed (HTTP {status_code}): {e}")
+            else:
+                logger.debug(f"chat_poll transient error: {e}")
             return []
 
     def send(self, response: Response) -> bool:
@@ -486,7 +601,7 @@ class TicalChatChannel(Channel):
                     "X-AI-Key": self._key,
                     "User-Agent": _UA,
                 }, method="POST")
-            _ssrf_guard(req)
+            _ssrf_guard(req, private_ok=True)
             with urllib.request.urlopen(req, timeout=10):
                 return True
         except Exception as e:
@@ -503,7 +618,7 @@ class TicalChatChannel(Channel):
                 req = urllib.request.Request(
                     url, headers={"X-AI-Identity": self._identity, "X-AI-Key": self._key,
                                   "User-Agent": _UA})
-                _ssrf_guard(req)
+                _ssrf_guard(req, private_ok=True)
                 urllib.request.urlopen(req, timeout=5)
                 logger.info("reconnect successful")
                 return True

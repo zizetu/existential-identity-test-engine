@@ -1,8 +1,8 @@
-# EITElite -- AI Agent Platform
+# tical-code -- AI Agent Platform
 # Copyright (C) 2026 zizetu
-# Original repository: https://github.com/zizetu/existential-identity-test-engine
+# Original repository: https://github.com/zizetu/eite-agent
 #
-# Licensed under AGPLv3. See LICENSE for details.
+# Independent AI agent system. See the project README for details.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -15,19 +15,24 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-logger = logging.getLogger("EITElite.prompt")
+logger = logging.getLogger("tical-code.prompt")
 
 
 def _build_tool_descriptions() -> List[str]:
-    """Build tool descriptions dynamically from TOOL_SCHEMAS."""
+    """Build tool descriptions dynamically from essential TOOL_SCHEMAS."""
     try:
-        from tical_code.core.tool_executor import TOOL_SCHEMAS
+        from tical_code.core.tool_schemas import TOOL_SCHEMAS_ESSENTIAL
+        schemas = TOOL_SCHEMAS_ESSENTIAL
     except ImportError:
-        return []
+        try:
+            from tical_code.core.tool_executor import TOOL_SCHEMAS
+            schemas = TOOL_SCHEMAS
+        except ImportError:
+            return []
 
     lines: List[str] = []
     seen_names: set = set()
-    for entry in TOOL_SCHEMAS:
+    for entry in schemas:
         func = entry.get("function", {})
         name = func.get("name", "")
         if name in seen_names:
@@ -43,7 +48,7 @@ def _build_tool_descriptions() -> List[str]:
 
 
 def build_system_prompt(
-    name: str = "agent",
+    name: str = "seoul",
     hostname: str = "",
     deploy_path: str = "",
     target_model: str = "",
@@ -61,7 +66,6 @@ def build_system_prompt(
         active_modules: Dict of enabled modules from registry.
         platform: Optional platform name for formatting hints
             ('telegram', 'wechat', 'cli', 'tical-chat', or '' for generic).
-        cognitive_workspace: Optional Workspace for cognitive state injection.
     """
     parts = [
         f"You are {name}, an autonomous agent on {hostname or 'this node'} ({target_model or 'unknown model'}). "
@@ -69,20 +73,13 @@ def build_system_prompt(
         "Reply clearly and directly. Be useful, not verbose."
     ]
 
-    # Inject cognitive workspace summary
-    if cognitive_workspace is not None:
-        try:
-            ws_summary = cognitive_workspace.get_summary()
-            if ws_summary:
-                parts.append(ws_summary)
-        except Exception:
-            pass
-
     # Operating rules
     parts.append(
         "## Operating rules\n"
-        "- Call tools to act -- do not just say what you will do.\n"
-        "- Keep going until the task is done. Do not stop after one step.\n"
+        "- When the user asks you to DO something (fix, modify, deploy, check), call tools to act.\n"
+        "- When the user asks a question or sends a greeting, reply directly WITHOUT tools.\n"
+        "After completing tool calls, STOP and summarize results to the user. Do NOT keep calling tools.\n"
+                "- You have 14 core tools available. To access advanced tools (task management, checkpoint, delegation, monitoring, evolution), call `capability_call` with the tool name as the `name` parameter. The system will activate it on your next turn.\n"
         "- Read enough files to answer, then reply. Do not read the entire codebase.\n"
         "- Never make up data. If something fails, report the failure.\n"
         "- IMPORTANT: The user may send short Chinese commands. Interpret them as DIRECT ORDERS:\n"
@@ -98,6 +95,20 @@ def build_system_prompt(
         "  memory_search FIRST to look up relevant context. Do not say 'I don't know'\n"
         "  without searching. The memory_search tool searches all past conversations\n"
         "  and memory files (SOUL.md, MEMORY.md, USER.md)."
+    )
+
+    # Self-modification capability
+    parts.append(
+        "## Self-Modification\n"
+        "You CAN modify your own code and configuration — but ONLY when the user explicitly requests it.\n"
+        "- Use safe_modify or safe_modify_diff to change code (with automatic git backup + rollback).\n"
+        "- After modifying code, call restart_self to apply changes.\n"
+        "- NEVER self-modify without user request. Do NOT proactively optimize or fix things.\n"
+        "- NEVER: delete your own deployment directory, stop/disable your service permanently,\n"
+        "  run rm -rf on system paths, or execute shutdown/reboot/poweroff.\n"
+        "- You may NOT switch to a different model family by editing providers.json;\n"
+        "  use shell_exec to check providers, then safe_modify to update config, then restart_self.\n"
+        "- Always verify code changes with syntax check before restarting."
     )
 
     # Reply Protocol -- structured reply rules
@@ -116,12 +127,39 @@ def build_system_prompt(
     if tools:
         parts.append("## Tools\n" + "\n".join(tools))
 
+    # Active module capabilities (from module_registry descriptions)
+    if active_modules:
+        try:
+            from tical_code.core.module_registry import get_active_descriptions
+            descs = get_active_descriptions(active_modules)
+            if descs:
+                lines = []
+                for mod_name, description, is_full in descs:
+                    profile_tag = "full" if is_full else "light"
+                    lines.append(f"- **{mod_name}** [{profile_tag}]: {description}")
+                parts.append(
+                    "## Active Capabilities\n"
+                    "The following modules are loaded and available:\n"
+                    + "\n".join(lines)
+                )
+        except Exception as e:
+            logger.debug("active_modules prompt injection skipped: %s", e)
+
+    # Cognitive workspace state injection (v0.9+)
+    if cognitive_workspace is not None:
+        try:
+            ws_summary = cognitive_workspace.get_summary()
+            if ws_summary:
+                parts.append(ws_summary)
+        except Exception:
+            pass  # Graceful degradation if workspace fails
+
     return "\n\n".join(parts)
 
 
-def build_power_mode_suffix(name: str = "worker") -> str:
+def build_power_mode_suffix(name: str = "ani") -> str:
     return ""
 
 
-def strip_and_inject_power_mode(prompt: str, name: str = "worker") -> str:
+def strip_and_inject_power_mode(prompt: str, name: str = "ani") -> str:
     return prompt

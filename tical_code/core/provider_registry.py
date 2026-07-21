@@ -1,4 +1,4 @@
-# EITElite -- AI Agent Platform
+# tical-code -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -14,9 +14,15 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Original repository: https://github.com/zizetu/existential-identity-test-engine
+# Original repository: https://github.com/zizetu/tical-agent
 #
-"""Provider Registry - Git-managed LLM provider configuration."""
+
+"""Provider Registry - load model cluster configs from git-tracked JSON files.
+
+Supports per-provider ``enabled`` flag and worker-config ``excluded_providers``
+list for configuration hibernation: providers remain in config but are hidden
+from the model picker, runtime resolver, and health checks.
+"""
 
 import json
 import logging
@@ -24,7 +30,7 @@ import os
 from pathlib import Path
 from typing import Dict, List, Optional
 
-logger = logging.getLogger("EITElite.provider_registry")
+logger = logging.getLogger("tical-code.provider_registry")
 
 
 class ProviderRegistry:
@@ -36,6 +42,14 @@ class ProviderRegistry:
     consumption by ModelFailover. Supports multi-key providers where multiple
     API keys are distributed across environment variables (e.g., MIMO_API_KEY_1
     through MIMO_API_KEY_4).
+
+    **enabled flag:** Each provider definition can set ``"enabled": false`` to
+    hide it from the model picker, runtime resolution, and health checks without
+    removing it from config.  Missing ``enabled`` = visible (backward compatible).
+
+    **excluded_providers:** Worker-config can list provider names to hide from
+    the model picker only (shallow filter).  Unlike ``enabled: false``, excluded
+    providers are still usable at runtime via explicit model switch.
 
     Config locations (first match wins):
       1. {repo_root}/config/providers.json
@@ -53,7 +67,7 @@ class ProviderRegistry:
         provided. Configuration is not loaded until load() is called.
 
         Args:
-            repo_root: Absolute path to the EITElite repository root directory.
+            repo_root: Absolute path to the tical-code repository root directory.
                 If None, uses the TICAL_CODE_ROOT env var or os.getcwd().
             worker_name: Name identifier for this worker instance, used to locate
                 the worker-specific config file under config/worker-configs/.
@@ -126,6 +140,20 @@ class ProviderRegistry:
         self._loaded = True
         return self
 
+    def _is_provider_enabled(self, name: str, pdef: Dict) -> bool:
+        """Check if a provider is enabled.
+
+        A provider is enabled by default (missing ``enabled`` = True).
+        Only an explicit ``"enabled": false`` hides it.
+
+        This is the single gate that feeds into four stages:
+          1. Runtime resolution (get_providers → skip)
+          2. Model picker (list_providers → skip)
+          3. Provider switch validation (switch_model → skip)
+          4. Health/diagnosis output (doctor → skip)
+        """
+        return pdef.get("enabled", True)
+
     def get_providers(self) -> List[Dict]:
         """Build an ordered list of resolved provider dictionaries for ModelFailover consumption.
 
@@ -133,6 +161,14 @@ class ProviderRegistry:
         list, resolves environment variables for API keys and endpoint URLs,
         and expands multi-key providers into individual entries. Automatically
         calls load() if configuration has not yet been loaded.
+
+        **Filtering chain:**
+          1. Worker-config ``disabled_providers`` — deep block (runtime + all)
+          2. Provider-level ``enabled: false`` — deep block (runtime + all)
+          3. Worker-config ``excluded_providers`` — shallow block (model picker only)
+
+        ``get_providers`` applies gates 1-2 (deep).  Gate 3 (excluded_providers)
+        is applied at the model picker / list_providers level only.
 
         Returns:
             A list of provider dictionaries, each containing keys such as
@@ -147,6 +183,7 @@ class ProviderRegistry:
         ordered_names = self._worker_config.get(
             "providers", list(self._provider_defs.keys())
         )
+        # Gate 1: worker-config deep block (disabled_providers)
         disabled = set(self._worker_config.get("disabled_providers", []))
 
         for name in ordered_names:
@@ -157,6 +194,11 @@ class ProviderRegistry:
                 continue
 
             pdef = self._provider_defs[name]
+            # Gate 2: provider-level enabled flag (deep block)
+            if not self._is_provider_enabled(name, pdef):
+                logger.info("Provider %s disabled by enabled:false flag", name)
+                continue
+
             provider_dicts = self._resolve_provider(name, pdef)
             result.extend(provider_dicts)
 
@@ -179,8 +221,9 @@ class ProviderRegistry:
                 return []
 
         key = self._resolve_env(pdef.get("env_key"))
-        if not key and pdef.get("auth_style") not in ("mimo-cli-subprocess",):
-            # Skip providers without keys (unless free channel)
+        auth_style = pdef.get("auth_style", "bearer")
+        if not key and auth_style not in ("mimo-cli-subprocess", "none"):
+            # Skip providers without keys (unless free channel, mimo-cli, or no auth)
             return []
 
         endpoint = (
@@ -245,6 +288,137 @@ class ProviderRegistry:
             return os.environ.get(env_key, "")
         return ""
 
+    def get_provider(self, name: str, include_disabled: bool = False) -> Optional[Dict]:
+        """Return the resolved provider dict for a single provider by name.
+
+        Args:
+            name: Provider name as defined in providers.json.
+            include_disabled: If True, return even providers with
+                ``enabled: false`` or listed in ``disabled_providers``.
+
+        Returns:
+            A resolved provider dict (same shape as get_providers entries),
+            or None if the provider is unknown, disabled, or has no keys.
+        """
+        if not self._loaded:
+            self.load()
+
+        if name not in self._provider_defs:
+            return None
+
+        pdef = self._provider_defs[name]
+        if not include_disabled:
+            disabled = set(self._worker_config.get("disabled_providers", []))
+            if name in disabled:
+                return None
+            if not self._is_provider_enabled(name, pdef):
+                return None
+
+        resolved = self._resolve_provider(name, pdef)
+        return resolved[0] if resolved else None
+
+    def get_disabled_providers(self) -> List[Dict]:
+        """Return all providers that are currently disabled by any mechanism.
+
+        Includes providers disabled via worker-config ``disabled_providers``,
+        provider-level ``enabled: false``, and ``enabled_env``-based toggles.
+        Each result dict contains the provider name and the reason for being
+        disabled.
+
+        Returns:
+            A list of dicts with keys ``name`` and ``reason``.
+        """
+        if not self._loaded:
+            self.load()
+
+        disabled = set(self._worker_config.get("disabled_providers", []))
+        excluded = set(self._worker_config.get("excluded_providers", []))
+        result = []
+
+        for name, pdef in self._provider_defs.items():
+            reasons = []
+            if name in disabled:
+                reasons.append("worker-config disabled_providers")
+            if not self._is_provider_enabled(name, pdef):
+                reasons.append("provider-level enabled:false")
+            if name in excluded:
+                reasons.append("worker-config excluded_providers (picker only)")
+            if not reasons:
+                enabled_env = pdef.get("enabled_env")
+                if enabled_env:
+                    val = os.environ.get(enabled_env, pdef.get("enabled_default", "1"))
+                    if val and val.lower() in ("0", "false", "no", "off"):
+                        reasons.append(f"env {enabled_env}={val}")
+            if reasons:
+                result.append({"name": name, "reason": "; ".join(reasons)})
+
+        return result
+
+    def get_total_providers(self) -> List[Dict]:
+        """Return ALL providers including disabled ones, for diagnostic/status views.
+
+        Unlike get_providers(), this method returns every provider definition
+        regardless of enabled/disabled flags.  Each entry includes a ``disabled``
+        boolean and optional ``disabled_reason`` for display purposes.
+
+        Returns:
+            A list of provider dicts with ``disabled`` and ``disabled_reason``
+            fields added for introspection.
+        """
+        if not self._loaded:
+            self.load()
+
+        disabled = set(self._worker_config.get("disabled_providers", []))
+        excluded = set(self._worker_config.get("excluded_providers", []))
+        result = []
+
+        for name, pdef in self._provider_defs.items():
+            is_disabled = name in disabled or not self._is_provider_enabled(name, pdef)
+            reasons = []
+            if name in disabled:
+                reasons.append("worker-config disabled_providers")
+            if not self._is_provider_enabled(name, pdef):
+                reasons.append("provider-level enabled:false")
+            if name in excluded:
+                reasons.append("worker-config excluded_providers (picker-only)")
+            enabled_env = pdef.get("enabled_env")
+            if enabled_env:
+                val = os.environ.get(enabled_env, pdef.get("enabled_default", "1"))
+                if val and val.lower() in ("0", "false", "no", "off"):
+                    is_disabled = True
+                    reasons.append(f"env {enabled_env}={val}")
+
+            result.append({
+                "name": name,
+                "display_name": pdef.get("name", name),
+                "family": pdef.get("family", "unknown"),
+                "default_model": pdef.get("default_model", "?"),
+                "cost": pdef.get("cost", "unknown"),
+                "priority": pdef.get("priority", 10),
+                "auth_style": pdef.get("auth_style", "bearer"),
+                "available_models": pdef.get("available_models", []),
+                "disabled": is_disabled,
+                "disabled_reason": "; ".join(reasons) if reasons else "",
+            })
+
+        return result
+
+    def reload(self) -> "ProviderRegistry":
+        """Force re-read configuration from disk on the next access.
+
+        Clears the internal cache and loaded flag so the next call to
+        get_providers(), list_providers(), or any accessor re-reads
+        the JSON files and environment variables.
+
+        Returns:
+            Self for chaining.
+        """
+        self._provider_defs = {}
+        self._worker_config = {}
+        self._loaded = False
+        logger.info("ProviderRegistry cache cleared, will reload on next access")
+        return self
+
     def get_worker_config(self) -> Dict:
         """Return a copy of the worker-specific configuration dictionary.
 
@@ -264,6 +438,11 @@ class ProviderRegistry:
     def list_providers(self) -> List[Dict]:
         """List all registered provider definitions with metadata and availability details.
 
+        Applies **both** deep and shallow filters:
+          - Skips worker-config ``disabled_providers`` (deep block)
+          - Skips providers with ``enabled: false`` (deep block)
+          - Skips worker-config ``excluded_providers`` (shallow — picker-only)
+
         Returns a list of dictionaries describing each provider defined in the
         providers.json configuration file, including display name, model family,
         default model, cost tier, priority, authentication style, and a list
@@ -277,8 +456,16 @@ class ProviderRegistry:
         """
         if not self._loaded:
             self.load()
+
+        disabled = set(self._worker_config.get("disabled_providers", []))
+        excluded = set(self._worker_config.get("excluded_providers", []))
+
         result = []
         for name, pdef in self._provider_defs.items():
+            if name in disabled:
+                continue
+            if not self._is_provider_enabled(name, pdef):
+                continue
             result.append(
                 {
                     "name": name,
@@ -289,6 +476,7 @@ class ProviderRegistry:
                     "priority": pdef.get("priority", 10),
                     "auth_style": pdef.get("auth_style", "bearer"),
                     "available_models": pdef.get("available_models", []),
+                    "is_excluded": name in excluded,  # marked for picker, still usable
                 }
             )
         return result

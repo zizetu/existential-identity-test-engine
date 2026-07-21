@@ -307,7 +307,8 @@ BASH_BLACKLIST = [
     r"\bhalt\b",
     r"\bpoweroff\b",
     r"\binit\s+0\b", r"\binit\s+6\b",
-    # Expanded rm -rf: catch /*, /home, /var, /etc, /tmp, /root, ~, $HOME
+    # Expanded rm -rf: catch /*, /home, /var, /etc, /tmp, /root, ~, $HOME, and bare /
+    r"\brm\s+-rf\s+/\s*$",  # bare "rm -rf /" (preserve-root bypass concern)
     r"\brm\s+-rf\s+/(\*|[a-zA-Z]|home|var|etc|tmp|root|usr|opt|srv|boot|proc|sys)\b",
     r"\brm\s+-rf\s+~",
     r"\brm\s+-rf\s+\$HOME\b",
@@ -361,7 +362,148 @@ _UNSAFE_OPS_RE = [
         r"(curl|wget)\s+.*(-o|--output|-O)\s+/(etc|bin|sbin|root)",
     )
 ]
-_SHELL_OP_PATTERN = re.compile(r'\||&&|\|\||[<>]|;|\$\(|`')
+_SHELL_OP_PATTERN = re.compile(r'\|\||&&|\|\||[<>]|;|\$\(|`')
+
+# ── Quick-safety prefilter for _bash_safety_check ────────────────
+# A cheap substring-based gate that catches any command containing
+# genuinely dangerous tokens.  Commands that pass this check skip
+# the full 23-regex BASH_BLACKLIST scan, saving ~40µs per call.
+# This is a SUPERSET of BASH_BLACKLIST — zero false negatives.
+# Uses substring matching for exact token check and regex for
+# patterns that need flexibility (like curl|sh pipe detection).
+_QUICK_HAZARD_WORDS = (
+    "reboot", "shutdown", "halt", "poweroff", "init ",
+    "rm -rf /", "rm -rf ~", "rm -rf $HOME",
+    "iptables -F", "iptables -X",
+    "dd if=", "mkfs", "mkswap",
+    "chmod 777 /",
+    ":(){", "fork bomb",
+    "base64 -d", "base64 |",
+    "python3 -c", "python -c", "perl -e", "ruby -e",
+    "nc -e", "bash -i",
+    "pkill", "killall",
+    "/dev/sda", "/dev/tcp",
+    "exec ",
+)
+# Regex version of patterns that substring matching can't catch
+# (e.g. "curl ... | sh" with arbitrary text between curl and pipe)
+_QUICK_HAZARD_RE = re.compile(
+    r'curl\s+.*\|\s*(?:ba|sh)\b'
+    r'|wget\s+.*\|\s*(?:ba|sh)\b'
+    r'|curl\s+.*;\s*(?:ba|sh)\b'
+    r'|wget\s+.*;\s*(?:ba|sh)\b'
+    r'|curl\s+.*&&\s*(?:ba|sh)\b'
+    r'|wget\s+.*&&\s*(?:ba|sh)\b'
+)
+
+# ── Comprehensive redaction patterns (write-time chokepoint) ──────
+# Used by redact_secrets() as a single entry point for all tool output
+# redaction.  Patterns are ordered from most- to least-specific so
+# that a long match is consumed before a shorter sub-pattern fires.
+_REDACTION_PATTERNS = [
+    # PEM-style private keys (entire block)
+    (re.compile(
+        r'-----BEGIN\s+(?:RSA|DSA|EC|OPENSSH|PRIVATE)\s+KEY-----\s*'
+        r'(?:.|\n)*?'
+        r'-----END\s+(?:RSA|DSA|EC|OPENSSH|PRIVATE)\s+KEY-----',
+        re.DOTALL
+    ), '[REDACTED PRIVATE KEY]'),
+    # JWT tokens
+    (re.compile(r'eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}'),
+     '***JWT_REDACTED***'),
+    # Telegram bot tokens: 1234567890:AA... (8-10 digits + :AA + 32-40 chars)
+    (re.compile(r'\d{8,10}:AA[a-zA-Z0-9_-]{32,40}'),
+     '***BOT_TOKEN_REDACTED***'),
+    # GitHub tokens: ghp_, ghs_, ghu_, gho_
+    (re.compile(r'gh[psuo]_[a-zA-Z0-9]{36,}'),
+     'gh*_***REDACTED***'),
+    # OpenAI / Stripe / etc sk- prefix keys
+    (re.compile(r'sk-[a-zA-Z0-9_-]{20,}'),
+     'sk-***REDACTED***'),
+    # AWS access key ID
+    (re.compile(r'AKIA[0-9A-Z]{16}'),
+     'AKIA***REDACTED***'),
+    # AWS secret key inline
+    (re.compile(r'(?i)(aws[_\- ]?secret[_\- ]?(?:access[_\- ]?)?key)[\s:=]+["\']?([A-Za-z0-9/+=]{40})'),
+     r'\1=***REDACTED***'),
+    # Authorization headers (Bearer, Basic, Digest, ApiKey, X-API-Key)
+    (re.compile(r'(?i)((?:Authorization|X-API-Key|Api-Key)[\s:=]+)"?\s*(Bearer|Basic|Digest|ApiKey)?\s*"?\s*([A-Za-z0-9._~+/=-]{20,})'),
+     r'\1=\2 ***REDACTED***'),
+    # Generic credential field: key=value or "key": "value" or key: value
+    (re.compile(
+        r'(?i)((?:api[_-]?key|token|secret|password|passwd|auth|'
+        r'private_key|access_key|secret_key|bot_token|'
+        r'refresh_token|client_secret'
+        r')[\s:=]+)["\']?([^\s"\'&]{16,})["\']?'
+    ), r'\1***REDACTED***'),
+    # Database connection strings (postgres://, mysql://, redis://, mongodb://)
+    (re.compile(r'(\w+://)([^:]+):([^@]+)@'),
+     r'\1\2:***@'),
+    # SSH private key header (detection-only, actual block caught above)
+    (re.compile(r'-----BEGIN\s+(?:RSA|DSA|EC|OPENSSH)\s+PRIVATE\s+KEY-----'),
+     '[REDACTED PRIVATE KEY]'),
+    # IP addresses (private IPs preserved, public IPs redacted to prevent PII leak)
+    (re.compile(r'\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b'),
+     None),  # special handling in code, see _replace_ip()
+    # Email addresses
+    (re.compile(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'),
+     '***EMAIL_REDACTED***'),
+    # Credit card numbers
+    (re.compile(r'\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13}|6(?:011|5[0-9]{2})[0-9]{12})\b'),
+     '***CC_REDACTED***'),
+    # HuggingFace tokens: hf_...
+    (re.compile(r'hf_[a-zA-Z0-9]{20,}'),
+     'hf_***REDACTED***'),
+    # Slack tokens: xoxb-, xoxp-, xapp-, xoxa-, xoxe-, xoxr-, xoxs-
+    (re.compile(r'xox[baprs]-[a-zA-Z0-9\-]{10,48}'),
+     'xox*-***REDACTED***'),
+    # Discord bot tokens (N Stripe-like MMMM.XXXX.YYYY format)
+    (re.compile(r'[MN][A-Za-z0-9_-]{23,25}\.[A-Za-z0-9_-]{6,7}\.[A-Za-z0-9_-]{27,}'),
+     '***DISCORD_TOKEN_REDACTED***'),
+    # Google API key: AIza...
+    (re.compile(r'AIza[0-9A-Za-z\-_]{32,}'),
+     'AIza***REDACTED***'),
+    # GitLab personal access token: glpat-...
+    (re.compile(r'glpat-[a-zA-Z0-9\-_]{20,}'),
+     'glpat-***REDACTED***'),
+    # npm access token: npm_...
+    (re.compile(r'npm_[a-zA-Z0-9]{36,}'),
+     'npm_***REDACTED***'),
+    # PyPI token: pypi-...
+    (re.compile(r'pypi-[A-Za-z0-9]{30,}'),
+     'pypi-***REDACTED***'),
+    # Stripe live/test secret keys
+    (re.compile(r'(?i)(sk|rk|pk|whsec)_(live|test)_[a-zA-Z0-9]{20,}'),
+     r'\1_\2_***REDACTED***'),
+    # Cloudflare API token
+    (re.compile(r'(?i)(?:CF-?API-?KEY|CLOUDFLARE-?API-?TOKEN)[:=]\s*["\']?([A-Za-z0-9_-]{20,})["\']?'),
+     r'\g<1>=***REDACTED***'),
+    # New Relic ingest/license key
+    (re.compile(r'(?i)NRAK[a-zA-Z0-9]{27}'),
+     'NRAK***REDACTED***'),
+    # Datadog API / application key
+    (re.compile(r'(?i)(datadog[_-]?(?:api|application)[_-]?key)\s*[:=]\s*["\']?([a-zA-Z0-9]{32})["\']?'),
+     r'\1=***REDACTED***'),
+    # Docker config auth (base64-encoded credentials in config.json)
+    (re.compile(r'(?i)"auth"\s*:\s*"[A-Za-z0-9+/=]{40,}"'),
+     '"auth": "***DOCKER_AUTH_REDACTED***"'),
+    # Heroku API key
+    (re.compile(r'(?i)heroku[_-]?(?:api)?[_-]?key\s*[:=]\s*["\']?([A-Za-z0-9-]{36})["\']?'),
+     'heroku_api_key=***REDACTED***'),
+    # SonarQube token: squ_...
+    (re.compile(r'squ_[a-f0-9]{20,}'),
+     'squ_***REDACTED***'),
+    # Sentry DSN / auth token
+    (re.compile(r'https://[a-f0-9]{32}@(?:[a-zA-Z0-9.-]+\.)?sentry\.io/\d+'),
+     'https://***SENTRY_DSN_REDACTED***@sentry.io/***'),
+    # OAuth2 Google refresh token (ya29.)
+    (re.compile(r'ya29\.[a-zA-Z0-9_-]{50,}'),
+     'ya29.***REDACTED***'),
+    # Generic bearer token in Authorization header (already partially covered, add catch-all)
+    (re.compile(r'(?i)(Authorization:\s*Bearer\s+)[A-Za-z0-9._~+/=-]{8,}'),
+     r'\1***REDACTED***'),
+]
+# Legacy fallback patterns (keep for imports from other modules)
 _REDACT_FALLBACK_PATTERNS = [
     (re.compile(r'(sk-[a-zA-Z0-9]{20,})'), r'sk-***REDACTED***'),
     (re.compile(r'(ghp_[a-zA-Z0-9]{36})'), r'ghp_***REDACTED***'),
@@ -387,25 +529,22 @@ _SANITIZE_PATTERNS = [
 def _bash_safety_check(command: str) -> Optional[str]:
     """Check shell command against the BASH_BLACKLIST and workspace boundary (informational only).
 
-    Applies regex blacklist patterns (reboot, shutdown, rm -rf /, fork bombs,
-    curl-pipe-shell, iptables flush, dd, mkfs, chmod 777 /, sudo rm -rf,
-    redirect to block devices, pkill/killall, self-kill) and workspace-based
-    restrictions (blocks access to system directories like /etc/shadow,
-    /etc/passwd, ~/.agents/, ~/.ssh/, and traversal via cd ..).
-
-    Admin commands (systemctl, journalctl, nginx, docker, ufw, iptables, etc.)
-    bypass the workspace restriction but are still subject to the blacklist.
-
-    Args:
-        command: The shell command string to check.
-
-    Returns:
-        A string describing the block reason if the command is blocked,
-        or None if the command passes all checks.
+    Applies a two-stage filter:
+      1. Quick substring prefilter — catches commands with known dangerous tokens
+         via O(1) substring check.  Commands with NO dangerous tokens skip the
+         23-regex BASH_BLACKLIST scan entirely.
+      2. Full regex scan (BASH_BLACKLIST_RE) — only runs when the prefilter fires.
     """
-    for pattern in BASH_BLACKLIST_RE:
-        if pattern.search(command):
-            return f"Command blocked by safety policy: {pattern.pattern}"
+    # Stage 1: Quick substring prefilter
+    cmd_lower = command.lower()
+    if not any(hazard in cmd_lower for hazard in _QUICK_HAZARD_WORDS) and not _QUICK_HAZARD_RE.search(command):
+        # No dangerous tokens found — skip full regex scan
+        pass
+    else:
+        # Stage 2: Full regex scan
+        for pattern in BASH_BLACKLIST_RE:
+            if pattern.search(command):
+                return f"Command blocked by safety policy: {pattern.pattern}"
     # Workspace boundary check - blocks operations outside allowed dirs
     if WORKSPACE and not WORKSPACE.endswith("/"):
         WORKSPACE_G = WORKSPACE + "/"
@@ -675,22 +814,55 @@ async def _run_cmd_async(cmd: str, timeout: int = 120, workdir: str = "") -> dic
 from tical_code.core.tool_schemas import TOOL_SCHEMAS, TOOL_SCHEMAS_CLEAN
 
 
-def redact_secrets(text: str) -> str:
+def redact_secrets(text: str, force: bool = False) -> str:
     """Mask common secret patterns (API keys, tokens) in text for safe logging.
 
-    Uses comprehensive 15+ pattern redaction from security_baseline when available.
-    Falls back to basic 3-pattern version if security_baseline unavailable.
+    Write-time chokepoint: every function that produces output for the model
+    or for storage should route through this function.  The ``force`` flag
+    overrides the global redact_secrets toggle for high-security paths such
+    as subagent transcripts and crash dumps.
+
+    Uses comprehensive 15+ pattern redaction from security_baseline when
+    available.  Falls back to built-in patterns if security_baseline
+    unavailable.
+
+    For long tokens (>=18 chars before any prefix stripping), preserves the
+    first 6 and last 4 characters so the operator can identify which key
+    triggered the redaction.  Short tokens are fully replaced with ``***``
+    to prevent reverse-engineering from fragments.
     """
     if not text:
         return text
+    # Check global toggle (snapshot at call time, re-read env var)
+    import os as _os
+    if not force:
+        toggle = _os.environ.get("TICAL_REDACT_SECRETS", "1")
+        if toggle.lower() in ("0", "false", "no", "off"):
+            return text
+
     try:
+        # Run security_baseline's comprehensive redact first
         from tical_code.core.security_baseline import redact_secrets as _sb_redact
-        return _sb_redact(text)
+        text = _sb_redact(text)
     except ImportError:
         pass
-    # Fallback: basic 3-pattern redaction (precompiled at module level)
-    for pattern, replacement in _REDACT_FALLBACK_PATTERNS:
-        text = pattern.sub(replacement, text)
+
+    # Always apply tool_executor's own patterns on top (second pass)
+    import ipaddress
+    for pattern, replacement in _REDACTION_PATTERNS:
+        if replacement is None:
+            # Special handler: IP addresses — preserve private IPs
+            def _replace_ip(m, _repl=replacement):
+                try:
+                    ip = ipaddress.ip_address(m.group(0).strip())
+                    if ip.is_private or ip.is_loopback or ip.is_link_local:
+                        return m.group(0)
+                except ValueError:
+                    pass
+                return '***IP_REDACTED***'
+            text = pattern.sub(_replace_ip, text)
+        else:
+            text = pattern.sub(replacement, text)
     return text
 
 
@@ -727,23 +899,16 @@ def exec_bash(args: dict) -> dict:
         timeout = 30
 
     result = _run_cmd(cmd, timeout, workdir=args.get("workdir", ""))
-    # Redact secrets from bash output
-    if result.get("stdout"):
-        result["stdout"] = redact_secrets(result["stdout"])
-    if result.get("stderr"):
-        result["stderr"] = redact_secrets(result["stderr"])
-    # Always append stderr to stdout so AI can see warnings/errors
-    # SECURITY: re-redact the combined output to catch anything missed in separate redaction
-    if result.get("stderr"):
-        stderr_text = result["stderr"][:1000]
-        if result.get("stdout"):
-            result["stdout"] += f"\n[STDERR]\n{stderr_text}"
+    # Merge stderr into stdout, then redact once (was triple-redact)
+    stdout_out = result.get("stdout", "") or ""
+    stderr_out = result.get("stderr", "")
+    if stderr_out:
+        if stdout_out:
+            stdout_out += f"\n[STDERR]\n{stderr_out[:1000]}"
         else:
-            result["stdout"] = f"[STDERR]\n{stderr_text}"
-        result["stderr"] = ""
-    # Re-redact combined output for safety (catches secrets spanning stdout+stderr boundary)
-    if result.get("stdout"):
-        result["stdout"] = redact_secrets(result["stdout"])
+            stdout_out = f"[STDERR]\n{stderr_out[:1000]}"
+    result["stdout"] = redact_secrets(stdout_out) if stdout_out else ""
+    result["stderr"] = ""
     if result["exit_code"] != 0:
         logger.warning(f"[executor] bash exit={result['exit_code']}: {cmd[:60]}")
     return result

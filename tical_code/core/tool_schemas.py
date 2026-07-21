@@ -1,4 +1,4 @@
-# EITElite -- AI Agent Platform
+# tical-code -- AI Agent Platform
 # Copyright (C) 2026 zizetu
 #
 # This program is free software: you can redistribute it and/or modify
@@ -14,10 +14,10 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Original repository: https://github.com/zizetu/EITE-agent
+# Original repository: https://github.com/zizetu/tical-agent
 #
 
-"""Tool schemas for EITElite agent — OpenAI function-calling definitions.
+"""Tool schemas for tical-code agent — OpenAI function-calling definitions.
 
 Extracted from tool_executor.py to reduce module size (~550 lines → 20 lines).
 Import path: from tical_code.core.tool_schemas import TOOL_SCHEMAS, TOOL_SCHEMAS_CLEAN
@@ -702,3 +702,57 @@ TOOL_SCHEMAS = [
 
 # Clean alias — all tool names already use underscores
 TOOL_SCHEMAS_CLEAN = TOOL_SCHEMAS
+
+# ── Tool tier definitions ──────────────────────────────────────────
+# Essential tools are always loaded.  Rare/admin tools are loaded
+# on demand via the capability_call mechanism, saving ~2000 input
+# tokens per LLM call by not sending all 37 schemas every time.
+
+_ESSENTIAL_NAMES = frozenset({
+    "shell_exec", "file_read", "file_write", "file_patch",
+    "file_search", "list_dir",
+    "memory_load", "memory_save", "memory_search", "memory",
+    "web_fetch", "http_post", "chat_send", "check_self",
+    "capability_call",  # gateway to load rare/admin tools
+})
+
+TOOL_SCHEMAS_ESSENTIAL = [
+    s for s in TOOL_SCHEMAS
+    if s.get("function", {}).get("name") in _ESSENTIAL_NAMES
+]
+
+TOOL_SCHEMAS_RARE = [
+    s for s in TOOL_SCHEMAS
+    if s.get("function", {}).get("name") not in _ESSENTIAL_NAMES
+]
+
+
+def load_rare_tools(tool_names: list) -> list:
+    """Filter rare-tool schemas by name for on-demand activation.
+
+    Args:
+        tool_names: List of tool name strings to activate.
+
+    Returns:
+        Partial schemas list with matching tools (or empty if none found).
+    """
+    names = set(tool_names)
+    return [
+        s for s in TOOL_SCHEMAS_RARE
+        if s.get("function", {}).get("name") in names
+    ]
+
+
+def build_tool_set(extra: list = None) -> list:
+    """Build a tool schemas list: essential + optional rare tools.
+
+    Args:
+        extra: Optional list of rare-tool names to include.
+
+    Returns:
+        Combined list suitable for use as LLM tool definitions.
+    """
+    tools = list(TOOL_SCHEMAS_ESSENTIAL)
+    if extra:
+        tools.extend(load_rare_tools(extra))
+    return tools
