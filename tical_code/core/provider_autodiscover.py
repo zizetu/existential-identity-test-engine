@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
-# Original repository: https://github.com/zizetu/existential-identity-test-engine
+# Original repository: https://github.com/zizetu/eite-agent
 #
 
 """Auto-discover LLM providers from common environment variables.
@@ -92,6 +92,19 @@ _KNOWN_PROVIDERS: List[Dict] = [
         "protocol": "gemini",
         "priority": 5,
         "cost": "free",
+    },
+    {
+        "name": "qwen",
+        "family": "openai",
+        "env_key": "QWEN_API_KEY",
+        "env_base_url": "QWEN_ENDPOINT",
+        "env_model": "QWEN_MODEL",
+        "default_base_url": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+        "auth_style": "bearer",
+        "default_model": "qwen3.8-max-preview",
+        "protocol": "openai",
+        "priority": 0,
+        "cost": "paid",
     },
     {
         "name": "custom-llm",
