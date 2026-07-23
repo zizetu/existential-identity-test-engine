@@ -414,7 +414,11 @@ class CronManager:
 
     async def add_job(self, job: CronJob) -> str:
         """
-        Add a new cron job.
+        Add or update a cron job.
+
+        If a job with the same job_id already exists, its next_run and
+        run_count are preserved so restarts don't push execution into
+        the future indefinitely.
 
         Args:
             job: CronJob instance to add
@@ -427,9 +431,19 @@ class CronManager:
             if not job.job_id:
                 job.job_id = f"cron_{uuid.uuid4().hex[:12]}"
 
-            # Set initial next_run
-            if job.next_run is None:
-                job.next_run = job.calculate_next_run()
+            existing = self._jobs.get(job.job_id)
+            if existing is not None:
+                # Preserve runtime state from the already-loaded job
+                job.next_run = existing.next_run
+                job.run_count = existing.run_count
+                job.fail_count = existing.fail_count
+                job.last_run = existing.last_run
+                logger.info(f"[CronManager] Updated job: {job.name} ({job.job_id})")
+            else:
+                # Brand-new job: run immediately, then on schedule
+                if job.next_run is None:
+                    job.next_run = time.time()
+                logger.info(f"[CronManager] Added job: {job.name} ({job.job_id})")
 
             # Store in memory
             self._jobs[job.job_id] = job
@@ -437,7 +451,6 @@ class CronManager:
             # Persist to database
             self._save_job(job)
 
-            logger.info(f"[CronManager] Added job: {job.name} ({job.job_id})")
             return job.job_id
 
     async def remove_job(self, job_id: str) -> bool:

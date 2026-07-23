@@ -2213,6 +2213,48 @@ class AsyncWorker:
                     except Exception:
                         pass
 
+                # ── Cron tick (every iteration) ──────────────────────
+                _cron = getattr(self, '_cron', None)
+                if _cron is not None:
+                    try:
+                        await _cron.tick()
+                    except Exception as _ce:
+                        self.logger.warning("[CRON] tick error: %s", _ce)
+
+                # ── Heartbeat pulse detection (every 30 iterations) ──
+                if not hasattr(self, '_hb_tick'):
+                    self._hb_tick = 0
+                self._hb_tick += 1
+                if self._hb_tick % 30 == 0:
+                    try:
+                        hb_msg = _hb_check()
+                        if hb_msg is not None:
+                            self.logger.info("[HEARTBEAT] Pulse detected — injecting directives")
+                            from .identity import Message as _HBMsg
+                            hb_session = f"heartbeat:{self.name}"
+                            _hb_ch = type('_HBChannel', (), {
+                                'name': 'heartbeat',
+                                'send': lambda self_, **kw: None,
+                                'poll': lambda: [],
+                            })()
+                            await self._dispatch_to_session(
+                                hb_session, _hb_ch,
+                                _HBMsg(role='system', content=hb_msg,
+                                       session_id=hb_session, channel='heartbeat'),
+                            )
+                    except Exception as hb_e:
+                        self.logger.warning("[HEARTBEAT] check failed: %s", hb_e)
+
+                # ── MemoryEvolver consolidation (every 500 iterations) ──
+                _evolver = getattr(self, 'memory_evolver', None)
+                if _evolver is not None and getattr(self, '_hb_tick', 0) % 500 == 0:
+                    try:
+                        _cons = _evolver.consolidate()
+                        if _cons:
+                            self.logger.info("[MemoryEvolver] consolidation: %s", _cons)
+                    except Exception as _me:
+                        self.logger.warning("[MemoryEvolver] consolidation error: %s", _me)
+
                 # Phase 2 - Periodic housekeeping
                 if cleanup_counter % 60 == 0:
                     await self._cleanup_sessions()
